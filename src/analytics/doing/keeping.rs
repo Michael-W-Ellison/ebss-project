@@ -760,6 +760,18 @@ impl Simulation {
         if knows_to {
             self.world.stores_lined += 1;
         }
+        // And a basket daubed shut, by somebody who knows to and has the clay
+        // for it (#393)
+        let vessel = if vessel == "basket"
+            && self.population.agents[agent_index].knows_how_to_make("sealedbasket")
+            && self.population.agents[agent_index].how_many_i_have("clay") > 0
+        {
+            self.population.agents[agent_index].inventory.remove_item("clay", 1);
+            self.world.stores_sealed += 1;
+            "sealedbasket"
+        } else {
+            vessel
+        };
         if let Some(pit) = self.world.pit_at_mut(at) {
             pit.put_in(if vessel == "stoneware" {
                 crate::agents::InventoryItem::new_container(
@@ -788,7 +800,18 @@ impl Simulation {
         if std::mem::take(&mut pit.gnawed) == 0 {
             return;
         }
+        let lined_already = pit.is_lined();
         let agent = &mut self.population.agents[agent_index];
+        // Gnawed through a lining, and somebody who lines their stores thinks
+        // to daub the next one shut (#393)
+        if lined_already && agent.knows_the_way("line_the_store") {
+            agent.skills.made_one(crate::agents::Agent::A_LINED_STORE_GNAWED);
+            if agent.skills.times_made(crate::agents::Agent::A_LINED_STORE_GNAWED)
+                >= crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_SEALING
+            {
+                agent.it_comes_to_me("sealedbasket", crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_SEALING);
+            }
+        }
         agent.skills.made_one(crate::agents::Agent::A_GNAWED_STORE_SEEN);
         if agent.skills.times_made(crate::agents::Agent::A_GNAWED_STORE_SEEN)
             >= crate::agents::Agent::GNAWED_STORES_BEFORE_LINING

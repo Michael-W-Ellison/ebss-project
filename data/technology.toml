@@ -2120,6 +2120,9 @@ name = "Sealed baskets"
 path = "storage"
 stage = 2
 role = "technique"
+model = ["make:sealedbasket"]
+needs = ["storage.1.woven_bins"]
+note = "A basket daubed shut with clay as it goes into a store, which vermin take from as little as from a fired pot. Comes to somebody who lines their stores and opens a lined one gnawed three times (Agent::LINED_STORES_GNAWED_BEFORE_SEALING) (#393)."
 
 [[tech]]
 id = "storage.2.above_ground_bins"

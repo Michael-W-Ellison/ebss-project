@@ -88,3 +88,40 @@ fn opening_a_gnawed_store_is_how_it_is_found_out() {
     }
     assert!(simulation.population.agents[0].knows_the_way("line_the_store"));
 }
+
+/// Somebody who knows to seal a lining, with clay to hand, daubs the basket
+/// shut as it goes in, and vermin take from it as little as from a fired pot
+/// (#393).
+#[test]
+fn a_basket_with_clay_to_hand_is_sealed_and_vermin_hardly_take_from_it() {
+    let mut simulation = at_a_bare_store();
+    let agent = &mut simulation.population.agents[0];
+    agent.found_out_how_to("know:line_the_store");
+    agent.found_out_how_to("sealedbasket");
+    agent.inventory.add_item(InventoryItem::new_with_weight("basket".to_string(), 1, 1.0));
+    agent.inventory.add_item(InventoryItem::new_with_weight("clay".to_string(), 1, 1.0));
+    simulation.line_the_store_here(0, Position::new(STORE.0, STORE.1));
+    assert!(simulation.world.pits[0].holds.iter().any(|item| item.item_id == "sealedbasket"));
+    assert_eq!(simulation.population.agents[0].how_many_i_have("clay"), 0);
+    assert_eq!(simulation.world.pits[0].what_vermin_get_at(), Pit::VERMIN_PAST_A_POT);
+    assert_eq!(simulation.world.stores_sealed, 1);
+}
+
+/// Opening lined stores gnawed three times is how sealing comes to somebody
+/// who lines them (#393).
+#[test]
+fn lined_stores_gnawed_is_how_sealing_is_found_out() {
+    let mut simulation = at_a_bare_store();
+    let here = Position::new(STORE.0, STORE.1);
+    simulation.population.agents[0].found_out_how_to("know:line_the_store");
+    simulation.population.agents[0].inventory.add_item(InventoryItem::new_with_weight("basket".to_string(), 1, 1.0));
+    simulation.line_the_store_here(0, here);
+    for _ in 0..Agent::LINED_STORES_GNAWED_BEFORE_SEALING {
+        assert!(!simulation.population.agents[0].knows_how_to_make("sealedbasket"));
+        for _ in 0..40 {
+            simulation.world.what_the_vermin_take();
+        }
+        simulation.what_opening_the_store_shows(0, here);
+    }
+    assert!(simulation.population.agents[0].knows_how_to_make("sealedbasket"));
+}

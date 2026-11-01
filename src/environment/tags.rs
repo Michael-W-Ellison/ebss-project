@@ -460,6 +460,11 @@ pub const EVERYTHING_TAGGED: &[Tagged] = &[
         called: "basket",
         is: &[Tag::FoodContainer, Tag::CarryingContainer],
     },
+    // A basket daubed shut with clay, for a store (#393)
+    Tagged {
+        called: "sealedbasket",
+        is: &[Tag::FoodContainer],
+    },
     Tagged {
         called: "leatherbag",
         is: &[
@@ -692,6 +697,9 @@ pub const EVERYTHING_THAT_KEEPS: &[Keeps] = &[
     Keeps { called: "leatherbag", how_fast_food_in_it_goes_off: 0.7 },
     // A lattice. Better than a bare arm and not by much
     Keeps { called: "basket", how_fast_food_in_it_goes_off: 0.9 },
+    // The lattice daubed shut with clay: the air kept off nearly as a pot
+    // keeps it (#393)
+    Keeps { called: "sealedbasket", how_fast_food_in_it_goes_off: 0.6 },
 ];
 
 /// What keeping food in this thing is worth, if it is anywhere at all.

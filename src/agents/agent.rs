@@ -3527,6 +3527,12 @@ impl Agent {
     pub const A_GNAWED_STORE_SEEN: &'static str = "a gnawed store";
     pub const GNAWED_STORES_BEFORE_LINING: u32 = 3;
 
+    /// And opening a store already lined to find vermin have been at it
+    /// anyway, and how many times before somebody daubs the lining shut with
+    /// clay (#393): "sealed baskets".
+    pub const A_LINED_STORE_GNAWED: &'static str = "a lined store gnawed";
+    pub const LINED_STORES_GNAWED_BEFORE_SEALING: u32 = 3;
+
     /// What being laid up by filth teaches (#357): enough of it, and a
     /// midden; with a midden and a people settled, a latrine.
     pub fn what_filth_teaches(&mut self) {

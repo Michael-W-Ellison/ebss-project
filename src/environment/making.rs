@@ -280,6 +280,22 @@ pub const HOE: Making = Making {
     wants_in_hand: Some("handaxe"),
 };
 
+/// A basket daubed shut with clay (#393): "sealed baskets", stage 2 of the
+/// storage path. Nothing gnaws through dried clay, so a store lined with one
+/// loses to vermin what a store with a fired pot in it does, for a basket and
+/// a handful of clay. Its listing is stage 2, so nobody arrives knowing it:
+/// it comes to somebody who lines their stores and still finds them gnawed.
+pub const SEALED_BASKET: Making = Making {
+    makes: "sealedbasket",
+    how_many: 1,
+    needs: &[("basket", 1), ("clay", 1)],
+    hands: SkillType::Crafting,
+    effort: 4.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
 /// Cord and a pouch of stone: what a people hunts with when it has no spear.
 ///
 /// Arrived-with, like the sling, the rod and the shovel below it. The line
@@ -1387,6 +1403,7 @@ pub const EVERY_STEP: &[Making] = &[
     DIGGING_STICK,
     HOE,
     BASKET,
+    SEALED_BASKET,
     TRAVOIS,
     WHEEL,
     SHARPENED_STICK,

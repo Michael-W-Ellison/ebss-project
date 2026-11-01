@@ -338,6 +338,9 @@ pub struct World {
     /// one they happened to have spare (#392).
     #[serde(default)]
     pub stores_lined: u64,
+    /// Stores lined with a basket daubed shut with clay (#393).
+    #[serde(default)]
+    pub stores_sealed: u64,
     /// Things a child was taught that a grown person of their camp knew
     /// (#388).
     #[serde(default)]
@@ -662,7 +665,7 @@ impl Pit {
     pub fn what_vermin_get_at(&self) -> f32 {
         if !self.covered {
             Self::VERMIN_IN_AN_OPEN_HOLE
-        } else if self.holds.iter().any(|item| item.item_id == "stoneware") {
+        } else if self.holds.iter().any(|item| item.item_id == "stoneware" || item.item_id == "sealedbasket") {
             Self::VERMIN_PAST_A_POT
         } else if self.is_lined() {
             Self::VERMIN_PAST_A_LINING
@@ -684,7 +687,8 @@ impl Pit {
     pub const VERMIN_UNDER_EARTH: f32 = 0.001;
     /// With a basket or a bowl in the way, half that.
     pub const VERMIN_PAST_A_LINING: f32 = 0.0005;
-    /// In a fired pot, next to nothing.
+    /// In a fired pot, or a basket daubed shut with clay (#393), next to
+    /// nothing.
     pub const VERMIN_PAST_A_POT: f32 = 0.00007;
     /// How near a midden brings more of them.
     pub const A_MIDDEN_DRAWS_VERMIN_FROM: u32 = 12;
@@ -1942,6 +1946,7 @@ impl World {
             ditches_dug_from: Vec::new(),
             compost_dug: 0,
             stores_lined: 0,
+            stores_sealed: 0,
             lessons_taught: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
