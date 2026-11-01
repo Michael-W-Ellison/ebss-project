@@ -510,7 +510,7 @@ impl Simulation {
                 agent.skills.made_one(crate::agents::Agent::A_STAND_NEAR_HOME_GATHERED);
                 if agent.skills.times_made(crate::agents::Agent::A_STAND_NEAR_HOME_GATHERED)
                     >= crate::agents::Agent::RETURNS_BEFORE_SPARING
-                    && agent.found_out_how_to("know:selective_harvest")
+                    && agent.it_comes_to_me("know:selective_harvest", crate::agents::Agent::RETURNS_BEFORE_SPARING)
                 {
                     debug!("Agent {} thought of leaving the young plants standing", agent.id);
                 }
@@ -523,7 +523,7 @@ impl Simulation {
                 agent.skills.made_one(crate::agents::Agent::WOOD_CUT_NEAR_HOME);
                 if agent.skills.times_made(crate::agents::Agent::WOOD_CUT_NEAR_HOME)
                     >= crate::agents::Agent::CUTS_BEFORE_COPPICING
-                    && agent.found_out_how_to("know:coppice")
+                    && agent.it_comes_to_me("know:coppice", crate::agents::Agent::CUTS_BEFORE_COPPICING)
                 {
                     debug!("Agent {} thought of cutting to the stool", agent.id);
                 }
@@ -536,7 +536,7 @@ impl Simulation {
                 let agent = &mut self.population.agents[agent_index];
                 agent.skills.made_one(Self::GATHERED_DRY_BY_WATER);
                 if agent.skills.times_made(Self::GATHERED_DRY_BY_WATER) >= Self::GATHERED_DRY_BY_WATER_BEFORE_DITCHING
-                    && agent.found_out_how_to("do:DigDitch")
+                    && agent.it_comes_to_me("do:DigDitch", Self::GATHERED_DRY_BY_WATER_BEFORE_DITCHING)
                 {
                     debug!("Agent {} thought of leading the water to the stands", agent.id);
                 }
@@ -548,7 +548,7 @@ impl Simulation {
                 let agent = &mut self.population.agents[agent_index];
                 agent.skills.made_one(Self::GATHERED_ON_BURNT_GROUND);
                 if agent.skills.times_made(Self::GATHERED_ON_BURNT_GROUND) >= Self::BURNT_GROUND_GATHERED_BEFORE_BURNING
-                    && agent.found_out_how_to("do:BurnOff")
+                    && agent.it_comes_to_me("do:BurnOff", Self::BURNT_GROUND_GATHERED_BEFORE_BURNING)
                 {
                     debug!("Agent {} thought of setting the dry growth alight", agent.id);
                 }
@@ -566,7 +566,7 @@ impl Simulation {
                 if agent.skills.times_made(crate::agents::Agent::A_SOWN_STAND_GATHERED)
                     >= crate::agents::Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS
                     && agent.knows_how_to_do("ScatterSeed")
-                    && agent.found_out_how_to("do:TillSoil")
+                    && agent.it_comes_to_me("do:TillSoil", crate::agents::Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS)
                 {
                     agent
                         .practices

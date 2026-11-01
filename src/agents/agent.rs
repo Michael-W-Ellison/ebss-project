@@ -3513,12 +3513,12 @@ impl Agent {
         let laid_up = self.times_laid_up.get(Self::OFF_FOUL_GROUND).copied().unwrap_or(0)
             + self.times_laid_up.get(Self::OFF_FOUL_WATER).copied().unwrap_or(0);
         if laid_up >= Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN {
-            self.found_out_how_to("do:StartMidden");
+            self.it_comes_to_me("do:StartMidden", Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN);
         }
         if self.found_out.contains("do:StartMidden")
             && self.practices.is_established(crate::agents::practices::Practice::Farming)
         {
-            self.found_out_how_to("do:DigLatrine");
+            self.it_comes_to_me("do:DigLatrine", 1);
         }
     }
 
@@ -4338,6 +4338,17 @@ impl Agent {
 
     pub fn found_out_how_to(&mut self, what: &str) -> bool {
         self.found_out.insert(what.to_string())
+    }
+
+    /// An idea found out by experience, to somebody who has had the
+    /// `experience_needed` it was written with: it comes now or it does not,
+    /// at the pace ideas come (`core::discovery`, #389). Nothing is rolled
+    /// for somebody who knows it already. True if it came now.
+    pub fn it_comes_to_me(&mut self, what: &str, experience_needed: u32) -> bool {
+        if self.found_out.contains(what) || !crate::core::discovery::does_it_occur_now(experience_needed) {
+            return false;
+        }
+        self.found_out_how_to(what)
     }
 
     /// Everything this agent has found out that it was not born knowing.

@@ -99,7 +99,7 @@ impl Simulation {
             if agent.skills.times_made(crate::agents::Agent::RAINED_OFF_DRYING)
                 >= crate::agents::Agent::RAINED_OFF_BEFORE_A_RACK
             {
-                agent.found_out_how_to("do:PutUpRack");
+                agent.it_comes_to_me("do:PutUpRack", crate::agents::Agent::RAINED_OFF_BEFORE_A_RACK);
             }
         }
     }
@@ -128,7 +128,7 @@ impl Simulation {
             let agent = &mut self.population.agents[index];
             agent.skills.made_one(Agent::THIRSTY_FAR_FROM_WATER);
             if agent.skills.times_made(Agent::THIRSTY_FAR_FROM_WATER) >= Agent::THIRSTY_DAYS_BEFORE_A_WATER_SKIN {
-                agent.found_out_how_to("waterskin");
+                agent.it_comes_to_me("waterskin", Agent::THIRSTY_DAYS_BEFORE_A_WATER_SKIN);
             }
         }
     }

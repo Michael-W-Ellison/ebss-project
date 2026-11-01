@@ -189,7 +189,7 @@ impl Simulation {
 
         for (keeper, what) in seen {
             if let Some(agent) = self.population.agents.iter_mut().find(|agent| agent.id == keeper) {
-                if agent.found_out_how_to(what) && matches!(what, "milk" | "wool") {
+                if agent.it_comes_to_me(what, 1) && matches!(what, "milk" | "wool") {
                     agent.found_out_how_to("do:CollectAnimalProduct");
                 }
             }

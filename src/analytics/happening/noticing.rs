@@ -140,9 +140,11 @@ impl Simulation {
 
                 // A practised hand notices sooner, because it knows what it
                 // is looking at.
-                let odds = Self::HOW_OFTEN_ANYBODY_WORKS_IT_OUT
-                    * curiosity as f64
-                    * agent.skills.hand_for(step.hands) as f64;
+                let odds = crate::core::discovery::at_this_pace(
+                    Self::HOW_OFTEN_ANYBODY_WORKS_IT_OUT
+                        * curiosity as f64
+                        * agent.skills.hand_for(step.hands) as f64,
+                );
 
                 if rng.gen_bool(odds.clamp(0.0, 1.0)) {
                     found.push((index, step.makes));
@@ -281,9 +283,11 @@ impl Simulation {
                     continue;
                 }
 
-                let odds = Self::HOW_OFTEN_A_LIKENESS_IS_FOLLOWED_UP
-                    * curiosity as f64
-                    * agent.skills.hand_for(step.hands) as f64;
+                let odds = crate::core::discovery::at_this_pace(
+                    Self::HOW_OFTEN_A_LIKENESS_IS_FOLLOWED_UP
+                        * curiosity as f64
+                        * agent.skills.hand_for(step.hands) as f64,
+                );
 
                 could_have_the_thought.push((index, step, odds));
                 break;
@@ -580,7 +584,7 @@ impl Simulation {
                     .max((agent.state.position.1 - where_it_was.y).abs());
 
                 if paces <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
-                    agent.found_out_how_to(Self::THAT_FIRE_HARDENS_CLAY);
+                    agent.it_comes_to_me(Self::THAT_FIRE_HARDENS_CLAY, 1);
                 }
             }
         }
@@ -650,7 +654,7 @@ impl Simulation {
                     continue;
                 }
 
-                if agent.found_out_how_to(Self::THAT_FIRE_HARDENS_CLAY) {
+                if agent.it_comes_to_me(Self::THAT_FIRE_HARDENS_CLAY, 1) {
                     debug!("Agent {} saw clay come out of a fire hard", agent.id);
                 }
                 agent.lessons.record_particular("fire:claypot", true);

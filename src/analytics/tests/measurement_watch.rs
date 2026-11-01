@@ -37,6 +37,11 @@ fn zz_discovery_watch() {
     let mut sim = Simulation::new(crate::world::World::new(cfg), population);
     sim.bring_everybody_to_the_middle();
     crate::core::dice::seed(seed * 7919 + 3);
+    // At the development pace unless told otherwise (#389)
+    if let Some(pace) = std::env::var("PACE").ok().and_then(|p| p.parse::<f64>().ok()) {
+        crate::core::discovery::set(pace);
+    }
+    println!("STORE slowness {}", crate::core::discovery::slowness() as u64);
 
     let mut first: BTreeMap<String, u32> = BTreeMap::new();
     let note = |sim: &Simulation, first: &mut BTreeMap<String, u32>, day: u32| {

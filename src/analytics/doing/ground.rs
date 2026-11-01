@@ -241,7 +241,7 @@ impl Simulation {
         agent.skills.made_one(crate::environment::making::GROUND_BROKEN_FOR_A_GARDEN);
         if agent.skills.times_made(crate::environment::making::GROUND_BROKEN_FOR_A_GARDEN)
             >= crate::environment::making::TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE
-            && agent.found_out_how_to("hoe")
+            && agent.it_comes_to_me("hoe", crate::environment::making::TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE)
         {
             debug!("Agent {} thought of a blade set across a haft", agent.id);
         }

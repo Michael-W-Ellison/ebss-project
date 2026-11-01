@@ -3,6 +3,7 @@
 
 pub mod clock;
 pub mod dice;
+pub mod discovery;
 pub mod behavior_tree;
 pub mod drives;
 pub mod learning;

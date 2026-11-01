@@ -1565,8 +1565,12 @@ impl Simulation {
                 let a_fire_is_to_hand = self
                     .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
                     .is_some();
+                // At the pace ideas come (#389): the thought of doing it comes
+                // as seldom as any other
                 if let Some((verb, to)) = agent.what_working_i_would_try_out(a_fire_is_to_hand) {
-                    return Some(Action::Work { verb, to });
+                    if crate::core::discovery::does_it_occur_now(1) {
+                        return Some(Action::Work { verb, to });
+                    }
                 }
 
                 // And putting the wrong thing where a part goes, which is
@@ -1575,7 +1579,8 @@ impl Simulation {
                 // anything comes of it.
                 let feeling_experimental = {
                     use rand::Rng;
-                    crate::core::dice::roll().gen_bool(Self::HOW_OFTEN_ANYBODY_TRIES_A_SWAP)
+                    crate::core::dice::roll()
+                        .gen_bool(crate::core::discovery::at_this_pace(Self::HOW_OFTEN_ANYBODY_TRIES_A_SWAP))
                 };
 
                 if feeling_experimental {

@@ -90,7 +90,9 @@ impl Simulation {
     /// scattering gathered seed (`Action::ScatterSeed`). Two such sights and
     /// it is settled practice.
     pub(in crate::analytics) fn seeing_seed_come_up_teaches_sowing(agent: &mut crate::agents::Agent) {
-        agent.found_out_how_to("do:ScatterSeed");
+        if !agent.it_comes_to_me("do:ScatterSeed", 1) && !agent.knows_how_to_do("ScatterSeed") {
+            return;
+        }
         agent
             .practices
             .saw_it_work(crate::agents::practices::Practice::Sowing);

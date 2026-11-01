@@ -69,9 +69,9 @@ impl Simulation {
         // Most of the time it tells you nothing, which is why this
         // does not collapse the chain into an afternoon's inspection.
         let hand = agent.skills.hand_for(crate::agents::SkillType::Crafting);
-        let odds = (Self::WHAT_LOOKING_CLOSELY_IS_WORTH * hand).clamp(0.0, 0.5);
+        let odds = crate::core::discovery::at_this_pace((Self::WHAT_LOOKING_CLOSELY_IS_WORTH * hand).clamp(0.0, 0.5) as f64);
 
-        if !rng.gen_bool(odds as f64) {
+        if !rng.gen_bool(odds) {
             return ActionResult::failure(format!("Turned the {what} over, none the wiser"))
                 .with_drive_change(DriveType::Curiosity, -0.2)
                 .with_energy_cost(1.0);
@@ -185,7 +185,7 @@ impl Simulation {
             if working.makes == "rawhide"
                 && agent.skills.times_made("rawhide") >= crate::agents::Agent::HIDES_SCRAPED_BEFORE_TANNING
             {
-                agent.found_out_how_to("leather");
+                agent.it_comes_to_me("leather", crate::agents::Agent::HIDES_SCRAPED_BEFORE_TANNING);
             }
 
             // And a pot fire with a bright stone beside it may show more than
@@ -193,7 +193,10 @@ impl Simulation {
             if let Some((beside, how_many, shows, odds)) = making::what_firing_this_might_show(working.makes) {
                 let could_see_it = agent.what_i_could_find_out().any(|step| step.makes == shows)
                     && !agent.knows_how_to_make(shows);
-                if could_see_it && agent.how_many_i_have(beside) >= how_many && rng.gen_bool(odds) {
+                if could_see_it
+                    && agent.how_many_i_have(beside) >= how_many
+                    && rng.gen_bool(crate::core::discovery::at_this_pace(odds))
+                {
                     agent.found_out_how_to(shows);
                     debug!("Agent {} saw a {beside} run in the pot fire ({shows})", agent.id);
                 }
