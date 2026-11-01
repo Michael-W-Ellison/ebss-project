@@ -28061,8 +28061,15 @@ later entry. These were not. Each line names the entry that left it.
   are (#383).
 - Agriculture's second stage is modelled throughout: gardens, cuttings,
   tubers (#384), saved seed, the hoe (#385), and muck and compost from the
-  midden (#386). Nobody made a hoe inside two years in probes: a farming
-  tool comes last among the tools a pair of hands wants (#385). A fire never gets away into a camp, and game is not drawn to
+  midden (#386). Nobody made a hoe inside two years in probes (#385); tools
+  are now made in the order of the time they save net of their making
+  (#387), which has not been looked at for the hoe.
+- Discovery runs at one pace (#389): a run of the model at a people's pace,
+  thirty thousand times slower than the development pace the suite and the
+  measurements use. A people's pace cannot be run long enough to be watched;
+  what it comes to is reckoned from the development pace. Teaching (#388)
+  has not been seen in a measurement, nobody born in a run being six by the
+  end of it. A fire never gets away into a camp, and game is not drawn to
   burnt ground (#381). Poles are not a thing apart from wood (#382).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
@@ -29568,3 +29575,133 @@ the first season of what stage 2 adds and no more.
 
 **Dice counts**: unchanged, 6,757 (seed 4242, 120 turns) and 961,864 (seed
 0, a year); seed 0 does not reach gardens within its year.
+
+### 387. Tools made in the order of the time they save
+
+The user said: "Tool making should be prioritized based on the amount of
+time it saves." Making a better tool in the middle of a job already weighed
+what it saves over its working life against the turns its making costs
+(`would_a_better_tool_pay`). What somebody made in spare time went down a
+fixed list of trades instead (`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO`), so a
+gardener reached the hoe only after every hunting, cutting, skinning,
+carving and digging tool they could want, and nobody ever wanted a tool for
+gathering, which is most of anybody's day.
+
+**What changed.**
+- **A record of work at each trade** (`Agent::work_at`, `a_turn_at`,
+  `how_much_work_goes_to`): a turn counted to the trade the action asks for,
+  in the turn's feedback, fading by half a season.
+- **The net saving** (`what_a_better_tool_would_save`): the work going to a
+  trade, or the tool's working life if shorter, at the difference the best
+  tool known for it would make, less the turns along the chain to making it.
+- **The order** (`trades_i_want_tools_for`): trades worked at whose tool
+  would save more than it costs, best first; then the list's own trades not
+  yet worked, in the list's order, which is where a founder starts.
+  Gathering and gardening come in once done.
+- Breaking ground and weeding count as farming, so the mid-job reckoning
+  weighs a stick or a hoe for them too.
+
+**How it got there.** Ordered by the saving alone, with nothing asked about
+the cost, a scattered world had all twelve people putting woodcutting first
+from day 120, each out looking for wood for its making every day for months
+while the making never began. Forty worlds:
+
+| | #386 | saving alone | net of the making |
+|---|---|---|---|
+| births | 190 | 165 (t -2.58) | 179 (t -0.87) |
+| alive at two years | 669 | 642 (t -2.74) | 658 (t -0.83) |
+| scattered births | 65 | 41 (t -3.05) | 50 (t -1.37) |
+| person-days wasting | 273 | 788 | 467 (t +0.99) |
+
+The last column is with #388 and #389 as well. Within noise; the days
+wasting fell mostly in two worlds (scattered seeds 3 and 15, 119 and 88).
+
+**Tests** (`tool_priority_tests`): work at a trade falls by half in a
+season; somebody with no work recorded keeps the list's order; the trade the
+days go to comes first, and a tool that would not repay its making is not
+wanted; a forager wants a tool for gathering first; weeding is counted as
+farming.
+
+### 388. The young are taught what their camp knows
+
+The user, asked whether children should learn what their parents and camp
+know: "Yes, by being taught." What somebody found out died with them, unless
+it was one of the few things learned by watching it done (sowing, breaking
+ground, burning, ditching, taming, mucking out). Ways of working and every
+making found out went into the ground with whoever had them; at the pace of
+#389 that would lose nearly all of it.
+
+**What changed** (`the_young_are_taught`): once a day each child and
+adolescent has a chance in thirty (`A_LESSON_A_DAY`) of learning one thing a
+parent, or a grown person living within the camp's reach, knows and they do
+not. A childhood takes in a hundred or more. What a camp knows outlives the
+one who found it, and is lost when the camp is.
+
+**Measured**: no lesson was taught in two years at forty settlements -
+founders arrive grown, and nobody born in a run is six by the end of it.
+
+**Tests** (`teaching_tests`): a child learns what a parent knows, and what
+the camp knows; nobody is taught from another camp; a grown person is not
+taught this way.
+
+### 389. One pace setting for every discovery
+
+The user said: "There is also no rush for tech development. I am
+anticipating it should take hundreds to thousands of generations for
+technologies to be discovered." Asked, they meant the whole tree, forager
+to farming; one pace setting, slow by default, that tests and measurements
+can turn up.
+
+**What changed** (`core::discovery`).
+- **The development pace** is what every discovery was calibrated to: inside
+  a two-year run, the only pace at which the machinery can be watched. It is
+  kept, and is a slowness of one.
+- **Found out by experience** (`Agent::it_comes_to_me`,
+  `does_it_occur_now`): the count an idea was written with makes it
+  possible, and each experience after brings it with a chance of one in the
+  count times the slowness. Applied to the midden, the latrine, the rack, the
+  water skin, selective harvesting, coppicing, ditching, burning, gardens,
+  the pit oven, smoking, tanning, the hoe, the dressing, seeing seed come up,
+  mucking out and what a herd gives, and taming.
+- **Noticed by chance** (`at_this_pace`): the odds divided by the slowness,
+  for noticing a making by either road, looking closely, what a firing
+  shows, fire hardening clay, and spare-time experiments with workings and
+  swaps.
+- **Not slowed**: watching it done, being told, being taught - how a camp
+  keeps what one person found - and what comes of an act that has already
+  worked (salt from boiled sea water, a working once done).
+- **A people's pace** (`A_PEOPLES_PACE`) is thirty thousand times slower. A
+  run of the model starts there, or at `EBSS_PACE`; a thread under test
+  starts at the development pace, as the dice start seeded; the measurement
+  harness reads `PACE` and prints the slowness. At the development pace
+  nothing is rolled that was not rolled before: with #388's teaching
+  switched off, both dice counts came out exactly as before #389.
+
+**What a people's pace comes to.** A run at it cannot be watched: the model
+runs about five or six minutes a settlement-year, a generation is two and a
+half hours, and a thousand generations is over two thousand hours a
+settlement. So it is reckoned from the development pace instead. If the
+first person in a camp of about fifteen came to an idea on day *d*, at
+thirty thousand times slower they come to it after about *d* x 2,000 days:
+
+| | first day, development pace | a people's pace |
+|---|---|---|
+| burning | 120 | about 650 years |
+| selective harvesting | 130 | about 700 years, 28 generations |
+| coppicing | 176 | about 950 years |
+| sowing | 181 | about 1,000 years |
+| gardens, after sowing | 225 later | about 1,200 years later |
+
+Forager to gardens is about 2,200 years, some ninety generations, and the
+stages after it more; a larger people, having more experience between them,
+comes to things sooner. The constant is one number to move if that is too
+fast or too slow.
+
+**Tests** (`pace_tests`): a test starts at the development pace; at it an
+idea comes at its count, once; slower, it comes that many times later; odds
+of noticing are divided by the slowness; teaching is not slowed.
+
+**Full suite**: 3,056 passed, 0 failed, 6 ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns) and 1,008,543 (seed 0, a
+year).
