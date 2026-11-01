@@ -29705,3 +29705,54 @@ of noticing are divided by the slowness; teaching is not slowed.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns) and 1,008,543 (seed 0, a
 year).
+
+### 390. Technology moves through personalities
+
+The user said: "That is a good pace for now. Go back to technology
+implementation. There are many developments which will enable the agents to
+complete tasks more effectively. Thing is, the technology is a backdrop
+against the personality interactions based on traits." Some sixty traits
+were in the model, and not one bore on finding something out, teaching it or
+taking it up.
+
+**What changed.**
+- **Inventiveness** (`Agent::how_inventive_i_am`): twice for the curious,
+  half again for the imaginative, half for the stubborn, the traditional and
+  the ignorant. It multiplies the chance of an idea, by experience or by
+  noticing, at any pace slower than the development pace
+  (`discovery::does_it_occur_now_for`, `at_this_pace_for`); at the
+  development pace an idea still comes at its count, whoever has it.
+- **Teaching** (`the_young_are_taught`): a child's daily chance of a lesson
+  is scaled by how readily they learn (`how_readily_i_learn`: the curious
+  and a copycat more, the stubborn and the traditional less) and how readily
+  the most willing of their teachers teaches (`how_readily_i_teach`: an
+  extrovert and the charismatic more, an introvert less, the mute only by
+  showing). The lesson comes from the most willing of those who know it, and
+  makes each warmer to the other; a proud teacher is pleased to pass on a
+  thing they came to themselves.
+- **Taking it up from watching** (`takes_it_up`): a grown person who sees a
+  thing done takes it up as readily as they learn anything, so the stubborn
+  and the traditional may see it and leave it, and it warms them to the one
+  they watched.
+- **Finding first** (`came_to_it_myself`, `what_the_camp_makes_of_it`): what
+  somebody came to themselves is remembered as theirs. A proud finder is
+  pleased with it; the envious of their camp resent them for it.
+
+**Measured**, forty settlements, two years, against #387 to #389:
+
+| | before | #390 | t |
+|---|---|---|---|
+| births | 179 | 181 | +0.24 |
+| deaths | 1 | 7 | +1.64 |
+| alive at two years | 658 | 654 | -0.39 |
+| person-days wasting | 467 | 271 | |
+
+Within noise. All seven deaths were blows, three of them in one world on
+two days (smooth seed 13). At the development pace the traits show only in
+who takes up what they see and in the warmth between people; who comes to
+ideas first shows at a people's pace, which cannot be run long enough to see.
+
+**Tests** (`trait_technology_tests`): ideas come more readily to the curious;
+who learns and who teaches readily; an eager child with a willing teacher
+learns more; a lesson warms teacher and taught; the proud are pleased and
+the envious resent it.
