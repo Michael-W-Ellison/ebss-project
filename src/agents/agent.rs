@@ -2069,6 +2069,12 @@ pub struct Agent {
         super::practices::Undertaking,
         super::rhythm::Rhythm,
     >,
+    /// How much of this one's work lately has gone to each trade: turns at
+    /// it, fading by half a season, and the tick it was last brought up to
+    /// date (#387). What a better tool for a trade would save is the time
+    /// that goes to it.
+    #[serde(default)]
+    pub work_at: std::collections::BTreeMap<super::SkillType, (f32, u32)>,
     /// Questions this one has put to the world and is waiting on the answer
     /// to - see [`super::wondering::Wondering`].
     ///
@@ -2236,6 +2242,7 @@ impl Agent {
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
             rhythms: std::collections::BTreeMap::new(),
+            work_at: std::collections::BTreeMap::new(),
             lately: std::collections::VecDeque::new(),
             by_what_way: None,
             took_from_the_store_at: None,
@@ -4456,15 +4463,69 @@ impl Agent {
         super::SkillType::Mining,
     ];
 
-    /// The kinds of work this one wants a tool for: what every pair of hands
+    /// How long it takes a trade's record of work to fall by half, in ticks:
+    /// a season (#387).
+    pub const WORK_FADES_BY_HALF_IN: u32 =
+        crate::environment::seasons::DAYS_PER_SEASON * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// A turn's work at this trade, at this tick (#387).
+    pub fn a_turn_at(&mut self, trade: super::SkillType, now: u32) {
+        let (amount, as_of) = self.work_at.get(&trade).copied().unwrap_or((0.0, now));
+        let faded = amount * 0.5f32.powf(now.saturating_sub(as_of) as f32 / Self::WORK_FADES_BY_HALF_IN as f32);
+        self.work_at.insert(trade, (faded + 1.0, now));
+    }
+
+    /// How much of this one's work has gone to this trade lately, as of this
+    /// tick: turns at it, faded by age (#387).
+    pub fn how_much_work_goes_to(&self, trade: super::SkillType, now: u32) -> f32 {
+        self.work_at
+            .get(&trade)
+            .map(|&(amount, as_of)| {
+                amount * 0.5f32.powf(now.saturating_sub(as_of) as f32 / Self::WORK_FADES_BY_HALF_IN as f32)
+            })
+            .unwrap_or(0.0)
+    }
+
+    /// What the best tool this one knows how to make for a trade would save
+    /// of their time, for the work that goes to it now (#387): the turns at
+    /// it, times how much faster the better tool would get through each.
+    /// Nothing where they know of nothing better, or do none of the work.
+    pub fn what_a_better_tool_would_save(&self, trade: super::SkillType, now: u32) -> f32 {
+        let Some(better) = self.what_i_would_rather_have(trade) else {
+            return 0.0;
+        };
+        let rate_now = self.how_fast_my_tools_make_this_go(trade).max(0.01);
+        let rate_after = better.how_much_better.max(rate_now);
+        self.how_much_work_goes_to(trade, now) * (1.0 - rate_now / rate_after)
+    }
+
+    /// The kinds of work this one wants a tool for, the one a better tool
+    /// would save them most time at first (#387): what every pair of hands
     /// wants (`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO`), and farming for somebody
     /// who keeps a garden (#385). Not farming for everybody: a stick for it
     /// is born knowledge, and the whole of a people that never broke ground
     /// would be off cutting digging sticks for gardens it does not keep.
-    pub fn trades_i_want_tools_for(&self) -> impl Iterator<Item = super::SkillType> + '_ {
-        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+    ///
+    /// The order was the list's own, so a gardener reached the hoe only after
+    /// every hunting, cutting, skinning, carving and digging tool they could
+    /// want, however little of their day went to any of those. Somebody with
+    /// no work recorded at anything keeps the list's order.
+    pub fn trades_i_want_tools_for(&self) -> Vec<super::SkillType> {
+        let now = self.time_of_my_last_turn();
+        let mut trades: Vec<(super::SkillType, f32)> = Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
             .into_iter()
             .chain(self.knows_how_to_do("TillSoil").then_some(super::SkillType::Farming))
+            .map(|trade| (trade, self.what_a_better_tool_would_save(trade, now)))
+            .collect();
+        // Stable, so equal savings keep the list's order
+        trades.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        trades.into_iter().map(|(trade, _)| trade).collect()
+    }
+
+    /// The tick of the latest work on this one's record, which is as near to
+    /// now as an agent knows without the world's clock (#387).
+    fn time_of_my_last_turn(&self) -> u32 {
+        self.work_at.values().map(|&(_, as_of)| as_of).max().unwrap_or(0)
     }
 
     /// The best tool this agent knows how to make for a kind of work, if it
@@ -5079,6 +5140,7 @@ impl Agent {
         let in_hand = |what: &str| self.how_many_i_have(what) > 0;
 
         self.trades_i_want_tools_for()
+            .into_iter()
             .filter_map(|trade| self.what_i_would_rather_have(trade))
             .find_map(|want| {
                 // Only a step that could actually be carried out. Asking for
@@ -5182,6 +5244,7 @@ impl Agent {
         let in_hand = |what: &str| self.how_many_i_have(what) > 0;
 
         self.trades_i_want_tools_for()
+            .into_iter()
             .filter_map(|trade| self.what_i_would_rather_have(trade))
             .find(|want| {
                 crate::environment::making::what_to_do_first_that_can_be_done(
@@ -5854,6 +5917,7 @@ impl Agent {
         let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
 
         let wanting: Vec<&'static str> = self.trades_i_want_tools_for()
+            .into_iter()
             .filter_map(|trade| self.what_i_would_rather_have(trade))
             .flat_map(|want| {
                 crate::environment::making::everything_wanting_knowing(
@@ -11728,6 +11792,7 @@ impl Agent {
             let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
             let mut makings: std::collections::BTreeSet<crate::world::ResourceType> =
                 self.trades_i_want_tools_for()
+                    .into_iter()
                     .flat_map(crate::environment::making::what_helps_with)
                     .filter(|tool| self.knows_how_to_make(tool.called))
                     .flat_map(|tool| {

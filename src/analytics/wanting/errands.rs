@@ -1413,6 +1413,9 @@ impl Simulation {
             Action::SetSnare | Action::CheckSnares => SkillType::Hunting,
             Action::Hunt { .. } => SkillType::Hunting,
             Action::Build { .. } => SkillType::Construction,
+            // Breaking ground and weeding are what a digging stick and a hoe
+            // are for (#387)
+            Action::TillSoil | Action::TendField => SkillType::Farming,
             _ => return None,
         })
     }

@@ -153,6 +153,7 @@ mod composting_tests;
 mod coppicing_tests;
 mod ditching_tests;
 mod hoe_tests;
+mod tool_priority_tests;
 mod tubers_tests;
 mod keeping_stands_tests;
 pub mod kit_tests;

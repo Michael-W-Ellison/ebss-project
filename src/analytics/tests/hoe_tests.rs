@@ -84,7 +84,7 @@ fn the_hoe_cannot_occur_to_anybody_who_has_not_gardened() {
 fn a_gardener_wants_a_tool_for_it_and_would_rather_a_hoe() {
     let mut simulation = a_farmer_on_a_field(Position::new(25, 25));
     let wants_for_farming =
-        |simulation: &Simulation| simulation.population.agents[0].trades_i_want_tools_for().any(|t| t == SkillType::Farming);
+        |simulation: &Simulation| simulation.population.agents[0].trades_i_want_tools_for().contains(&SkillType::Farming);
     assert!(!wants_for_farming(&simulation), "nobody who keeps no garden");
 
     simulation.population.agents[0].found_out_how_to("do:ScatterSeed");
