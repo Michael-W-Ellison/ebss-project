@@ -263,7 +263,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // the night, in turns.
     // Down to 6,757 for #379's correction: nobody goes to bed with a beast on
     // the camp, and a thorn ring turns the scavengers too.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_757;
+    // Up to 6,783 for #388: the young are taught what their camp knows, a
+    // chance a day each. (#389's pace rolls nothing at the development pace:
+    // with teaching off, both counts were as before.)
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_783;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -669,7 +672,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // home, brings the wood there back faster.
     // Down 3.2% to 931,132 for #387: tools are made in the order of the time
     // they would save, from a record of the work that goes to each trade.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 931_132;
+    // Up 6.8% to 994,553 for #388: the young are taught what their camp
+    // knows.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 994_553;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
