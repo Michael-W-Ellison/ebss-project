@@ -173,7 +173,7 @@ fn vermin_take_by_how_a_store_is_shut() {
         if let Some(vessel) = lining {
             holds.push(InventoryItem::new_with_weight(vessel.to_string(), 1, 1.0));
         }
-        simulation.world.pits.push(Pit {
+        simulation.world.pits.push(Pit { gnawed: 0,
             where_it_is: Position::new(at.0, at.1),
             holds,
             covered,
@@ -210,7 +210,7 @@ fn a_spare_pot_lines_a_store() {
     agent.inventory.add_item(InventoryItem::new_with_weight("basket".to_string(), 2, 1.0));
     let fish = food(&simulation, crate::world::ItemType::Fish, "dried_fish", 30);
     simulation.population.agents[0].inventory.add_item(fish);
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0,
         where_it_is: Position::new(100, 100),
         holds: Vec::new(),
         covered: false,
@@ -232,7 +232,7 @@ fn taking_from_anothers_store_is_found_out() {
     let owner = simulation.population.agents[0].id;
     let thief = simulation.population.agents[1].id;
     let stores = vec![food(&simulation, crate::world::ItemType::Grain, "grain", 100)];
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0,
         where_it_is: Position::new(100, 100),
         holds: stores,
         covered: true,
@@ -264,7 +264,7 @@ fn taking_from_anothers_store_is_found_out() {
 fn scavengers_come_to_an_open_store() {
     let mut simulation = one_person();
     let grain = vec![food(&simulation, crate::world::ItemType::Meat, "meat", 50)];
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0,
         where_it_is: Position::new(100, 100),
         holds: grain.clone(),
         covered: false,
@@ -286,7 +286,7 @@ fn scavengers_come_to_an_open_store() {
 
     // Covered, nothing comes
     let mut simulation = one_person();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0,
         where_it_is: Position::new(100, 100),
         holds: grain,
         covered: true,

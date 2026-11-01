@@ -63,7 +63,7 @@ impl Simulation {
         // settlement's, not the digger's - which is the one place in this
         // model where `ToUsAll` is the truthful answer rather than a
         // convenience. See `world::belonging`.
-        self.world.pits.push(crate::world::Pit {
+        self.world.pits.push(crate::world::Pit { gnawed: 0,
             where_it_is: under,
             holds: Vec::new(),
             covered: true,

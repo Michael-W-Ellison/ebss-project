@@ -3521,6 +3521,12 @@ impl Agent {
     /// (#391), "selection of preferred springs over surface water".
     pub const ILL_FROM_FOUL_WATER_BEFORE_CHOOSING: u32 = 2;
 
+    /// What the practice record calls opening a store to find vermin have
+    /// been at it, and how many times before somebody lines the next one
+    /// (#392): "woven bins".
+    pub const A_GNAWED_STORE_SEEN: &'static str = "a gnawed store";
+    pub const GNAWED_STORES_BEFORE_LINING: u32 = 3;
+
     /// What being laid up by filth teaches (#357): enough of it, and a
     /// midden; with a midden and a people settled, a latrine.
     pub fn what_filth_teaches(&mut self) {
@@ -3968,7 +3974,8 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 3] = ["selective_harvest", "coppice", "clean_water"];
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 4] =
+        ["selective_harvest", "coppice", "clean_water", "line_the_store"];
 
     /// What the practice record calls a gather from a wild stand within a
     /// forage of home, and how many before somebody notices that the stands

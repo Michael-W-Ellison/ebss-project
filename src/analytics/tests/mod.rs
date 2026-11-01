@@ -152,6 +152,7 @@ mod burning_tests;
 mod composting_tests;
 mod clean_water_tests;
 mod coppicing_tests;
+mod lining_tests;
 mod ditching_tests;
 mod hoe_tests;
 mod tool_priority_tests;

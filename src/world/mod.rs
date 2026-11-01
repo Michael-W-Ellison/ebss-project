@@ -334,6 +334,10 @@ pub struct World {
     /// Loads of compost dug out of a midden for a garden (#386).
     #[serde(default)]
     pub compost_dug: u64,
+    /// Stores lined with a vessel by somebody who knew to, rather than with
+    /// one they happened to have spare (#392).
+    #[serde(default)]
+    pub stores_lined: u64,
     /// Things a child was taught that a grown person of their camp knew
     /// (#388).
     #[serde(default)]
@@ -647,6 +651,10 @@ pub struct Pit {
     /// which is what a world starts with.
     #[serde(default)]
     pub belongs: crate::world::belonging::Belongs,
+    /// What vermin have carried off since anybody last opened it, whole
+    /// units (#392): what somebody sees when they do.
+    #[serde(default)]
+    pub gnawed: u32,
 }
 
 impl Pit {
@@ -1427,6 +1435,7 @@ impl World {
                 *owed = due - gone as f32;
                 item.quantity -= gone;
                 taken += gone as u64;
+                pit.gnawed += gone;
             }
             pit.holds.retain(|item| item.quantity > 0);
         }
@@ -1932,6 +1941,7 @@ impl World {
             ditches_dug: 0,
             ditches_dug_from: Vec::new(),
             compost_dug: 0,
+            stores_lined: 0,
             lessons_taught: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),

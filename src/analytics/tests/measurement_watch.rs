@@ -125,6 +125,7 @@ fn zz_discovery_watch() {
         ("ditches_dug", sim.world.ditches_dug),
         ("compost_dug", sim.world.compost_dug),
         ("lessons_taught", sim.world.lessons_taught),
+        ("stores_lined", sim.world.stores_lined),
         (
             "stands_watered",
             sim.world.resources.iter().filter(|node| node.watered >= 0.5).count() as u64,

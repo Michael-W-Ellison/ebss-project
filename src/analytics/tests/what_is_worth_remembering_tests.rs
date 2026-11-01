@@ -171,7 +171,7 @@ fn a_body_living_on_itself_goes_to_the_store_before_the_roof() {
     buried.food_data = simulation
         .food_database
         .create_food_data(&ItemType::Food, 0);
-    let mut pit = Pit {
+    let mut pit = Pit { gnawed: 0,
         where_it_is: Position::new(25, 25),
         holds: Vec::new(),
         covered: true,

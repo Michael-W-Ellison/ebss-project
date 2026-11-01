@@ -332,7 +332,7 @@ fn a_starving_man_on_a_pit_of_roots(room: f32) -> crate::analytics::Simulation {
         .food_database
         .create_food_data(&crate::world::ItemType::Roots, 0);
 
-    let mut pit = crate::world::Pit {
+    let mut pit = crate::world::Pit { gnawed: 0,
         where_it_is: Position::new(here.0, here.1),
         holds: Vec::new(),
         covered: true,

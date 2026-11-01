@@ -443,7 +443,7 @@ fn a_gathering_people_moves_on_from_a_cache() {
     put_food(&mut simulation, Position::new(21, 20), 8);
     a_valley_they_know_of(&mut simulation, 400);
     simulation.world.pits.clear();
-    simulation.world.pits.push(crate::world::Pit {
+    simulation.world.pits.push(crate::world::Pit { gnawed: 0,
         where_it_is: Position::new(24, 22),
         holds: vec![crate::agents::InventoryItem::new_with_weight("food".to_string(), 5, 0.1)],
         covered: false,

@@ -229,7 +229,7 @@ fn nobody_moves_for_ploughland_they_do_not_know_of() {
 #[test]
 fn a_farmer_does_not_leave_food_in_store_for_ploughland() {
     let mut simulation = a_camp_on_poor_ground(1);
-    simulation.world.pits.push(crate::world::Pit {
+    simulation.world.pits.push(crate::world::Pit { gnawed: 0,
         where_it_is: crate::world::Position::new(HERE.0 + 2, HERE.1),
         holds: vec![crate::agents::InventoryItem::new_with_weight("food".to_string(), 5, 0.1)],
         covered: false,

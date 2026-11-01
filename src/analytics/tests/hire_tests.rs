@@ -44,7 +44,7 @@ fn a_kill_and_a_neighbour(joints: u32, days_left: f32) -> Simulation {
     }
 
     let hunter = simulation.population.agents[0].id;
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0,
         where_it_is: STORE,
         holds: Vec::new(),
         covered: true,

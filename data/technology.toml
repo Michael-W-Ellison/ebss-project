@@ -2085,6 +2085,8 @@ name = "Woven bins"
 path = "storage"
 stage = 1
 role = "technique"
+model = ["know:line_the_store"]
+note = "A store lined with the only vessel one has, or a basket woven for it there and then, rather than with one to spare. Found out by opening a store to find vermin have been at it, three times (Agent::GNAWED_STORES_BEFORE_LINING) (#392)."
 
 [[tech]]
 id = "storage.2.raised_racks"

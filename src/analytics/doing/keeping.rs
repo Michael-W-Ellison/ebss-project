@@ -32,7 +32,7 @@ impl Simulation {
             .map(|building| building.position)
             .find(|there| (there.x - at.0).abs().max((there.y - at.1).abs()) <= Self::AT_THE_STOREHOUSE)?;
         if self.world.pit_at(storehouse).is_none() {
-            self.world.pits.push(crate::world::Pit {
+            self.world.pits.push(crate::world::Pit { gnawed: 0,
                 where_it_is: storehouse,
                 holds: Vec::new(),
                 covered: true,
@@ -80,6 +80,8 @@ impl Simulation {
         if put == 0 {
             return ActionResult::failure(format!("No {} in inventory to store", item_type));
         }
+        self.line_the_store_here(agent_index, store);
+        self.what_opening_the_store_shows(agent_index, store);
         if let Some(pit) = self.world.pit_at_mut(store) {
             for item in going {
                 pit.put_in(item);
@@ -112,6 +114,7 @@ impl Simulation {
                     .collect()
             })
             .unwrap_or_default();
+        self.what_opening_the_store_shows(agent_index, store);
         if held.is_empty() {
             return ActionResult::failure(format!("Storehouse has no {} available", item_type));
         }
@@ -245,44 +248,11 @@ impl Simulation {
                 .practise(crate::agents::SkillType::Farming, 12, turn_now);
         }
 
-        // A vessel goes in first, if there is one to spare. What
-        // gets at buried food is the ground itself, and a bowl or a
-        // basket in the way of it doubles what the hole is worth.
-        //
-        // **Whichever keeps best**, asked of what keeps rather than of two
-        // names: a fired pot, which keeps food best and which nothing gnaws
-        // through, was never put in (#357).
-        let lining = {
-            let agent = &self.population.agents[agent_index];
-            crate::environment::tags::EVERYTHING_THAT_KEEPS
-                .iter()
-                .filter(|keeps| {
-                    crate::environment::tags::is_this_a(keeps.called, crate::environment::tags::Tag::FoodContainer)
-                })
-                .filter(|keeps| agent.how_many_i_have(keeps.called) > 1)
-                .min_by(|a, b| a.how_fast_food_in_it_goes_off.total_cmp(&b.how_fast_food_in_it_goes_off))
-                .map(|keeps| keeps.called)
-        };
-
-        if let Some(vessel) = lining {
-            if self.world.pit_at(here).is_some_and(|pit| !pit.is_lined()) {
-                self.population.agents[agent_index]
-                    .inventory
-                    .remove_item(vessel, 1);
-
-                if let Some(pit) = self.world.pit_at_mut(here) {
-                    pit.put_in(if vessel == "stoneware" {
-                        crate::agents::InventoryItem::new_container(
-                            vessel.to_string(),
-                            1,
-                            crate::environment::making::WHAT_A_FIRED_POT_HOLDS,
-                        )
-                    } else {
-                        crate::agents::InventoryItem::new_with_weight(vessel.to_string(), 1, 1.0)
-                    });
-                }
-            }
-        }
+        // A vessel goes in first, if there is one to spare (#357), or
+        // whatever this one has, to somebody who knows to line a store
+        // (#392)
+        self.line_the_store_here(agent_index, here);
+        self.what_opening_the_store_shows(agent_index, here);
 
         let mut holds = 0u32;
         if let Some(pit) = self.world.pit_at_mut(here) {
@@ -591,7 +561,7 @@ impl Simulation {
             .skills
             .practise(crate::agents::SkillType::Mining, 10, turn_now);
         let whose = agent.id;
-        self.world.pits.push(Pit {
+        self.world.pits.push(Pit { gnawed: 0,
             where_it_is: here,
             holds: Vec::new(),
             covered: true,
@@ -741,4 +711,89 @@ impl Simulation {
 
     /// What bedding takes: two wood of boughs and brush.
     pub(in crate::analytics) const WHAT_BEDDING_TAKES: u32 = 2;
+
+    /// A vessel into the store at `at` before what is put by goes in, if the
+    /// store is not lined already.
+    ///
+    /// A vessel to spare goes in, whichever keeps best: what gets at buried
+    /// food is the ground itself, and a bowl or a basket in the way of it
+    /// doubles what the hole is worth; a fired pot, which nothing gnaws
+    /// through, was never put in until #357.
+    ///
+    /// Somebody who knows to line a store (#392), "woven bins", puts in the
+    /// only vessel they have, and with none makes a basket of two lashings
+    /// for it there and then. A spare was all that ever went in, and nearly
+    /// half of what a people put by lay in bare earth for want of one.
+    pub(in crate::analytics) fn line_the_store_here(&mut self, agent_index: usize, at: crate::world::Position) {
+        if !self.world.pit_at(at).is_some_and(|pit| !pit.is_lined()) {
+            return;
+        }
+        let knows_to = self.population.agents[agent_index].knows_the_way("line_the_store");
+        let enough = if knows_to { 0 } else { 1 };
+        let lining = {
+            let agent = &self.population.agents[agent_index];
+            crate::environment::tags::EVERYTHING_THAT_KEEPS
+                .iter()
+                .filter(|keeps| {
+                    crate::environment::tags::is_this_a(keeps.called, crate::environment::tags::Tag::FoodContainer)
+                })
+                .filter(|keeps| agent.how_many_i_have(keeps.called) > enough)
+                .min_by(|a, b| a.how_fast_food_in_it_goes_off.total_cmp(&b.how_fast_food_in_it_goes_off))
+                .map(|keeps| keeps.called)
+        };
+        let vessel = match lining {
+            Some(vessel) => {
+                self.population.agents[agent_index].inventory.remove_item(vessel, 1);
+                vessel
+            }
+            None if knows_to
+                && self.population.agents[agent_index].how_many_i_have("lashing")
+                    >= Self::LASHINGS_A_BASKET_FOR_A_STORE_TAKES =>
+            {
+                self.population.agents[agent_index]
+                    .inventory
+                    .remove_item("lashing", Self::LASHINGS_A_BASKET_FOR_A_STORE_TAKES);
+                "basket"
+            }
+            None => return,
+        };
+        if knows_to {
+            self.world.stores_lined += 1;
+        }
+        if let Some(pit) = self.world.pit_at_mut(at) {
+            pit.put_in(if vessel == "stoneware" {
+                crate::agents::InventoryItem::new_container(
+                    vessel.to_string(),
+                    1,
+                    crate::environment::making::WHAT_A_FIRED_POT_HOLDS,
+                )
+            } else {
+                crate::agents::InventoryItem::new_with_weight(vessel.to_string(), 1, 1.0)
+            });
+        }
+    }
+
+    /// What a basket for a store takes, woven there and then (#392): what a
+    /// basket always takes (`making::BASKET`).
+    pub(in crate::analytics) const LASHINGS_A_BASKET_FOR_A_STORE_TAKES: u32 = 2;
+
+    /// What opening a store shows (#392): what vermin have carried off since
+    /// it was last opened. Seen often enough, in stores of one's own or the
+    /// camp's, and somebody thinks to put something between the food and the
+    /// ground.
+    pub(in crate::analytics) fn what_opening_the_store_shows(&mut self, agent_index: usize, at: crate::world::Position) {
+        let Some(pit) = self.world.pit_at_mut(at) else {
+            return;
+        };
+        if std::mem::take(&mut pit.gnawed) == 0 {
+            return;
+        }
+        let agent = &mut self.population.agents[agent_index];
+        agent.skills.made_one(crate::agents::Agent::A_GNAWED_STORE_SEEN);
+        if agent.skills.times_made(crate::agents::Agent::A_GNAWED_STORE_SEEN)
+            >= crate::agents::Agent::GNAWED_STORES_BEFORE_LINING
+        {
+            agent.it_comes_to_me("know:line_the_store", crate::agents::Agent::GNAWED_STORES_BEFORE_LINING);
+        }
+    }
 }

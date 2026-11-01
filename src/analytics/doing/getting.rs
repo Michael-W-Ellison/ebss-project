@@ -1349,7 +1349,7 @@ impl Simulation {
         // anything.
         let whose = self.population.agents[agent_index].id;
 
-        self.world.pits.push(Pit {
+        self.world.pits.push(Pit { gnawed: 0,
             where_it_is: here,
             holds: Vec::new(),
             covered: false,
