@@ -153,7 +153,7 @@ impl Simulation {
                     let agent = &mut self.population.agents[agent_index];
                     agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, turn_now);
                     if now_tame {
-                        agent.found_out_how_to("do:Tame");
+                        agent.it_comes_to_me("do:Tame", 1);
                         return ActionResult::success()
                             .with_energy_cost(3.0)
                             .with_message(format!("The {} is tame and stays", species.name));
@@ -180,7 +180,7 @@ impl Simulation {
                 let agent = &mut self.population.agents[agent_index];
                 agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, turn_now);
                 if now_tame && !was_tame {
-                    agent.found_out_how_to("do:Tame");
+                    agent.it_comes_to_me("do:Tame", 1);
                     agent.skills.practise(crate::agents::skills::SkillType::Farming, 10, turn_now);
                     return ActionResult::success()
                         .with_drive_change(DriveType::Utility, -0.3)

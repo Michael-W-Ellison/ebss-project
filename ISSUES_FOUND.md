@@ -28032,6 +28032,14 @@ later entry. These were not. Each line names the entry that left it.
   for a third of each load when it brings more home (#374). Meat by the
   beast's mass was tried and not kept (#257, #330).
 - A wounded person still goes back to fight a boar, often by a fold (#374).
+- A walk at a target inside a beast's ground stops short and is decided again
+  every minute, until the walker is starving or parched (#376). On the camp's
+  own ground those about now drive the beast off together (#377), a
+  troubled camp is ringed with thorn (#378) and keeps a watch at night
+  (#379). Beasts still strike more by night than by day (75 against 41
+  at #382).
+- The Utility working is chosen from a fixed place in the list, so a working
+  refused for any reason comes back every turn Utility wins (#376).
 - A failed swap destroys the substitute, and swaps the world cannot supply
   are still offered once (#206). ~~Fixed (#369).~~
 - ~~`what_i_would_work_on` has no "is the output worth having" filter (#199).~~
@@ -28045,6 +28053,24 @@ later entry. These were not. Each line names the entry that left it.
   proportional in #363.
 - Rotation cannot be learned, because lessons are keyed on the crop and not
   the ground (#165), and a field is read only from a full stand (#246).
+- Agriculture's first stage is modelled throughout: selective harvesting
+  keeps the wild stands near home larger (#380), controlled burning brings
+  them on (#381), the wood near home is coppiced (#382), and ditches water
+  stands on dry ground (#383). Ground never dries out in a dry spell, so a
+  ditch helps only on hills, mountain, desert and salt flat, where few camps
+  are (#383).
+- Agriculture's second stage is modelled throughout: gardens, cuttings,
+  tubers (#384), saved seed, the hoe (#385), and muck and compost from the
+  midden (#386). Nobody made a hoe inside two years in probes (#385); tools
+  are now made in the order of the time they save net of their making
+  (#387), which has not been looked at for the hoe.
+- Discovery runs at one pace (#389): a run of the model at a people's pace,
+  thirty thousand times slower than the development pace the suite and the
+  measurements use. A people's pace cannot be run long enough to be watched;
+  what it comes to is reckoned from the development pace. Teaching (#388)
+  has not been seen in a measurement, nobody born in a run being six by the
+  end of it. A fire never gets away into a camp, and game is not drawn to
+  burnt ground (#381). Poles are not a thing apart from wood (#382).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
   (#200, #201). A better tool changes the yield, not the time (#345).
@@ -28055,7 +28081,8 @@ later entry. These were not. Each line names the entry that left it.
   "moving camp never fires" though camps move (#193). ~~The prose is
   corrected (#369).~~
 - Sling, travois and leather bag are never found out in two years (#345).
-- Mating is tried about 1.4 times a day per partnered adult (#338). Best
+- ~~Mating is tried about 1.4 times a day per partnered adult (#338).~~
+  Only on a day a child could come of it (#375). Best
   suited pairs stand no nearer than others (#339). Traits only a mutation
   can give never appear in an adult (#337).
 - ~~An ill person sleeps through their own hunger (#166, not settled)~~: no
@@ -28756,4 +28783,925 @@ fight fix.
 **Full suite**: 2,989 passed, 0 failed.
 
 **Dice counts**: 7,126 (seed 4242, 120 turns) and 1,004,850 (seed 0, a
+year).
+
+### 375. Partners couple only on a day a child could come of it
+
+The user asked: "Resolve issue 338, Mating Rate, so that more turns are
+freed up."
+
+**What #338 left open.** Partnered adults coupled about 1.4 times a day,
+and a pair can conceive on one day in a cycle of thirty: the carrier's
+fertile day, once, with their chance for the cycle unspent
+(`Agent::could_conceive_now`). The Reproduction drive answered with `Mate`
+whenever the partner was within courting distance, and walked to the partner
+when not. After a try outside the window the wish was left a day short of
+asking again (`after_a_try_outside_the_window`, #311), so the same pair asked
+every day.
+
+Counted on two smooth worlds over 200 days, with every `Mate` sorted by
+whether a child could have come of it that day:
+
+| | seed 1 | seed 2 |
+|---|---|---|
+| couplings | 2,290 | 573 |
+| on a day either could conceive | 12 | 0 |
+| conceived | 1 | 0 |
+
+The pairing pass (`Population::process_reproduction`) makes most children
+anyway. It conceives for any pair on the carrier's fertile day whether or not
+they coupled, so the couplings were nearly all turns spent on nothing.
+
+**What changed.** The Reproduction arm couples, or walks halfway to the
+partner, only when a child could come of it today
+(`reproduction::could_these_two_conceive_today`): one of the two can carry,
+it is their fertile day, and their chance this cycle is not spent. On every
+other day the drive stands aside and the turn goes to whatever presses next.
+The same two worlds then coupled once each in 200 days, and both conceived
+more (5 against 3, and 2 against 0).
+
+**And a counter.** The coupling count added for this went into
+`socialising` first, the first function its edit matched, so the first two
+runs' `STORE a_coupling_tried` counted conversations. It is in `mating` now.
+The figures above are from a probe, not from those runs.
+
+**Measured**, forty settlements, two years, against #374 (the baseline run
+reproduces #374 exactly):
+
+| | #374 | #375 | t |
+|---|---|---|---|
+| births | 168 | 174 | +1.06 |
+| deaths | 5 | 10 | +1.09 |
+| of hunger | 1 | 6 | +1.40 |
+| of thirst | 1 | 3 | |
+| of a blow | 3 | 0 | |
+| alive at two years | 643 | 644 | +0.15 |
+| children conceived by the pairing pass | 169 | 191 | |
+| by a coupling | 47 | 20 | |
+
+Every column is within noise. The turns freed came to about 11 a day on
+smooth seed 1 and 3 on smooth seed 2, a settlement of twelve founders. Three of the six hunger deaths were on smooth
+seed 3, between days 675 and 680, at the end of the second winter. Whether
+the extra births or the freed turns had anything to do with that was not
+looked into.
+
+**Tests** (`coupling_tests`):
+- `nobody_goes_to_their_partner_on_a_day_nothing_could_come_of_it`: off the
+  fertile day the drive offers neither a coupling nor a walk. On the
+  carrier's day it couples, and once the cycle's chance is spent it waits for
+  the next.
+- `partners_apart_meet_rather_than_pass` now runs on a fertile day, the only
+  day they go.
+
+**Full suite**: 2,990 passed, 0 failed.
+
+**Dice counts**: 7,126 (seed 4242, 120 turns, unchanged) and 939,903 (seed
+0, a year).
+
+### 376. Why hunger deaths went up after #375, and what stopped them
+
+The user asked: "Look into why hunger deaths went up."
+
+After #375 hunger deaths went from 1 to 6 in forty settlements over two
+years, and thirst from 1 to 3. Earlier runs in this series had 0 to 3. Each
+death was traced: a person's last few weeks of actions, reserve, health and
+water, what took their health, food carried, and where their partner and
+hearth were. Four causes turned up, two from #375 and two older faults that
+the freed turns ran into.
+
+**1. Partners drifted apart.** The Reproduction drive used to walk a person
+halfway to their partner whenever the wish for a child was up, which was about
+daily. That walk was what kept a pair in one place. #375 kept it to the
+fertile day. Eight settlements run both ways for two years:
+
+| | every day (#374) | fertile day only (#375) |
+|---|---|---|
+| partners' mean distance apart | 14 cells | 28 cells |
+| partner-days over fifty cells apart | 2,910 | 6,758 |
+
+The two traced on smooth seed 3 had partners two hundred cells away. A partner
+more than 25 cells off (`A_PARTNER_IS_MISSED_FROM`) is now gone halfway to on
+any day. Coupling stays on the fertile day.
+
+**2. A boar on the hearth.** The #372 rule stops a walk short of a beast's
+ground. A boar settled on smooth seed 3's camp, and the two people outside
+its ground could not get back to their hearth or their store. The walk
+stopped short and called itself done, so it was decided again every minute,
+about 280 times a day. They starved three cells from home over two days.
+Somebody starving now walks in and takes the chance
+(`does_this_one_stop_short`).
+
+**3. The same at the water.** On smooth seed 24, two people died of thirst
+three cells from a stream with a boar's ground between them and it. Each
+walked at it 870 to 1,040 times on their last day. Somebody down to the last
+quarter of their water (`DESPERATE_FOR_WATER`) now walks in as well.
+
+**4. Firing a pot with no fire.** On scattered seed 8 and smooth seed 18,
+people wasting through a winter spent 34 to 48 turns a day on
+`Work { verb: "fire", to: "claypot" }` and nothing else. The Utility drive
+offered any working the person knew, whether or not it is done over a fire
+(`what_i_would_work_on`). Each person always takes the same entry from that
+list, chosen by their id. So the same refused job came back every turn
+Utility won: "No fire here to fire claypot over" 6,467 times in 399 days on
+smooth seed 18, against 359 pots fired. The turns freed from coupling went
+there. A working over a fire, and the fired pot as the vessel wanted
+(`what_vessel_i_would_rather_have`), are now offered only with a lit fire to
+hand (`what_i_would_work_on_with`, `what_vessel_i_would_rather_have_with`).
+
+**Measured**, forty settlements, two years:
+
+| | #374 | #375 | #376 first step (1, 2) | #376 (1–4) |
+|---|---|---|---|---|
+| births | 168 | 174 | 178 | 178 |
+| deaths | 5 | 10 | 12 | 5 |
+| of hunger | 1 | 6 | 4 | 1 |
+| of thirst | 1 | 3 | 3 | 0 |
+| of a blow | 3 | 0 | 5 | 4 |
+| alive at two years | 643 | 644 | 646 | 653 |
+| person-days wasting | | | 939 | 574 |
+| couplings tried | | | 155 | 128 |
+
+Against #374, the last column is t +0.82 for births and alive, and 0.00 for
+deaths and hunger deaths. Partners are 17.6 cells apart on average, and over
+fifty apart on 4.7% of partner-days.
+
+**Still open.** Somebody who is not desperate still walks at a target inside
+a beast's ground, stops short and decides the same walk again, turn after
+turn. The decision layer should not pick such a target, but many of the walks
+come from overrides that never ask (`can_this_be_got_to`). The same fixed
+starting place in the Utility list means one person can still repeat any
+working that keeps being refused for some other reason.
+
+**Tests**:
+- `coupling_tests::nobody_goes_to_their_partner_on_a_day_nothing_could_come_of_it`
+  now also checks that a partner eighty cells off is gone halfway to.
+- `danger_cadence_tests::somebody_starving_walks_into_a_beasts_ground` and
+  `somebody_dying_of_thirst_walks_into_a_beasts_ground`.
+- `clay_tests::nobody_sets_out_to_fire_a_pot_with_no_fire`.
+
+Each fails without its fix.
+
+**And to the measurement**: partner distance and person-days wasting, as
+`STORE` lines.
+
+**Full suite**: 2,993 passed, 0 failed.
+
+**Dice counts**: 7,126 (seed 4242, 120 turns) and 948,917 (seed 0, a year).
+
+### 377. Driving a beast off the camp's ground
+
+The user asked: "What technology discoveries should be added next from the
+list?" and then "Go ahead and start with the first." The first was driving a
+beast off the camp: "People protect or cull animals informally"
+(animal_husbandry, stage 0), with "Thorn barriers" and "Night watches"
+(defensive_infrastructure, stage 0). This entry is the first of the three.
+
+**What was there.** A beast that charges (a boar, a bear, a mammoth) keeps
+the ground two cells about it, and a walk stops short of that ground (#372).
+One that settled by a hearth could only be waited out. On smooth seed 3 two
+people starved outside a boar's ground three cells from home (#376).
+
+A beast sizes people up one at a time (`what_the_beasts_make_of_us`), and a
+boar outweighs any one person. So a camp full of people faced it one at a
+time.
+
+**What changed** (`analytics::between_us::driving_off`, `Action::DriveOff`,
+`do:DriveOff` in the catalogue, born knowledge as a stage-0 listing):
+- **The decision** (`a_beast_on_our_ground`, ahead of every want). It applies
+  to a grown person outside a charging beast's ground, with the beast within
+  sixty metres of their hearth (`ON_THE_CAMPS_GROUND`). They reckon what the
+  grown people within earshot are worth together (`what_those_about_are_worth`):
+  - each at what a person is worth to a beast, more with a weapon, less for
+    being hurt (`what_shape_i_am_in`);
+  - half as much again with brands from a fire burning within three cells
+    (`WHAT_A_BRAND_ADDS`).
+
+  That is set against what the beast would need to stand up to them: its
+  worth, times its nerve, times `WHAT_IT_TAKES_TO_TURN_AND_FACE`, the same
+  sum a beast makes. Nobody tries it when the sum says it would stand.
+- **The act.** The same reckoning again. The beast bolts as far as a
+  frightened beast gets, the way most nearly away from the drivers that has
+  ground off the camp to stand on (`where_it_would_bolt_to`). If it has
+  nowhere to go, it is not driven and nobody tries.
+
+**What did not work first.** Driven straight away and nowhere else, a
+mammoth with a lake behind it on smooth seed 10 had no ground to bolt to. It
+stood where it was, and the drive-off counted as done: 7,781 of the first
+run's 7,838 drive-offs were that one world, every turn for two years. It
+moved no population column, but it was turns spent on nothing.
+
+**Measured**, forty settlements, two years, against #376:
+
+| | #376 | #377 | t |
+|---|---|---|---|
+| births | 178 | 182 | +1.00 |
+| deaths | 5 | 4 | −0.44 |
+| of a blow | 4 | 2 | |
+| of hunger | 1 | 2 | +0.57 |
+| alive at two years | 653 | 658 | +1.22 |
+| person-days wasting | 574 | 383 | |
+| beasts driven off | | 61, in 19 worlds | |
+
+All within noise. Against #374, before the mating change, alive is 643 to
+658 (t +1.30).
+
+**Tests** (`driving_off_tests`):
+- four grown people drive a boar off the hearth, and it ends off the camp's
+  ground;
+- one alone does not try it, and it stands if he does;
+- brands from a burning fire make two enough;
+- a boar away from the camp is left alone;
+- with water straight behind it, a boar goes round (fails with the
+  straight-away rule);
+- with nowhere at all to go, it is not driven.
+
+**Still to do from the same item.** Thorn barriers, which keep beasts from
+coming onto the camp's ground at all, and night watches, which would see
+one coming while the camp sleeps. A walk to water or anything else outside
+the camp still stops short of a beast's ground until the walker is desperate
+(#376).
+
+**Full suite**: 2,999 passed, 0 failed.
+
+**Dice counts**: 7,388 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
+unchanged).
+
+### 378. A ring of thorn round a troubled camp
+
+The user asked: "Yes, go on to thorn barriers." The second of the three
+listings in the first recommendation of #377: "Thorn barriers"
+(defensive_infrastructure, stage 0).
+
+**What changed** (`Action::PutUpThornHedge`, `do:PutUpThornHedge` in the
+catalogue, born knowledge as a stage-0 listing; `world::ThornHedge`):
+- **When.** In the evening at home (`the_evening_at_home`, after the midden
+  and latrine), somebody grown lays brush into a ring round their hearth
+  (`a_thorn_hedge_to_lay`). They do it if they remember a beast on the
+  camp's ground, or a ring there is already begun. Remembering means a
+  danger anywhere within the camp's sixty metres at three tenths or more
+  (`A_CAMP_TROUBLED_ENOUGH_FOR_THORNS`). A boar's warning marks one; so now
+  does driving a beast off, for everybody who was there.
+- **The work.** Every armful of wood in hand goes in, by whoever brings it.
+  Twenty-four close the ring (`ThornHedge::WHAT_IT_TAKES`). With none in
+  hand, wood within a forage is fetched.
+- **What it does.** Closed, it stands a season (`HOW_LONG_IT_STANDS`); one
+  begun and left is given up after a month. After the beasts move each turn,
+  any wild beast of six kilograms or more that has come inside a closed ring
+  it was outside goes back to where it stood
+  (`World::the_thorns_turn_them`). One already inside when the ring closed is
+  not shut in, a hare goes under it, and kept beasts pass.
+
+**Measured**, forty settlements, two years, against #377:
+
+| | #377 | #378 | t |
+|---|---|---|---|
+| births | 182 | 181 | −0.19 |
+| deaths | 4 | 2 | −1.00 |
+| of hunger | 2 | 1 | −0.57 |
+| of a blow | 2 | 1 | |
+| alive at two years | 658 | 659 | +0.16 |
+| person-days wasting | 383 | 326 | |
+| thorn rings closed | | 246, in 34 worlds | |
+| beasts turned at a ring | | 2,518 | |
+| beasts driven off | 61 | 63 | |
+
+Within noise. A camp that has been troubled re-rings itself about every
+season, about seven rings a world in two years, at twenty-four armfuls each.
+Against #374, before the mating change, alive is 643 to 659 (t +1.25) and
+deaths 5 to 2.
+
+**Tests** (`driving_off_tests`):
+- an untroubled camp is not hedged, a troubled one is, and a closed ring is
+  not laid again;
+- two people's brush closes one ring;
+- a closed ring turns a boar and not a hare, and does not shut in one
+  already inside;
+- driving a beast off sets the camp hedging.
+
+**Still to do from the same item:** night watches. A walk to water or
+anything else outside the camp still stops short of a beast's ground until
+the walker is desperate (#376).
+
+**Full suite**: 3,003 passed, 0 failed.
+
+**Dice counts**: 7,793 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
+unchanged).
+
+### 379. A watch through the night, and what the first one missed
+
+The user asked: "go on to night watches." The last of the three listings in
+the first recommendation of #377: "Night watches"
+(defensive_infrastructure, stage 0).
+
+**What the night was costing.** Probed over eight settlements for two years,
+with drive-offs and thorn rings in: beasts struck people nine times at night,
+eight of them asleep, against three by day. Three quarters of the damage from
+beasts came at night. Every blow was a boar's, and no hungry predator struck
+anybody.
+
+**The watch** (`Action::KeepWatch`, `do:KeepWatch` in the catalogue, born
+knowledge as a stage-0 listing):
+- **Who.** A camp keeps one when it remembers a beast on its ground
+  (`is_my_camp_troubled`, shared with the thorn ring) and has three or more
+  grown people (`ENOUGH_TO_KEEP_A_WATCH`). The night is cut into two-hour
+  watches (`A_WATCH`) that go round the camp, starting in a different place
+  each night (`on_watch_now`).
+- **What.** The one on watch sits up by the hearth instead of sleeping
+  (`what_the_watch_does`, in `what_the_night_asks`). They drive off a beast
+  the camp together outweighs. If they can't, they wake and frighten anybody
+  of the camp asleep near it, so they get out of its way (`keeping_watch`).
+
+**What the first measurement found.** Watches were kept, 9,163 of them, and
+810 sleepers woken. But night blows did not fall: 76 against 26 by day over
+forty settlements, and deaths went from 2 to 4. Traced
+(`victim_from_home`, ring, watch, whether the camp could have driven it off),
+most of them were one thing. A boar lay by the hearth inside a closed thorn
+ring, striking a camp of ten or twelve as they slept, a beast the camp could
+easily have driven off. Three faults:
+1. **The ring was asked before the scavengers moved.** Hungry scavengers
+   are drawn to a camp's meat, open pits and midden (`what_draws_the_scavengers`).
+   That pass ran after the ring had already turned the beasts that moved, so a
+   boar drawn to meat inside the ring walked straight through. The ring is
+   asked after it now. Rings turned beasts 4,465 times in the corrected run
+   against 2,107.
+2. **Bed came before driving off.** Driving a beast off is weighed with the
+   day's decisions, and the night sends people to bed first, so it was never
+   asked. Nobody now goes to bed with a beast on the camp that those about
+   could drive off. By night, too, the camp's ground is where its people
+   sleep, twenty cells and not six.
+3. **A closed ring stood the watch down** even with a beast inside it. It does
+   not now (`a_beast_inside_the_ring_round`).
+
+**Measured**, forty settlements, two years:
+
+| | #378 | #379 first | #379 | t (against first) |
+|---|---|---|---|---|
+| births | 181 | 185 | 173 | −1.39 |
+| deaths | 2 | 4 | 1 | −1.36 |
+| of a blow | 1 | 3 | 1 | |
+| of hunger | 1 | 1 | 0 | |
+| alive at two years | 659 | 661 | 652 | −1.05 |
+| beasts struck people by night | | 76 | 60 | |
+| beasts struck people by day | | 26 | 36 | |
+| beasts driven off | 63 | 63 | 154 | |
+| beasts turned at a ring | 2,107 | 2,107 | 4,465 | |
+| watches kept | | 9,163 | 7,787 | |
+| person-days wasting | 326 | 510 | 416 | |
+
+Every column is within noise. Against #374, before the mating change, deaths
+went from 5 to 1 (t −1.43) and alive from 643 to 652. Blows by night fell by
+a fifth, and are still the larger part.
+
+**Tests** (`driving_off_tests`):
+- one of a troubled camp of three is on watch at any hour, and the watch goes
+  round all three;
+- no watch at a camp of two, an untroubled camp, by day, or inside a closed
+  ring;
+- the watch drives off a boar with the camp behind it, and wakes whoever
+  sleeps near a mammoth it cannot drive;
+- nobody goes to bed with a boar by the hearth;
+- by night the camp's ground is where its people sleep;
+- a ring with a beast inside it is still watched;
+- a ring turns a scavenger drawn to meat inside it. This fails with the ring
+  asked before the scavengers.
+
+**And to the measurement**: blows and warnings from beasts by night and by
+day.
+
+**Still open.** Sixty blows by night in forty settlements. Somebody asleep
+does not decide again until woken, so only the watch and whoever is still up
+can act. A walk outside the camp still stops short of a beast's ground until
+the walker is desperate (#376).
+
+**Full suite**: 3,011 passed, 0 failed.
+
+**Dice counts**: 6,757 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
+unchanged).
+
+### 380. Selective harvesting, and the larger stands it keeps
+
+The user asked: "go on to agriculture stage 1." Of the five unmodelled
+listings at that stage, this entry is "Selective harvesting" and "Larger
+stands of desired grains, nuts, berries, and tubers", which are one thing:
+the second is what the first comes to. Still to do: controlled burning,
+coppicing and small-scale water diversion.
+
+**What changed.**
+- **A kept stand** (`ResourceNode::tended`, nothing to one). Kept as well as
+  it can be, a wild food stand carries twice what it did wild
+  (`how_heavy_a_crop_it_carries`) and grows back twice as fast
+  (`regenerate_in_ground`): `A_KEPT_STAND_CARRIES`. It goes back to the wild
+  over about two hundred days when nobody keeps it
+  (`HOW_FAST_KEEPING_FADES_A_DAY`, in the day's pass for stands somebody is
+  near).
+- **Taking sparingly** (`would_this_one_harvest_sparingly`, in the gather
+  executor). Somebody who knows selective harvesting, gathering at a wild
+  stand within a forage of home (`is_this_a_stand_near_home`) and not
+  starving, leaves a quarter of what stands (`WHAT_A_SPARING_HARVEST_LEAVES`).
+  Each such harvest keeps the stand a twentieth better
+  (`WHAT_A_SPARING_HARVEST_KEEPS`). Far from home, or starving, a person
+  strips it as before.
+- **Found out** by coming back to the stands near home: three hundred gathers
+  there (`RETURNS_BEFORE_SPARING`), about five months of ordinary gathering,
+  so a season has turned. At thirty, all twelve founders knew it inside six
+  weeks.
+- **The catalogue** gains a `know:` link, for a way of doing a thing that is
+  not a separate act (`Agent::WAYS_A_THING_IS_DONE`, `Agent::knows_the_way`).
+  Both listings point at `know:selective_harvest`.
+
+**Measured**, forty settlements, two years, against #379:
+
+| | #379 | #380 | t |
+|---|---|---|---|
+| births | 173 | 187 | +1.54 |
+| deaths | 1 | 5 | +1.27 |
+| of a blow | 1 | 4 | |
+| of hunger | 0 | 1 | |
+| alive at two years | 652 | 661 | +1.02 |
+| worlds that found it out | | 40 | |
+| median first day | | 129 | |
+| harvests taken sparingly | | 1,331,769 | |
+| stands kept at half or better, at the end | | 2,227 | |
+
+All within noise. Births and the living are up, which is what the stands
+were for, and the four deaths by a blow fell in two worlds (smooth seeds 4
+and 18). Night blows stand where they were: 64 against 60.
+
+**Tests** (`keeping_stands_tests`):
+- a kept stand carries twice the wild one;
+- a sparing harvest leaves a quarter and keeps the stand, where somebody who
+  does not know to keeps nothing;
+- nobody harvests sparingly far from home, or starving;
+- coming back to the stands near home is how it is found out.
+
+**Full suite**: 3,015 passed, 0 failed.
+
+**Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 959,558 (seed
+0, a year).
+
+### 381. Controlled burning, and the country burning of itself
+
+The user asked: "Implement controlled burning." The second of agriculture's
+stage-1 listings, after selective harvesting (#380).
+
+**What changed.**
+- **The flush after a fire** (`ResourceNode::burnt`, nothing to one, one the
+  day it burnt). A stand a fire went over has what stood on it burnt off,
+  then carries up to twice what it did and comes back up to twice as fast
+  (`WHAT_A_BURN_BRINGS_ON`), fading over a year
+  (`HOW_FAST_A_BURN_FADES_A_DAY`). Nut trees and timber are passed under
+  (`is_brought_on_by_fire`). It multiplies with keeping (#380)
+  (`what_is_done_for_it`).
+- **Fading in a node's day** (`a_day_since_it_was_seen_to`, from
+  `a_day_for_a_node`). The keeping of #380 faded only in the awake pass, so a
+  kept stand that fell asleep kept its keeping; the flush and the keeping now
+  fade asleep or awake alike.
+- **Lightning** (`World::the_dry_country_burns`). On a dry day in the summer
+  or the autumn, each stand that burns has the same small chance of being
+  where a fire starts (`A_WILDFIRE_AT_A_STAND_ON_A_DRY_DAY`), which runs six
+  cells. Only country within the sleeping reach of somebody burns, read off
+  where the people are and not off whether anything sleeps
+  (`the_dry_country_burns`). The climate's own lightning was never set down
+  on the map, and is still not.
+- **Found out** by gathering twelve times on ground a fire went over within
+  the year (`GATHERED_ON_BURNT_GROUND`, `BURNT_WITHIN_THE_YEAR`), or by
+  watching it done. It is one of the actions found out by themselves.
+- **Setting a fire** (`Action::BurnOff`, `a_patch_to_burn`, `burning_off`).
+  Somebody grown who knows how, and how to make a fire, with nothing
+  pressing, on a day for setting one, walks to the patch near home most
+  worth burning and sets it alight; it runs five cells
+  (`HOW_FAR_A_BURN_GOES`). A patch is worth it when the flush, at half what
+  a burn brings on for its fading, would add more than what stands
+  (`what_a_burn_here_comes_to`). Not within the camp's own ground plus the
+  fire's reach, not where three stands do not burn, not where the last fire
+  is under half a year old, and not within a fortnight of the camp's last
+  (`World::fires_set_from`). Days for setting one are the dry days of the
+  summer and the autumn, and of early spring
+  (`is_it_a_day_for_setting_a_fire`).
+
+**How it got there**, each found by probing a live world:
+1. A strike at one stand anywhere: on a map a thousand cells square, with
+   eighty thousand stands, it landed within a forage of the people less than
+   one time in a hundred, and nobody ever gathered on burnt ground. Now per
+   stand, in country somebody is near.
+2. The flush counted as seen only while over half fresh: a summer's fire was
+   below that by midwinter, before the stands bore again. Now within the year.
+3. At twice the present rate lightning burnt two stands in five near home
+   within the year.
+4. A camp's fortnight was read off any ground burnt near home, so a wildfire
+   stopped it burning its own. Now the day each camp last set one.
+5. A brand from the camp's fire: the fire was out most days by noon. Making
+   fire is born knowledge (carrying embers), and dry grass is its own tinder.
+6. A patch of three cells held fewer than three stands most places; five.
+7. Through the summer and the autumn the stands bear, so every patch was
+   worth more standing than burnt until the dry season was over. Early
+   spring, burning last year's dead growth off before the new comes through,
+   is when winter has left little to lose.
+8. A world that never slept counted all its ground as near somebody and
+   burnt it all, so an empty world woke from a year asleep different from
+   one kept awake (`an_empty_world_sleeps_a_year_and_wakes_the_same`).
+
+**Measured**, forty settlements, two years, against #380:
+
+| | #380 | #381 | t |
+|---|---|---|---|
+| births | 187 | 185 | -0.23 |
+| deaths | 5 | 1 | -1.27 |
+| of hunger | 1 | 1 | |
+| alive at two years | 662 | 664 | +0.20 |
+| camp moves | 374 | 303 | -1.76 |
+| worlds that found it out | | 40 | |
+| median first day | | 120 | |
+| fires set | | 1,082 | |
+| lightning fires | | 6,438 | |
+| stands burnt, either sort | | 182,582 | |
+| person-days wasting | 424 | 328 | |
+| rotted | 43,349 | 46,093 | |
+| vermin | 266,882 | 293,415 | |
+| blows by night / by day | 64 / 27 | 35 / 18 | |
+
+Within noise throughout. The latest world to find it out did on day 469; a
+world set between 4 and 54 fires. Fewer moves and fewer days wasting fit
+heavier stands near home; more of what is gathered rots and is lost to
+vermin.
+
+**Not modelled**: a fire getting away into a camp, its stores or its people;
+game drawn to the green pick on burnt ground; the smoke.
+
+**Tests** (`burning_tests`):
+- burnt ground carries twice, and the flush is gone in a year;
+- a fire burns what it brings on within its reach, not nut trees or timber;
+- the country burns only on a dry day in summer or autumn, and fires are set
+  in early spring as well;
+- a picked-over patch near home is walked to and set alight, and not burnt
+  again straight off;
+- a patch hung with fruit is not burnt;
+- nobody sets a fire near the camp;
+- no burning in the wet or the winter;
+- gathering on burnt ground is how it is found out.
+
+**Full suite**: 3,025 passed, 0 failed, 6 ignored.
+
+**Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 954,540 (seed
+0, a year).
+
+### 382. Coppicing the wood near home
+
+The user asked: "go on to coppicing." The third of agriculture's stage-1
+listings, after selective harvesting (#380) and controlled burning (#381):
+"Coppicing and pruning of useful trees/shrubs".
+
+**What changed.**
+- **A coppice** (`ResourceNode::coppiced`, nothing to one). Wood cut back to
+  the stool sends up a crown of straight poles: a stand coppiced as well as
+  it can be carries up to twice and comes back up to twice as fast
+  (`A_COPPICE_CARRIES`), and it multiplies with keeping and burning
+  (`what_is_done_for_it`). Uncut, it grows out over about three years
+  (`HOW_FAST_A_COPPICE_GROWS_OUT_A_DAY`), far slower than a kept food stand
+  goes wild, because overstood coppice is still coppice for years.
+- **Cut to the stool** (in the gather executor). Somebody who knows to,
+  cutting wood within a forage of home (`is_this_wood_near_home`), coppices
+  the stand a twentieth better (`WHAT_A_CUT_TO_THE_STOOL_DOES`). It costs
+  nothing and takes no more of the wood than before; far from home nobody
+  comes back to it.
+- **Found out** by cutting wood near home three hundred times
+  (`Agent::CUTS_BEFORE_COPPICING`), about six months, so a stump has had a
+  growing season to sprout in. At sixty the first in each world knew it
+  inside a month.
+- **The catalogue** gets a second way of doing a thing,
+  `know:coppice` (`Agent::WAYS_A_THING_IS_DONE`). The listing names it and
+  `know:selective_harvest` both: the pruning of fruit and nut shrubs is
+  what selective harvesting already does for them.
+
+**Measured**, forty settlements, two years, against #381:
+
+| | #381 | #382 | t |
+|---|---|---|---|
+| births | 185 | 187 | +0.36 |
+| deaths | 1 | 5 | +0.94 |
+| of a blow | 0 | 4 | |
+| of hunger | 1 | 1 | |
+| alive at two years | 664 | 662 | -0.24 |
+| camp moves | 303 | 338 | +1.22 |
+| worlds that found it out | | 40 | |
+| median first day | | 176 | |
+| cuts to the stool | | 294,053 | |
+| stools coppiced half or better, at the end | | 1,258 | |
+| person-days wasting | 328 | 311 | |
+| blows by night and by day | 53 | 116 | +1.46 |
+
+Within noise throughout. The blows fell mostly in two worlds (smooth seeds
+18 and 4, 31 and 30 of them), and against #380 they stand at t +0.63; #381
+was the low draw. Wood was never short in two years, so a faster coppice
+shows in nothing measured yet; it is there for camps that stay.
+
+**Not modelled**: poles as a different thing from wood, for building or
+hafting; a coppice cut on a cycle, standing years between cuttings.
+
+**Tests** (`coppicing_tests`):
+- a coppice carries twice, and grows out in three years;
+- wood near home is cut to the stool by somebody who knows to, and not far
+  from home or by somebody who does not;
+- cutting wood near home is how it is found out.
+
+**Full suite**: 3,028 passed, 0 failed, 6 ignored.
+
+**Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 961,864 (seed
+0, a year).
+
+### 383. Water diversion on a very small scale
+
+The user asked: "Continue with small-scale water diversion." The last of
+agriculture's stage-1 listings, after #380 to #382.
+
+**What changed.**
+- **Watered ground** (`ResourceNode::watered`, nothing to one). What a plant
+  has to drink is what the ground holds of itself, by terrain, and a little
+  for rain (`Soil::humidity`); plains, meadow, forest and riverbank already
+  hold as much as a plant does best on, whatever the sky does. Hills,
+  mountain, desert and salt flat do not (`DRIER_THAN_A_PLANT_LIKES`). A ditch
+  brings what a stand on such ground has to drink up towards the middle of
+  what a plant does best on (`WHAT_A_DITCH_BRINGS`, `what_it_has_to_drink`),
+  and does nothing on ground wet enough already. It silts up over half a year
+  (`HOW_FAST_A_DITCH_SILTS_A_DAY`), asleep or awake.
+- **Digging** (`Action::DigDitch`, `a_ditch_to_dig`, `digging_a_ditch`).
+  Somebody grown who knows how, with nothing pressing, in the spring or the
+  summer, walks to the patch near home that a ditch would water most, with
+  water within four cells to lead from (`HOW_FAR_A_DITCH_RUNS`) and at least
+  two stands on dry ground about its end not watered already, and digs. Every
+  such stand within two cells is watered. A camp digs one a week at most
+  (`World::ditches_dug_from`).
+- **Found out** by gathering forty times from stands near home on dry ground
+  with water close by (`GATHERED_DRY_BY_WATER`), or by watching it done. It is
+  one of the actions found out by themselves.
+
+**Where camps are.** A probe at three worlds found camps sitting in well
+watered country: of 215 to 276 wild stands within a forage of home, 4 to 20
+were on dry ground (all of them hills), and 0 to 9 of those had water near
+enough to lead to them. People settle by water among green country, and a
+forager's ditch belonged to dry places; this world has few camps in them, so
+this does little in most.
+
+**Measured**, forty settlements, two years, against #382:
+
+| | #382 | #383 | t |
+|---|---|---|---|
+| births | 187 | 190 | +1.00 |
+| deaths | 5 | 5 | 0 |
+| alive at two years | 662 | 665 | +1.00 |
+| worlds that found it out | | 7 | |
+| first days | | 234 to 625 | |
+| ditches dug | | 12, in 3 worlds | |
+| stands watered at the end | | 0 | |
+
+The smooth worlds came out the same to the person. Smooth seed 1 found it
+out and dug nothing, and ran the same until then; the three scattered births
+are within noise. Ditches are dug in the spring and summer and silt up in
+half a year, so none was still watering at two years, which ends in winter.
+
+**Not modelled**: ground that dries out in a dry spell, which is where a
+ditch would matter on ordinary ground (`Soil::humidity` holds no memory of
+the weather, only today's rain); flooding a patch by damming rather than
+leading; water carried by hand to a stand.
+
+**Tests** (`ditching_tests`):
+- a ditch waters dry ground, leaves wet ground as it is, and silts up in
+  half a year;
+- a dry patch near water is walked to and watered, and not dug again
+  straight off;
+- no ditch on wet ground, away from water, or in the winter;
+- gathering from stands on dry ground by water is how it is found out.
+
+**Full suite**: 3,032 passed, 0 failed, 6 ignored.
+
+**Dice counts**: unchanged, 6,757 (seed 4242, 120 turns) and 961,864 (seed
+0, a year).
+
+### 384. Propagation from tubers
+
+The user asked: "go on to agriculture stage 2." Stage 2 was mostly in
+already: gardens (`do:TillSoil`, found out by gathering from stands sown
+yourself), cuttings (`do:TakeCutting`, `do:PlantCutting`), saved seed
+(#365) and muck (`do:SpreadMuck`). A probe at three worlds found it working
+where a settlement got there: in two smooth worlds gardens were found out on
+days 338 and 474, and by two years each had 120 to 190 cells of field, with
+cuttings taken and planted, fields tended and muck spread; the scattered
+world never got past sowing. What was missing was a listing with no model
+(digging sticks and hoes, #385), a listing whose model left a part out
+(composting, #386), and this: roots could be neither sown nor lifted.
+
+**What changed.** Roots are on the list of what can be put in the ground
+(`what_can_be_sown`), as a piece of the tuber or a dug top put back, which
+is how growing them began: a field can be sown with them, and a piece lifted
+from a stand far off and planted by the camp, as a cutting is.
+
+**Tests** (`tubers_tests`): a piece of tuber is lifted from a stand of
+roots; roots go in when roots are what there is.
+
+### 385. Digging sticks and hoes
+
+**What changed.**
+- **The hoe** (`making::HOE`, `HOE_FOR_FARMING`): a blade lashed across a
+  haft, the same three parts as a shovel set the other way, helping at
+  farming twice what bare hands do where the stick helps 1.4. Its listing is
+  stage 2, so nobody arrives knowing it. It is found out by breaking ground
+  for a garden twenty times (`GROUND_BROKEN_FOR_A_GARDEN`), and the same
+  count gates it by any other road (`how_practised_first`).
+- **A gardener wants a tool for the garden**
+  (`Agent::trades_i_want_tools_for`): farming joins the trades a pair of
+  hands wants a tool for, for somebody who keeps a garden only. For
+  everybody, a people that never broke ground would be cutting digging
+  sticks for gardens it does not keep.
+- **A tool weeds more** (`tending_a_field`): what a turn's tending clears is
+  multiplied by the farming tool in hand, never below bare hands.
+- The listing names `make:diggingstick` and `make:hoe`; the stage-2 product
+  listing points at gardens.
+
+**How it got there.**
+1. Counted only with a digging stick in hand and left to the general
+   noticing, which wants the makings in the pack: gardeners seldom carried a
+   stick, never wood, a knapped tip and a lashing at once, and the most
+   anybody broke with a stick in a year was three. Now any ground broken for
+   a garden, and found out directly, as thirst finds the water skin.
+2. With no practice gate, the hoe was noticed on day six, before anybody had
+   a garden, as a likeness of the shovel. The gate came back.
+
+**Not reached**: in probes, nobody who knew the hoe made one before two
+years were out, and gardeners seldom carried even a digging stick. Wanting
+a farming tool reaches the making errands last, after every other trade's
+tool, and the blade and the lashing were not gathered for it.
+
+**Tests** (`hoe_tests`): breaking ground often enough is how the hoe is
+found out; it cannot occur to anybody who has not gardened; a gardener wants
+a tool for it and would rather a hoe than a stick; a hoe weeds more than a
+stick and a stick more than hands.
+
+### 386. Compost from the midden
+
+**What changed.** Muck was fold dung and what went off in a pack; what went
+onto a camp's midden stayed there, fouling its ground. A midden now keeps
+what goes onto it (`Midden::holds`) - spoiled food, offal, rotten hides, what
+a body leaves - which rots down over about two months
+(`HOW_FAST_IT_ROTS_DOWN_A_DAY`, `Midden::rotted`). A gardener at a camp
+with a garden walks to the midden and digs out what has rotted, four loads
+a trip (`Action::DigOutMidden`, `compost_to_dig`), and it goes on the field
+as muck, worth what dung is. It comes with gardens, as muck does.
+
+**Tests** (`composting_tests`): a midden rots down into compost, nothing
+lost on the way; a gardener digs out the midden for the garden and not
+again while carrying it; nobody digs without a garden, compost or gardening;
+compost goes on a field as muck.
+
+**Measured**, #384 to #386 together, forty settlements, two years, against
+#383:
+
+| | #383 | #386 | t |
+|---|---|---|---|
+| births | 190 | 190 | 0 |
+| deaths | 5 | 1 | -1.00 |
+| alive at two years | 665 | 669 | +0.39 |
+| camp moves | 342 | 364 | +1.15 |
+| worlds that gardened | | 35 | |
+| loads of compost dug out | | 5,939, in 35 worlds | |
+| worlds that found out the hoe | | 30, days 103 to 720 | |
+| person-days wasting | 314 | 273 | |
+| rotted | 44,767 | 44,613 | |
+| vermin | 294,979 | 305,316 | |
+
+Within noise throughout. Gardens come in the second year, so two years show
+the first season of what stage 2 adds and no more.
+
+**Full suite**: 3,042 passed, 0 failed, 6 ignored.
+
+**Dice counts**: unchanged, 6,757 (seed 4242, 120 turns) and 961,864 (seed
+0, a year); seed 0 does not reach gardens within its year.
+
+### 387. Tools made in the order of the time they save
+
+The user said: "Tool making should be prioritized based on the amount of
+time it saves." Making a better tool in the middle of a job already weighed
+what it saves over its working life against the turns its making costs
+(`would_a_better_tool_pay`). What somebody made in spare time went down a
+fixed list of trades instead (`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO`), so a
+gardener reached the hoe only after every hunting, cutting, skinning,
+carving and digging tool they could want, and nobody ever wanted a tool for
+gathering, which is most of anybody's day.
+
+**What changed.**
+- **A record of work at each trade** (`Agent::work_at`, `a_turn_at`,
+  `how_much_work_goes_to`): a turn counted to the trade the action asks for,
+  in the turn's feedback, fading by half a season.
+- **The net saving** (`what_a_better_tool_would_save`): the work going to a
+  trade, or the tool's working life if shorter, at the difference the best
+  tool known for it would make, less the turns along the chain to making it.
+- **The order** (`trades_i_want_tools_for`): trades worked at whose tool
+  would save more than it costs, best first; then the list's own trades not
+  yet worked, in the list's order, which is where a founder starts.
+  Gathering and gardening come in once done.
+- Breaking ground and weeding count as farming, so the mid-job reckoning
+  weighs a stick or a hoe for them too.
+
+**How it got there.** Ordered by the saving alone, with nothing asked about
+the cost, a scattered world had all twelve people putting woodcutting first
+from day 120, each out looking for wood for its making every day for months
+while the making never began. Forty worlds:
+
+| | #386 | saving alone | net of the making |
+|---|---|---|---|
+| births | 190 | 165 (t -2.58) | 179 (t -0.87) |
+| alive at two years | 669 | 642 (t -2.74) | 658 (t -0.83) |
+| scattered births | 65 | 41 (t -3.05) | 50 (t -1.37) |
+| person-days wasting | 273 | 788 | 467 (t +0.99) |
+
+The last column is with #388 and #389 as well. Within noise; the days
+wasting fell mostly in two worlds (scattered seeds 3 and 15, 119 and 88).
+
+**Tests** (`tool_priority_tests`): work at a trade falls by half in a
+season; somebody with no work recorded keeps the list's order; the trade the
+days go to comes first, and a tool that would not repay its making is not
+wanted; a forager wants a tool for gathering first; weeding is counted as
+farming.
+
+### 388. The young are taught what their camp knows
+
+The user, asked whether children should learn what their parents and camp
+know: "Yes, by being taught." What somebody found out died with them, unless
+it was one of the few things learned by watching it done (sowing, breaking
+ground, burning, ditching, taming, mucking out). Ways of working and every
+making found out went into the ground with whoever had them; at the pace of
+#389 that would lose nearly all of it.
+
+**What changed** (`the_young_are_taught`): once a day each child and
+adolescent has a chance in thirty (`A_LESSON_A_DAY`) of learning one thing a
+parent, or a grown person living within the camp's reach, knows and they do
+not. A childhood takes in a hundred or more. What a camp knows outlives the
+one who found it, and is lost when the camp is.
+
+**Measured**: no lesson was taught in two years at forty settlements -
+founders arrive grown, and nobody born in a run is six by the end of it.
+
+**Tests** (`teaching_tests`): a child learns what a parent knows, and what
+the camp knows; nobody is taught from another camp; a grown person is not
+taught this way.
+
+### 389. One pace setting for every discovery
+
+The user said: "There is also no rush for tech development. I am
+anticipating it should take hundreds to thousands of generations for
+technologies to be discovered." Asked, they meant the whole tree, forager
+to farming; one pace setting, slow by default, that tests and measurements
+can turn up.
+
+**What changed** (`core::discovery`).
+- **The development pace** is what every discovery was calibrated to: inside
+  a two-year run, the only pace at which the machinery can be watched. It is
+  kept, and is a slowness of one.
+- **Found out by experience** (`Agent::it_comes_to_me`,
+  `does_it_occur_now`): the count an idea was written with makes it
+  possible, and each experience after brings it with a chance of one in the
+  count times the slowness. Applied to the midden, the latrine, the rack, the
+  water skin, selective harvesting, coppicing, ditching, burning, gardens,
+  the pit oven, smoking, tanning, the hoe, the dressing, seeing seed come up,
+  mucking out and what a herd gives, and taming.
+- **Noticed by chance** (`at_this_pace`): the odds divided by the slowness,
+  for noticing a making by either road, looking closely, what a firing
+  shows, fire hardening clay, and spare-time experiments with workings and
+  swaps.
+- **Not slowed**: watching it done, being told, being taught - how a camp
+  keeps what one person found - and what comes of an act that has already
+  worked (salt from boiled sea water, a working once done).
+- **A people's pace** (`A_PEOPLES_PACE`) is thirty thousand times slower. A
+  run of the model starts there, or at `EBSS_PACE`; a thread under test
+  starts at the development pace, as the dice start seeded; the measurement
+  harness reads `PACE` and prints the slowness. At the development pace
+  nothing is rolled that was not rolled before: with #388's teaching
+  switched off, both dice counts came out exactly as before #389.
+
+**What a people's pace comes to.** A run at it cannot be watched: the model
+runs about five or six minutes a settlement-year, a generation is two and a
+half hours, and a thousand generations is over two thousand hours a
+settlement. So it is reckoned from the development pace instead. If the
+first person in a camp of about fifteen came to an idea on day *d*, at
+thirty thousand times slower they come to it after about *d* x 2,000 days:
+
+| | first day, development pace | a people's pace |
+|---|---|---|
+| burning | 120 | about 650 years |
+| selective harvesting | 130 | about 700 years, 28 generations |
+| coppicing | 176 | about 950 years |
+| sowing | 181 | about 1,000 years |
+| gardens, after sowing | 225 later | about 1,200 years later |
+
+Forager to gardens is about 2,200 years, some ninety generations, and the
+stages after it more; a larger people, having more experience between them,
+comes to things sooner. The constant is one number to move if that is too
+fast or too slow.
+
+**Tests** (`pace_tests`): a test starts at the development pace; at it an
+idea comes at its count, once; slower, it comes that many times later; odds
+of noticing are divided by the slowness; teaching is not slowed.
+
+**Full suite**: 3,056 passed, 0 failed, 6 ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns) and 1,008,543 (seed 0, a
 year).

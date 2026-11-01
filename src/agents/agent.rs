@@ -2069,6 +2069,12 @@ pub struct Agent {
         super::practices::Undertaking,
         super::rhythm::Rhythm,
     >,
+    /// How much of this one's work lately has gone to each trade: turns at
+    /// it, fading by half a season, and the tick it was last brought up to
+    /// date (#387). What a better tool for a trade would save is the time
+    /// that goes to it.
+    #[serde(default)]
+    pub work_at: std::collections::BTreeMap<super::SkillType, (f32, u32)>,
     /// Questions this one has put to the world and is waiting on the answer
     /// to - see [`super::wondering::Wondering`].
     ///
@@ -2236,6 +2242,7 @@ impl Agent {
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
             rhythms: std::collections::BTreeMap::new(),
+            work_at: std::collections::BTreeMap::new(),
             lately: std::collections::VecDeque::new(),
             by_what_way: None,
             took_from_the_store_at: None,
@@ -3506,12 +3513,12 @@ impl Agent {
         let laid_up = self.times_laid_up.get(Self::OFF_FOUL_GROUND).copied().unwrap_or(0)
             + self.times_laid_up.get(Self::OFF_FOUL_WATER).copied().unwrap_or(0);
         if laid_up >= Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN {
-            self.found_out_how_to("do:StartMidden");
+            self.it_comes_to_me("do:StartMidden", Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN);
         }
         if self.found_out.contains("do:StartMidden")
             && self.practices.is_established(crate::agents::practices::Practice::Farming)
         {
-            self.found_out_how_to("do:DigLatrine");
+            self.it_comes_to_me("do:DigLatrine", 1);
         }
     }
 
@@ -3885,8 +3892,13 @@ impl Agent {
     /// - A rack (Stage 2 of storage) by being rained off drying, often
     ///   enough.
     /// - A pit oven (Stage 1 of cooking) by enough suppers over a fire.
-    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 5] =
-        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven"];
+    /// - Burning the country off (Stage 1 of the agricultural path) by
+    ///   gathering, often enough, on ground a fire went over (#381).
+    /// - Leading water to a stand (Stage 1 of the agricultural path) by
+    ///   gathering, often enough, from stands on dry ground with water close
+    ///   by (#383).
+    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 7] =
+        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven", "BurnOff", "DigDitch"];
 
     /// What the practice record calls food dried within reach of a burning
     /// hearth, and how much of it before somebody notices that what hung in
@@ -3932,6 +3944,37 @@ impl Agent {
     /// and it took generations. Here it takes a good many seasons of seeing
     /// your own scattered seed come back as food.
     pub const GATHERED_FROM_SOWN_BEFORE_GARDENS: u32 = 12;
+
+    /// The ways of doing a thing that are not a thing done: known, and then
+    /// the same action goes differently (#380). What a catalogue `know:` link
+    /// names.
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 2] = ["selective_harvest", "coppice"];
+
+    /// What the practice record calls a gather from a wild stand within a
+    /// forage of home, and how many before somebody notices that the stands
+    /// they come back to come back best where they were not stripped:
+    /// "seasonal return to productive patches" turning into "selective
+    /// harvesting", stage 0 into stage 1 (#380). About five months of
+    /// ordinary gathering, so a season has turned first: at thirty, all
+    /// twelve founders knew it inside six weeks.
+    pub const A_STAND_NEAR_HOME_GATHERED: &'static str = "gatherednearhome";
+    pub const RETURNS_BEFORE_SPARING: u32 = 300;
+
+    /// What the practice record calls wood cut within a forage of home, and
+    /// how much of it before somebody notices that what was cut low sends up
+    /// a crown of straight poles from the stump, and cuts the next to the
+    /// stool on purpose: coppicing (#382). About six months of ordinary
+    /// cutting, so a stump has had a growing season to sprout in: at sixty,
+    /// the first knew it inside a month.
+    pub const WOOD_CUT_NEAR_HOME: &'static str = "woodcutnearhome";
+    pub const CUTS_BEFORE_COPPICING: u32 = 300;
+
+    /// Whether this one knows a way of doing a thing (`WAYS_A_THING_IS_DONE`):
+    /// born knowing it, or found it out.
+    pub fn knows_the_way(&self, way: &str) -> bool {
+        let link = format!("know:{way}");
+        crate::environment::catalogue::is_born_knowledge(&link) || self.found_out.contains(&link)
+    }
 
     /// Whether this agent knows any way to a product of the making chain, by
     /// a making or by a working: retted flax and a needle are both workings,
@@ -4297,6 +4340,17 @@ impl Agent {
         self.found_out.insert(what.to_string())
     }
 
+    /// An idea found out by experience, to somebody who has had the
+    /// `experience_needed` it was written with: it comes now or it does not,
+    /// at the pace ideas come (`core::discovery`, #389). Nothing is rolled
+    /// for somebody who knows it already. True if it came now.
+    pub fn it_comes_to_me(&mut self, what: &str, experience_needed: u32) -> bool {
+        if self.found_out.contains(what) || !crate::core::discovery::does_it_occur_now(experience_needed) {
+            return false;
+        }
+        self.found_out_how_to(what)
+    }
+
     /// Everything this agent has found out that it was not born knowing.
     pub fn what_i_found_out(&self) -> &std::collections::BTreeSet<String> {
         &self.found_out
@@ -4419,6 +4473,106 @@ impl Agent {
         super::SkillType::Crafting,
         super::SkillType::Mining,
     ];
+
+    /// How long it takes a trade's record of work to fall by half, in ticks:
+    /// a season (#387).
+    pub const WORK_FADES_BY_HALF_IN: u32 =
+        crate::environment::seasons::DAYS_PER_SEASON * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// A turn's work at this trade, at this tick (#387).
+    pub fn a_turn_at(&mut self, trade: super::SkillType, now: u32) {
+        let (amount, as_of) = self.work_at.get(&trade).copied().unwrap_or((0.0, now));
+        let faded = amount * 0.5f32.powf(now.saturating_sub(as_of) as f32 / Self::WORK_FADES_BY_HALF_IN as f32);
+        self.work_at.insert(trade, (faded + 1.0, now));
+    }
+
+    /// How much of this one's work has gone to this trade lately, as of this
+    /// tick: turns at it, faded by age (#387).
+    pub fn how_much_work_goes_to(&self, trade: super::SkillType, now: u32) -> f32 {
+        self.work_at
+            .get(&trade)
+            .map(|&(amount, as_of)| {
+                amount * 0.5f32.powf(now.saturating_sub(as_of) as f32 / Self::WORK_FADES_BY_HALF_IN as f32)
+            })
+            .unwrap_or(0.0)
+    }
+
+    /// What the best tool this one knows how to make for a trade would save
+    /// of their time, less what making it costs, in turns (#387).
+    ///
+    /// The saving is the work that goes to the trade now - about a season and
+    /// a half of it, the record fading by half a season - or the tool's whole
+    /// working life if that is shorter, each turn of it at the difference the
+    /// tool makes. The cost is the turns along the chain to it
+    /// (`making::how_many_turns_to_make`). `None` where they know of nothing
+    /// better, or cannot make it at all.
+    ///
+    /// The first cut ordered by the saving alone, and asked nothing about the
+    /// cost: in a scattered world all twelve people put woodcutting first from
+    /// day 120, each was out looking for wood for its making every day for
+    /// months, and the making never began. Births across forty worlds fell
+    /// from 190 to 165 and days wasting went from 273 to 788.
+    pub fn what_a_better_tool_would_save(&self, trade: super::SkillType, now: u32) -> Option<f32> {
+        let better = self.what_i_would_rather_have(trade)?;
+        let rate_now = self.how_fast_my_tools_make_this_go(trade).max(0.01);
+        let rate_after = better.how_much_better.max(rate_now);
+        let work = self.how_much_work_goes_to(trade, now).min(better.how_long_it_lasts);
+        let saving = work * (1.0 - rate_now / rate_after);
+        let holding = |what: &str| self.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+        let costs = crate::environment::making::how_many_turns_to_make(better.called, &holding, &knows)?;
+        Some(saving - costs as f32)
+    }
+
+    /// The kinds of work this one wants a tool for, the one a better tool
+    /// would save them most time at, net of its making, first (#387).
+    ///
+    /// What every pair of hands wants (`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO`);
+    /// gathering, which is most of anybody's day; and farming for somebody who
+    /// keeps a garden (#385). Not farming for everybody: a stick for it is
+    /// born knowledge, and the whole of a people that never broke ground would
+    /// be off cutting digging sticks for gardens it does not keep.
+    ///
+    /// A trade this one works at comes in only if the tool would save more
+    /// than it costs, best first. A trade of the list's they have done no
+    /// work at keeps its place after those, which is where a founder with no
+    /// record yet starts; gathering and gardening come in only once done. The order was the list's own throughout, so a gardener reached
+    /// the hoe only after every hunting, cutting, skinning, carving and
+    /// digging tool they could want, and nobody ever wanted a tool for
+    /// gathering at all.
+    pub fn trades_i_want_tools_for(&self) -> Vec<super::SkillType> {
+        let now = self.time_of_my_last_turn();
+        let candidates = Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+            .into_iter()
+            .chain(std::iter::once(super::SkillType::Herbalism))
+            .chain(self.knows_how_to_do("TillSoil").then_some(super::SkillType::Farming));
+        let mut worth_it: Vec<(super::SkillType, f32)> = Vec::new();
+        let mut not_yet_worked = Vec::new();
+        for trade in candidates {
+            if self.how_much_work_goes_to(trade, now) < 1.0 {
+                // Only the list's own: gathering and gardening come in when
+                // they are done
+                if Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO.contains(&trade) {
+                    not_yet_worked.push(trade);
+                }
+                continue;
+            }
+            if let Some(net) = self.what_a_better_tool_would_save(trade, now) {
+                if net > 0.0 {
+                    worth_it.push((trade, net));
+                }
+            }
+        }
+        // Stable, so equal savings keep the list's order
+        worth_it.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        worth_it.into_iter().map(|(trade, _)| trade).chain(not_yet_worked).collect()
+    }
+
+    /// The tick of the latest work on this one's record, which is as near to
+    /// now as an agent knows without the world's clock (#387).
+    fn time_of_my_last_turn(&self) -> u32 {
+        self.work_at.values().map(|&(_, as_of)| as_of).max().unwrap_or(0)
+    }
 
     /// The best tool this agent knows how to make for a kind of work, if it
     /// would be an improvement on what it already carries.
@@ -4555,10 +4709,24 @@ impl Agent {
     /// What the verb wants in the hand is not asked here. That is the verb
     /// matrix's business, and it is asked once, before the action runs.
     pub fn what_i_would_work_on(&self) -> Option<(String, String)> {
+        self.what_i_would_work_on_with(true)
+    }
+
+    /// The same, standing where there is a fire to hand or not.
+    ///
+    /// Asked without a fire, a working done over one was still offered, and
+    /// refused when it was tried: on smooth seed 18, "No fire here to fire
+    /// claypot over" 6,467 times in 399 days against 359 pots fired, the
+    /// same person every Utility turn, because where a person starts in the
+    /// list is fixed (#376). The turns freed from coupling in #375 went
+    /// there, and two people wasting through a winter spent forty turns a day
+    /// trying to fire a pot with no fire.
+    pub fn what_i_would_work_on_with(&self, a_fire_to_hand: bool) -> Option<(String, String)> {
         use crate::environment::making;
 
         let could: Vec<&'static making::Working> = making::EVERY_WORKING
             .iter()
+            .filter(|working| a_fire_to_hand || !working.over_a_fire)
             .filter(|working| working.born_known() || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
             .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
@@ -4972,12 +5140,20 @@ impl Agent {
     /// the cost and the water is free, so a person who owns something to carry
     /// it in pays that cost once and drinks for days.
     pub fn what_vessel_i_would_rather_have(&self) -> Option<(&'static str, &'static str)> {
+        self.what_vessel_i_would_rather_have_with(true)
+    }
+
+    /// The same, where there is a fire to hand or not: a fired pot holds the
+    /// most, so without this it was the vessel chosen with no fire to fire it
+    /// in, and refused (#376).
+    pub fn what_vessel_i_would_rather_have_with(&self, a_fire_to_hand: bool) -> Option<(&'static str, &'static str)> {
         if self.what_i_can_hold_water_in() > 0 {
             return None;
         }
 
         crate::environment::making::EVERY_WORKING
             .iter()
+            .filter(|working| a_fire_to_hand || !working.over_a_fire)
             .filter(|working| working.holds.is_some_and(|held| held > 0.0))
             .filter(|working| working.born_known() || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
@@ -5009,9 +5185,9 @@ impl Agent {
         // tool gets taken in hand on the way - see `get_the_tool_out_for`.
         let in_hand = |what: &str| self.how_many_i_have(what) > 0;
 
-        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
-            .iter()
-            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+        self.trades_i_want_tools_for()
+            .into_iter()
+            .filter_map(|trade| self.what_i_would_rather_have(trade))
             .find_map(|want| {
                 // Only a step that could actually be carried out. Asking for
                 // one that could not is worse than a wasted turn: the refusal
@@ -5113,9 +5289,9 @@ impl Agent {
         let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
         let in_hand = |what: &str| self.how_many_i_have(what) > 0;
 
-        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
-            .iter()
-            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+        self.trades_i_want_tools_for()
+            .into_iter()
+            .filter_map(|trade| self.what_i_would_rather_have(trade))
             .find(|want| {
                 crate::environment::making::what_to_do_first_that_can_be_done(
                     want.called,
@@ -5786,9 +5962,9 @@ impl Agent {
 
         let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
 
-        let wanting: Vec<&'static str> = Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
-            .iter()
-            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+        let wanting: Vec<&'static str> = self.trades_i_want_tools_for()
+            .into_iter()
+            .filter_map(|trade| self.what_i_would_rather_have(trade))
             .flat_map(|want| {
                 crate::environment::making::everything_wanting_knowing(
                     want.called,
@@ -8173,6 +8349,9 @@ impl Agent {
             Action::Cook { .. } => "cook".to_string(),
             Action::LightFire => "lightfire".to_string(),
             Action::ScatterSeed => "scatterseed".to_string(),
+            Action::BurnOff => "burnoff".to_string(),
+            Action::DigDitch => "digditch".to_string(),
+            Action::DigOutMidden => "digoutmidden".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
@@ -8321,6 +8500,9 @@ impl Agent {
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
             | Action::ScatterSeed
+            | Action::BurnOff
+            | Action::DigDitch
+            | Action::DigOutMidden
             | Action::SpreadMuck
             | Action::TendField
             | Action::TakeCutting
@@ -11655,9 +11837,9 @@ impl Agent {
             let holding_none = |_: &str| 0;
             let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
             let mut makings: std::collections::BTreeSet<crate::world::ResourceType> =
-                Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
-                    .iter()
-                    .flat_map(|trade| crate::environment::making::what_helps_with(*trade))
+                self.trades_i_want_tools_for()
+                    .into_iter()
+                    .flat_map(crate::environment::making::what_helps_with)
                     .filter(|tool| self.knows_how_to_make(tool.called))
                     .flat_map(|tool| {
                         crate::environment::making::everything_wanting_knowing(tool.called, &holding_none, &knows)

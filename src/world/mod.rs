@@ -194,6 +194,10 @@ pub struct World {
     #[serde(default)]
     pub folds: Vec<Fold>,
 
+    /// Rings of thorn brush round camps, laid and standing (#378).
+    #[serde(default)]
+    pub thorn_hedges: Vec<ThornHedge>,
+
     /// A camp's middens: one place set aside for its refuse, away from where
     /// it sleeps and draws water (#357).
     #[serde(default)]
@@ -273,6 +277,67 @@ pub struct World {
     pub joints_carried_for_a_share: u64,
     #[serde(default)]
     pub joints_kept_as_pay: u64,
+
+    /// Beasts driven off a camp's ground (#377).
+    #[serde(default)]
+    pub beasts_driven_off: u64,
+
+    /// Thorn rings closed round camps, and beasts they turned (#378).
+    #[serde(default)]
+    pub thorn_hedges_closed: u64,
+    #[serde(default)]
+    pub beasts_the_thorns_turned: u64,
+
+    /// Watches of the night kept, and sleepers woken near a beast (#379).
+    #[serde(default)]
+    pub watches_kept: u64,
+    #[serde(default)]
+    pub woken_by_the_watch: u64,
+
+    /// Blows and warnings from beasts, by night and by day (#379).
+    #[serde(default)]
+    pub beasts_struck_by_night: u64,
+    #[serde(default)]
+    pub beasts_struck_by_day: u64,
+    #[serde(default)]
+    pub beasts_warned_by_night: u64,
+    #[serde(default)]
+    pub beasts_warned_by_day: u64,
+
+    /// Gathers taken sparingly from a wild stand (#380).
+    #[serde(default)]
+    pub sparing_harvests: u64,
+
+    /// Fires of the country's own, lit by lightning on a dry day (#381).
+    #[serde(default)]
+    pub wildfires: u64,
+    /// Fires somebody set on purpose to bring the stands on (#381).
+    #[serde(default)]
+    pub burns_set: u64,
+    /// Stands a fire went over, either sort (#381).
+    #[serde(default)]
+    pub stands_burnt: u64,
+    /// The day each camp last set a fire on purpose, by where it is, so it
+    /// watches one out before setting the next (#381). Serde cannot key a
+    /// map on a pair in JSON, so it is kept as a list.
+    #[serde(default)]
+    pub fires_set_from: Vec<((i32, i32), u32)>,
+    /// Stands of wood cut back to the stool (#382).
+    #[serde(default)]
+    pub cuts_to_the_stool: u64,
+    /// Ditches dug to water a patch of stands on dry ground (#383).
+    #[serde(default)]
+    pub ditches_dug: u64,
+    /// The day each camp last dug a ditch, by where it is (#383).
+    #[serde(default)]
+    pub ditches_dug_from: Vec<((i32, i32), u32)>,
+    /// Loads of compost dug out of a midden for a garden (#386).
+    #[serde(default)]
+    pub compost_dug: u64,
+    /// Things a child was taught that a grown person of their camp knew
+    /// (#388).
+    #[serde(default)]
+    pub lessons_taught: u64,
 
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
@@ -395,6 +460,53 @@ impl Bedding {
     }
 }
 
+/// A ring of cut thorn brush laid round a camp, which no beast a fox's size
+/// or bigger pushes through (#378): "Thorn barriers", stage 0 of the
+/// defensive path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThornHedge {
+    /// The hearth it goes round.
+    pub around: Position,
+    /// When the first brush was laid.
+    pub started: u32,
+    /// How much brush is in it so far.
+    pub laid: u32,
+    /// When the ring was closed, after which it keeps beasts out.
+    pub closed_on: Option<u32>,
+}
+
+impl ThornHedge {
+    /// How far out from the hearth the ring goes: the camp's ground,
+    /// sixty metres (`Simulation::ON_THE_CAMPS_GROUND`).
+    pub const HOW_FAR_IT_GOES_ROUND: i32 = 6;
+
+    /// How much cut brush closes the ring, in armfuls of wood. Several trips
+    /// for one person, a morning for a camp.
+    pub const WHAT_IT_TAKES: u32 = 24;
+
+    /// How long a closed ring of cut thorn keeps beasts out before it has
+    /// dried, sagged and been pushed through: a season.
+    pub const HOW_LONG_IT_STANDS: u32 = 90 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// And how long one begun and not closed is kept at before it is given
+    /// up: a month.
+    pub const HOW_LONG_ONE_IS_KEPT_AT: u32 = 30 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// The smallest beast a ring of thorn turns: anything a fox's size or
+    /// bigger. A hare goes under it.
+    pub const THE_SMALLEST_IT_TURNS_KG: f32 = 6.0;
+
+    /// Whether a place is inside the ring.
+    pub fn takes_in(&self, at: (i32, i32)) -> bool {
+        (at.0 - self.around.x).abs().max((at.1 - self.around.y).abs()) <= Self::HOW_FAR_IT_GOES_ROUND
+    }
+
+    /// Whether it keeps anything out: closed, and still standing.
+    pub fn is_closed(&self, now: u32) -> bool {
+        self.closed_on.is_some_and(|then| now.saturating_sub(then) < Self::HOW_LONG_IT_STANDS)
+    }
+}
+
 /// A fold of brush and poles where kept beasts are shut in for the night
 /// (#354), and the dung that has gathered in it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -427,9 +539,33 @@ impl Fold {
 pub struct Midden {
     pub at: Position,
     pub started: u32,
+    /// What has gone onto it and is still rotting down (#386).
+    #[serde(default)]
+    pub holds: f32,
+    /// What has rotted down into compost, ready to be dug out and carried to
+    /// a garden (#386).
+    #[serde(default)]
+    pub rotted: f32,
 }
 
 impl Midden {
+    /// How fast what goes onto a midden rots down, a day: about two months
+    /// from refuse to something a garden takes (#386).
+    pub const HOW_FAST_IT_ROTS_DOWN_A_DAY: f32 = 1.0 / 60.0;
+
+    /// How much of what went onto a midden one load of compost is.
+    pub const WHAT_A_LOAD_OF_COMPOST_IS: f32 = 1.0;
+
+    /// How many loads one trip to the midden carries away.
+    pub const LOADS_DUG_OUT_AT_ONCE: u32 = 4;
+
+    /// A day rotting down: a share of what it holds turns to compost.
+    pub fn a_day_rotting_down(&mut self) {
+        let turning = self.holds * Self::HOW_FAST_IT_ROTS_DOWN_A_DAY;
+        self.holds -= turning;
+        self.rotted += turning;
+    }
+
     /// How far from where a camp sleeps its midden is put.
     pub const HOW_FAR_FROM_THE_HEARTH: i32 = 8;
 
@@ -1763,6 +1899,7 @@ impl World {
             racks: Vec::new(),
             bedding: Vec::new(),
             folds: Vec::new(),
+            thorn_hedges: Vec::new(),
             middens: Vec::new(),
             latrines: Vec::new(),
             fish_traps: Vec::new(),
@@ -1777,6 +1914,25 @@ impl World {
             carriers_taken_on: 0,
             joints_carried_for_a_share: 0,
             joints_kept_as_pay: 0,
+            beasts_driven_off: 0,
+            thorn_hedges_closed: 0,
+            beasts_the_thorns_turned: 0,
+            watches_kept: 0,
+            woken_by_the_watch: 0,
+            beasts_struck_by_night: 0,
+            beasts_struck_by_day: 0,
+            beasts_warned_by_night: 0,
+            beasts_warned_by_day: 0,
+            sparing_harvests: 0,
+            wildfires: 0,
+            burns_set: 0,
+            stands_burnt: 0,
+            fires_set_from: Vec::new(),
+            cuts_to_the_stool: 0,
+            ditches_dug: 0,
+            ditches_dug_from: Vec::new(),
+            compost_dug: 0,
+            lessons_taught: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -2887,6 +3043,65 @@ impl World {
     }
 
     /// The fold within reach of a place, if one is standing (#354).
+    /// The thorn ring round the hearth at `hearth`, closed or not.
+    pub fn thorn_hedge_round(&self, hearth: (i32, i32)) -> Option<usize> {
+        self.thorn_hedges.iter().position(|hedge| {
+            (hedge.around.x - hearth.0).abs().max((hedge.around.y - hearth.1).abs()) <= 2
+        })
+    }
+
+    /// Whether a closed thorn ring takes this place in.
+    pub fn inside_a_thorn_hedge(&self, at: (i32, i32)) -> bool {
+        self.thorn_hedges.iter().any(|hedge| hedge.is_closed(self.turn) && hedge.takes_in(at))
+    }
+
+    /// Where every wild beast big enough for thorn to turn stands, by id,
+    /// while any ring is closed: what `the_thorns_turn_them` puts them back
+    /// to.
+    pub(crate) fn where_the_thorns_would_turn_them(&self) -> Vec<(uuid::Uuid, (i32, i32))> {
+        if !self.thorn_hedges.iter().any(|hedge| hedge.is_closed(self.turn)) {
+            return Vec::new();
+        }
+        let mut stood: Vec<(uuid::Uuid, (i32, i32))> = self
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated && !animal.is_kept())
+            .filter(|animal| {
+                self.animals
+                    .get_species(&animal.species_id)
+                    .is_some_and(|species| species.mass_kg >= ThornHedge::THE_SMALLEST_IT_TURNS_KG)
+            })
+            .map(|animal| (animal.id, animal.position))
+            .collect();
+        stood.sort_unstable_by_key(|(id, _)| *id);
+        stood
+    }
+
+    /// A beast that has come inside a closed thorn ring it was outside goes
+    /// back to where it stood (#378). One already inside when the ring was
+    /// closed may leave, and is not shut in.
+    pub(crate) fn the_thorns_turn_them(&mut self, stood: Vec<(uuid::Uuid, (i32, i32))>) {
+        if stood.is_empty() {
+            return;
+        }
+        let now = self.turn;
+        let closed: Vec<ThornHedge> = self.thorn_hedges.iter().filter(|hedge| hedge.is_closed(now)).cloned().collect();
+        let inside = |at: (i32, i32)| closed.iter().any(|hedge| hedge.takes_in(at));
+        let mut turned = 0u64;
+        for animal in self.animals.get_all_mut().iter_mut() {
+            let Ok(found) = stood.binary_search_by_key(&animal.id, |(id, _)| *id) else {
+                continue;
+            };
+            let was = stood[found].1;
+            if inside(animal.position) && !inside(was) {
+                animal.position = was;
+                turned += 1;
+            }
+        }
+        self.beasts_the_thorns_turned += turned;
+    }
+
     pub fn fold_near(&self, pos: &Position) -> Option<usize> {
         let reach = Fold::HOW_FAR_IT_REACHES;
         self.folds
@@ -3442,6 +3657,10 @@ impl World {
             .retain(|laid| now.saturating_sub(laid.laid) < laid.how_long_it_lasts());
         self.folds
             .retain(|fold| now.saturating_sub(fold.put_up) < Fold::HOW_LONG_IT_STANDS);
+        self.thorn_hedges.retain(|hedge| match hedge.closed_on {
+            Some(_) => hedge.is_closed(now),
+            None => now.saturating_sub(hedge.started) < ThornHedge::HOW_LONG_ONE_IS_KEPT_AT,
+        });
 
         // Update heat sources (fuel consumption, heating)
         self.heat_sources.turn_all();
@@ -3491,6 +3710,8 @@ impl World {
             now: self.turn,
             season: self.climate.current_season(),
         };
+        // Where the beasts a thorn ring turns stood before they moved
+        let before_the_beasts_moved = self.where_the_thorns_would_turn_them();
         self.animals.turn_in_world(
             &mut self.grid,
             &mut self.plants,
@@ -3500,6 +3721,12 @@ impl World {
 
         // And what a camp leaves lying draws what eats such things (#357)
         self.what_draws_the_scavengers();
+
+        // And a thorn ring turns whatever came at it, the scavengers drawn
+        // to a camp's midden, pits and meat with the rest. Asked before the
+        // scavengers came, it let a hungry boar walk through to the refuse
+        // and lie by the hearth: most blows by night were that (#379).
+        self.the_thorns_turn_them(before_the_beasts_moved);
 
         // And what has gone into the snares, and what has come out of them
         // again. Taken and put back because the snares are the world's and
@@ -3615,6 +3842,10 @@ impl World {
     fn a_day_goes_by_for_the_ground(&mut self) {
         let precipitation = self.climate.weather.weather_type.precipitation_intensity();
         self.grid.a_day_of_air_for_the_middens(precipitation);
+        // And what is on a midden rots down into compost (#386)
+        for midden in &mut self.middens {
+            midden.a_day_rotting_down();
+        }
         self.what_came_off_the_fields();
         self.grid.a_day_goes_by_for_the_fields(self.turn);
     }
@@ -3744,6 +3975,12 @@ impl World {
             return false;
         }
 
+        // A kept stand nobody keeps goes back to the wild (#380), the flush
+        // after a fire goes back to old growth (#381), a coppice nobody cuts
+        // grows out (#382), and a ditch nobody digs out silts up (#383),
+        // asleep or not
+        resource.a_day_since_it_was_seen_to();
+
         // A hedgerow out of season carries nothing. Growth was seasonal
         // from the beginning and what was *standing* was not, so a berry
         // bush that had grown all summer still had its berries on it in
@@ -3758,7 +3995,8 @@ impl World {
 
         // What a plant drinks is what the ground holds, not whether it
         // happens to be raining on it this hour
-        let ground_water = crate::world::soil::Soil::humidity(terrain, day.precipitation);
+        let ground_water =
+            resource.what_it_has_to_drink(crate::world::soil::Soil::humidity(terrain, day.precipitation));
 
         // A pass stands for exactly the ground it covers: however long it
         // has been since the last one. The rates inside are per-pass
@@ -3885,6 +4123,153 @@ impl World {
         }
     }
 
+    /// Whether this is a day dry country burns on: no rain, in the summer or
+    /// the autumn, when the growth has dried off standing (#381).
+    pub fn is_it_a_day_for_burning(season: crate::environment::seasons::Season, precipitation: f32) -> bool {
+        use crate::environment::seasons::Season;
+        precipitation <= 0.0 && matches!(season, Season::Summer | Season::Fall)
+    }
+
+    /// Whether this is a day somebody sets a fire on (#381): any day the
+    /// country burns of itself, and besides those the dry days of early
+    /// spring, when last year's dead growth is burnt off before the new comes
+    /// through. Winter has stripped the stands by then, so a fire takes
+    /// little; through the summer and the autumn they bear, and a patch near
+    /// home was worth more standing than burnt nearly every day of it.
+    pub fn is_it_a_day_for_setting_a_fire(day_of_year: u32, precipitation: f32) -> bool {
+        use crate::environment::seasons::{Season, DAYS_PER_SEASON};
+        let season = Season::from_day_of_year(day_of_year);
+        let early_spring = season == Season::Spring
+            && day_of_year < Season::Spring.first_day() + DAYS_PER_SEASON / 2;
+        Self::is_it_a_day_for_burning(season, precipitation) || (precipitation <= 0.0 && early_spring)
+    }
+
+    /// The chance, on a day for burning, that lightning sets the country
+    /// alight at any one stand that burns (#381).
+    ///
+    /// Lightning falls evenly over the land, so how many fires start is a
+    /// matter of how much country there is. This puts each stand under a fire
+    /// about once in ten years: a fire takes in ten or so stands about a camp,
+    /// and there are about a hundred and fifty days for burning in a year.
+    /// Twice this burnt two stands in five near home within the year, which
+    /// left a camp little of its own to burn.
+    pub const A_WILDFIRE_AT_A_STAND_ON_A_DRY_DAY: f32 = 6e-5;
+
+    /// How far a fire of the country's own runs before it goes out, cells.
+    pub const HOW_FAR_A_WILDFIRE_RUNS: u32 = 6;
+
+    /// Lightning on a dry day, in the country somebody is near (#381).
+    ///
+    /// The climate's own lightning is not set down anywhere on the map, so
+    /// this is where it strikes. A fire where nobody is within reach of it is
+    /// not burnt at all: its flush would be gone before anybody came near
+    /// enough to see it, and the world has eighty thousand stands, most of
+    /// them a long way from anybody. Near is the reach that puts ground to
+    /// sleep, but it is read off where the people are and not off whether
+    /// anything sleeps, so a world that sleeps burns the same as one that
+    /// never does. A world nobody has told where its people are is all of it
+    /// country somebody is near.
+    fn the_dry_country_burns(&mut self, day: &sleeping::AGrowingDay) {
+        use rand::Rng;
+        if !Self::is_it_a_day_for_burning(day.season, day.precipitation) {
+            return;
+        }
+        let near = self
+            .where_people_are
+            .as_ref()
+            .map(|people| sleeping::WhoIsAwake::round(people, self.grid.width, self.grid.height));
+        let awake = near.as_ref();
+        let what_burns: Vec<Position> = self
+            .resources
+            .iter()
+            .filter(|node| node.is_brought_on_by_fire())
+            .filter(|node| awake.is_none_or(|awake| awake.near_anybody(node.position.x, node.position.y)))
+            .map(|node| node.position)
+            .collect();
+        if what_burns.is_empty() {
+            return;
+        }
+        let mut rng = crate::core::dice::roll();
+        let fires = what_burns.len() as f32 * Self::A_WILDFIRE_AT_A_STAND_ON_A_DRY_DAY;
+        let fires = fires.trunc() as usize + usize::from(rng.gen::<f32>() < fires.fract());
+        for _ in 0..fires {
+            let struck = what_burns[rng.gen_range(0..what_burns.len())];
+            self.wildfires += 1;
+            self.burn_over(struck, Self::HOW_FAR_A_WILDFIRE_RUNS);
+        }
+    }
+
+    /// A fire over the ground within `reach` of `at`: every stand it brings
+    /// on is burnt off, and its flush begins (#381). Whatever is asleep there
+    /// is brought up to today first, so the days it slept through are lived
+    /// before the fire and not after. Returns how many stands burnt.
+    pub fn burn_over(&mut self, at: Position, reach: u32) -> usize {
+        self.wake_the_nodes_near(at, reach);
+        let mut burnt = 0;
+        let reach_squared = (reach as i64) * (reach as i64);
+        for number in self.node_numbers_near(at, reach) {
+            let node = &mut self.resources[number];
+            let (dx, dy) = ((node.position.x - at.x) as i64, (node.position.y - at.y) as i64);
+            if dx * dx + dy * dy <= reach_squared && node.is_brought_on_by_fire() {
+                node.goes_up_in_flames();
+                burnt += 1;
+            }
+        }
+        self.stands_burnt += burnt as u64;
+        burnt
+    }
+
+    /// How many days since the camp at `home` last set a fire on purpose, if
+    /// it ever has (#381).
+    pub fn days_since_this_camp_set_a_fire(&self, home: (i32, i32)) -> Option<u32> {
+        self.fires_set_from
+            .iter()
+            .find(|(camp, _)| *camp == home)
+            .map(|(_, day)| self.days_gone_by.saturating_sub(*day))
+    }
+
+    /// The camp at `home` set a fire today.
+    pub fn this_camp_set_a_fire(&mut self, home: (i32, i32)) {
+        let today = self.days_gone_by;
+        match self.fires_set_from.iter_mut().find(|(camp, _)| *camp == home) {
+            Some((_, day)) => *day = today,
+            None => self.fires_set_from.push((home, today)),
+        }
+    }
+
+    /// How many days since the camp at `home` last dug a ditch, if it ever
+    /// has (#383).
+    pub fn days_since_this_camp_dug_a_ditch(&self, home: (i32, i32)) -> Option<u32> {
+        self.ditches_dug_from
+            .iter()
+            .find(|(camp, _)| *camp == home)
+            .map(|(_, day)| self.days_gone_by.saturating_sub(*day))
+    }
+
+    /// The camp at `home` dug a ditch today.
+    pub fn this_camp_dug_a_ditch(&mut self, home: (i32, i32)) {
+        let today = self.days_gone_by;
+        match self.ditches_dug_from.iter_mut().find(|(camp, _)| *camp == home) {
+            Some((_, day)) => *day = today,
+            None => self.ditches_dug_from.push((home, today)),
+        }
+    }
+
+    /// What the ground at `at` holds of itself, with no rain on it: what a
+    /// plant there has to drink before any ditch (#383).
+    pub fn how_wet_the_ground_is_of_itself(&self, at: &Position) -> f32 {
+        let terrain = self.grid.get_tile(at).map(|t| t.terrain.terrain_type).unwrap_or(TerrainType::Plains);
+        crate::world::soil::Soil::humidity(terrain, 0.0)
+    }
+
+    /// Whether there is water within `reach` of `at` that a ditch could be
+    /// led from (#383).
+    pub fn is_there_water_to_lead_from(&self, at: Position, reach: u32) -> bool {
+        self.node_numbers_near(at, reach)
+            .into_iter()
+            .any(|number| self.resources[number].resource_type == ResourceType::Water)
+    }
+
     /// How many nodes are asleep.
     pub fn how_many_are_asleep(&self) -> usize {
         self.resources.iter().filter(|r| r.asleep_since.is_some()).count()
@@ -3904,6 +4289,10 @@ impl World {
             )),
             _ => None,
         };
+
+        // The country burns now and then of itself, before today's growing
+        // (#381)
+        self.the_dry_country_burns(&day);
 
         let mut oldest_sleep = today;
 

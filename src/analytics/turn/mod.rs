@@ -254,6 +254,8 @@ impl Simulation {
         self.the_small_stay_with_their_people();
         self.feed_the_small_children();
         self.process_nursing();
+        // And the young are taught what their camp knows (#388)
+        self.the_young_are_taught();
 
         // Turn world (building construction progress, etc.) - having told it
         // where the living are, so that ground nobody is near can sleep. See

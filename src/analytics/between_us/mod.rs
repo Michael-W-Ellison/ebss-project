@@ -11,6 +11,7 @@
 //! - [`exchange`] - trading, taking, and giving
 //! - [`hire`] - work done for somebody else, for a share of what it moves
 //! - [`asking`] - putting a question to somebody who might know
+//! - [`driving_off`] - everybody about driving a beast off the camp's ground
 //!
 //! This layer sits across the other three rather than beside them: it is
 //! consulted by [`crate::analytics::wanting`] when a drive needs somebody else
@@ -22,6 +23,7 @@
 //! byte-identical worlds either side of the move.
 
 pub mod asking;
+pub mod driving_off;
 pub mod exchange;
 pub mod hire;
 pub mod seeing;

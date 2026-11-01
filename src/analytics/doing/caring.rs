@@ -38,7 +38,7 @@ impl Simulation {
         let carer = &mut self.population.agents[agent_index];
         carer.skills.made_one(Self::A_WOUND_PRESSED);
         if carer.skills.times_made(Self::A_WOUND_PRESSED) >= Self::WOUNDS_PRESSED_BEFORE_A_DRESSING {
-            carer.found_out_how_to("do:Bandage");
+            carer.it_comes_to_me("do:Bandage", Self::WOUNDS_PRESSED_BEFORE_A_DRESSING);
         }
 
         ActionResult::success()

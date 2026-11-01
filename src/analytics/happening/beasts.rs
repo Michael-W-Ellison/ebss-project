@@ -324,6 +324,31 @@ impl Simulation {
         self.whose_ground_is_this(there).is_some() && self.whose_ground_is_this(here).is_none()
     }
 
+    /// Whether this one stops short of a beast's ground on the way from here
+    /// to there: anybody does, except somebody starving or down to the last
+    /// quarter of their water.
+    ///
+    /// A boar that settled on a camp's hearth kept everybody outside its
+    /// ground out of their own camp, and their store with it. The walk home
+    /// stopped short and called itself done, so the same walk was decided
+    /// again every minute: two people on smooth seed 3 starved three cells
+    /// from their hearth, walking at it two hundred and eighty times a day
+    /// for two days (#376). Starving, a person goes in and takes the chance.
+    ///
+    /// And the same at the water: on smooth seed 24 two people died of thirst
+    /// walking at a stream three cells off a thousand times a day, a boar's
+    /// ground between them and it.
+    pub(in crate::analytics) fn does_this_one_stop_short(&self, agent_index: usize, here: (i32, i32), there: (i32, i32)) -> bool {
+        let body = &self.population.agents[agent_index].state;
+        let desperate = body.is_starving() || body.physiology.hydration <= Self::DESPERATE_FOR_WATER;
+        !desperate && self.walks_into_a_beasts_ground(here, there)
+    }
+
+    /// How low the water in a body has to run before its owner walks past a
+    /// beast to get more: the last of the four bands, where everything the
+    /// body does is at a quarter (`Physiology::capability`).
+    pub(in crate::analytics) const DESPERATE_FOR_WATER: f32 = 0.25;
+
     /// And how near before anybody is wary of it: fifty metres. A hunter
     /// worries anybody within `CLOSE_ENOUGH_TO_WORRY_ABOUT`, because it comes
     /// for them; a beast that only keeps its ground worries only somebody
@@ -531,6 +556,15 @@ impl Simulation {
         // about fighting from it. Without the memory a settlement beside a
         // mammoth was warned off 332 times in a year on seed 0 and walked
         // back each time.
+        // By night or by day, for the measurement (#379)
+        let (night, _, _) = self.where_in_the_night_it_is();
+        if night {
+            self.world.beasts_warned_by_night += warnings.len() as u64;
+            self.world.beasts_struck_by_night += strikes.len() as u64;
+        } else {
+            self.world.beasts_warned_by_day += warnings.len() as u64;
+            self.world.beasts_struck_by_day += strikes.len() as u64;
+        }
         for (agent_index, what_it_was, called, at) in warnings {
             // And backs off it. Warned, a person decided again but was not
             // moved, so whatever they were about - a gather, a sleep, a site

@@ -523,7 +523,7 @@ impl Simulation {
             if agent.skills.times_made(crate::agents::Agent::A_BATCH_OFF_THE_FIRE)
                 >= crate::agents::Agent::BATCHES_BEFORE_A_PIT_OVEN
             {
-                agent.found_out_how_to("do:PitOven");
+                agent.it_comes_to_me("do:PitOven", crate::agents::Agent::BATCHES_BEFORE_A_PIT_OVEN);
             }
         }
         cooked
@@ -1025,7 +1025,7 @@ impl Simulation {
             if agent.skills.times_made(crate::agents::Agent::DRIED_BY_THE_HEARTH)
                 >= crate::agents::Agent::DRIED_BY_THE_HEARTH_BEFORE_SMOKING
             {
-                agent.found_out_how_to("do:Smoke");
+                agent.it_comes_to_me("do:Smoke", crate::agents::Agent::DRIED_BY_THE_HEARTH_BEFORE_SMOKING);
             }
         }
 

@@ -153,6 +153,10 @@ impl Simulation {
         {
             return Some(Action::DigLatrine);
         }
+        // A ring of thorn round a camp that beasts have troubled (#378)
+        if let Some(work) = self.a_thorn_hedge_to_lay(agent, here) {
+            return Some(work);
+        }
         // The skins, which will not wait a week (#353)
         if let Some(work) = self.a_hide_to_work(agent, here) {
             return Some(work);
@@ -389,6 +393,27 @@ impl Simulation {
                 .entry(if thirsty { "night: let be, thirsty" } else { "night: let be, hungry" }.to_string())
                 .or_insert(0) += 1;
             return action;
+        }
+
+        // **Nobody goes to bed with a beast on the camp** that those about
+        // could drive off (#379). Driving off was weighed with the day's
+        // decisions and bed came first, so a boar lay by the hearth inside a
+        // closed thorn ring and struck a camp of twelve as they slept: the
+        // warned backed off and walked back to bed beside it.
+        if let Some(drive) = {
+            let agent = &self.population.agents[agent_index];
+            self.a_beast_on_our_ground(agent, agent.state.position)
+        } {
+            *self.what_a_threat_came_to.entry("night: drove a beast off".to_string()).or_insert(0) += 1;
+            return drive;
+        }
+
+        // **Somebody keeps watch** at a camp a beast has troubled (#379):
+        // three blows in four from a beast came at night, nearly all on
+        // somebody asleep.
+        if self.on_watch_now(agent_index) {
+            *self.what_a_threat_came_to.entry("night: kept watch".to_string()).or_insert(0) += 1;
+            return self.what_the_watch_does(agent_index);
         }
 
         // **Nobody lies down in it.** The Rest drive's own way to bed steps

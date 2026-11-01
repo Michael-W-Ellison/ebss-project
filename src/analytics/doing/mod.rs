@@ -27,7 +27,10 @@
 //! ISSUES_FOUND.md #94, and it is what makes a refactor of this size a
 //! reviewable change rather than an act of faith.
 
+pub mod burning;
 pub mod caring;
+pub mod composting;
+pub mod ditching;
 pub mod eating;
 pub mod fighting;
 pub mod getting;
@@ -79,6 +82,9 @@ impl Simulation {
             Action::Store { item_type, amount } => self.storing(item_type, amount, agent_index),
             Action::Retrieve { item_type, amount } => self.retrieving(item_type, amount, agent_index),
             Action::Hunt { animal_id, weapon } => self.hunting(animal_id, weapon, agent_index, &mut rng, turn_now),
+            Action::DriveOff { animal_id } => self.driving_off(animal_id, agent_index),
+            Action::PutUpThornHedge => self.laying_a_thorn_hedge(agent_index, turn_now),
+            Action::KeepWatch => self.keeping_watch(agent_index, turn_now),
             Action::Fight { animal_id, weapon } => self.fighting_a_beast(animal_id, weapon, agent_index, &mut rng, turn_now),
             Action::Tame { animal_id, food_type } => self.taming(animal_id, food_type, agent_index, turn_now),
             Action::CollectAnimalProduct { animal_id } => self.collecting_from_a_beast(animal_id, agent_index, turn_now),
@@ -100,6 +106,9 @@ impl Simulation {
             Action::WearClothing { garment } => self.wearing_clothing(garment, agent_index),
             Action::TillSoil => self.tilling_soil(agent_index, turn_now),
             Action::ScatterSeed => self.scattering_seed(agent_index),
+            Action::BurnOff => self.burning_off(agent_index),
+            Action::DigDitch => self.digging_a_ditch(agent_index),
+            Action::DigOutMidden => self.digging_out_the_midden(agent_index),
             Action::TrySwapping { instead_of_making, instead_of, put_in } => self.trying_a_swap(instead_of_making, instead_of, put_in, agent_index, turn_now),
             Action::TakeFrom { from } => self.taking_from(from, agent_index, turn_now),
             Action::Equip { what } => self.equipping(what, agent_index),

@@ -1017,9 +1017,16 @@ impl Simulation {
             self.what_it_is_like_here(agent, agent.state.position)
         };
 
+        // Which trade the turn went to, for what a better tool would save
+        // (#387)
+        let trade = self.what_trade_this_asks_for(&action, agent_index);
+
         // Apply feedback to agent (drive satisfaction)
         let agent = &mut self.population.agents[agent_index];
         agent.apply_feedback(&action_result, drive_type);
+        if let (Some(trade), true) = (trade, action_result.attempted) {
+            agent.a_turn_at(trade, self.current_turn);
+        }
 
         // And note how it went, so the agent does more of what pays
         // and less of what does not - and note what the afternoon was

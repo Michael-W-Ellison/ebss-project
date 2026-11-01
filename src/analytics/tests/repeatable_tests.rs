@@ -254,7 +254,19 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // to have carried home.
     // Down to 7,126 for #374's correction: a kill is its killer's only while
     // it is being carried for him.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_126;
+    // Up to 7,332 for #377: those about drive a beast off the camp's ground.
+    // Up to 7,388 for #377's correction: a driven beast goes round what it
+    // cannot cross, and one with nowhere to go is not driven.
+    // Up to 7,793 for #378: a camp a beast has troubled is ringed with thorn,
+    // and those who drove one off remember it.
+    // Down to 7,015 for #379: a troubled camp of three keeps a watch through
+    // the night, in turns.
+    // Down to 6,757 for #379's correction: nobody goes to bed with a beast on
+    // the camp, and a thorn ring turns the scavengers too.
+    // Up to 6,783 for #388: the young are taught what their camp knows, a
+    // chance a day each. (#389's pace rolls nothing at the development pace:
+    // with teaching off, both counts were as before.)
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_783;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -645,7 +657,26 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // its first day or while it is carried, then anybody's.
     // Up 3.5% to 1,004,850 for #374's second correction: a kill is anybody's
     // until it is being carried for its killer.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_004_850;
+    // Down 6.5% to 939,903 for #375: partners couple only on a day a child
+    // could come of it.
+    // Up 2.6% to 963,961 for #376: partners far apart go to each other any
+    // day, and somebody starving walks into a beast's ground.
+    // Down 1.6% to 948,917 for #376's second step: nobody sets out to fire a
+    // pot with no fire, and the parched go past a beast for water too.
+    // Up 1.1% to 959,558 for #380: selective harvesting, found out by coming
+    // back to the stands near home, keeps them larger.
+    // Down 0.5% to 954,540 for #381: lightning burns the dry country near
+    // people now and then, and those who gather in the flush set fires of
+    // their own.
+    // Up 0.8% to 961,864 for #382: coppicing, found out by cutting wood near
+    // home, brings the wood there back faster.
+    // Down 3.2% to 931,132 for #387: tools are made in the order of the time
+    // they would save, from a record of the work that goes to each trade.
+    // Up 6.8% to 994,553 for #388: the young are taught what their camp
+    // knows.
+    // Up 1.4% to 1,008,543 for #387's correction: a tool is wanted for a trade
+    // only if it would save more than its making costs, and gathering is one.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_008_543;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

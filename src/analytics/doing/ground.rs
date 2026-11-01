@@ -237,6 +237,14 @@ impl Simulation {
         agent
             .skills
             .practise(crate::agents::SkillType::Farming, 25, turn_now);
+        // Breaking ground often enough is how a hoe comes to mind (#385)
+        agent.skills.made_one(crate::environment::making::GROUND_BROKEN_FOR_A_GARDEN);
+        if agent.skills.times_made(crate::environment::making::GROUND_BROKEN_FOR_A_GARDEN)
+            >= crate::environment::making::TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE
+            && agent.it_comes_to_me("hoe", crate::environment::making::TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE)
+        {
+            debug!("Agent {} thought of a blade set across a haft", agent.id);
+        }
 
         debug!(
             "Agent {} broke ground at {:?} and sowed {:?}",
@@ -478,6 +486,12 @@ impl Simulation {
         let hand = self.population.agents[agent_index]
             .skills
             .hand_for(crate::agents::SkillType::Farming);
+        // And what it is done with: a stick pries a weed out, a hoe chops a
+        // row of them (#385). Only ever more: bare hands weed as they did.
+        let tool = self.population.agents[agent_index]
+            .how_much_my_tools_bring_back(crate::agents::SkillType::Farming)
+            .max(1.0);
+        let hand = hand * tool;
 
         let cleared = {
             let Some(tile) = self.world.grid.get_tile_mut(&tile_position) else {
@@ -529,6 +543,7 @@ impl Simulation {
                 .filter(|item| item.quantity > 0)
                 .filter(|item| {
                     item.item_id == "dung"
+                        || item.item_id == Self::COMPOST
                         || item
                             .food_data
                             .as_ref()
@@ -557,8 +572,9 @@ impl Simulation {
                 // worth many times as much to a field on that account
                 // alone.
                 worth += *quantity as f32
-                    * if item_id == "dung" {
-                        // What a beast has already made of the grass (#354)
+                    * if item_id == "dung" || item_id == Self::COMPOST {
+                        // What a beast has already made of the grass (#354),
+                        // or the midden of the camp's refuse (#386)
                         2.0 * Self::MUCK_PER_UNIT
                     } else if crate::world::Soil::came_out_of_the_water(item_id) {
                         Self::MUCK_PER_FISH

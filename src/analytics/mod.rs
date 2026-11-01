@@ -499,7 +499,7 @@ impl Simulation {
             Action::Tame { .. } => Some(ActionType::Social), // Taming requires social skills
             Action::CollectAnimalProduct { .. } => Some(ActionType::Crafting), // Animal husbandry
             Action::PutUpFold | Action::MuckOut => Some(ActionType::Farming),
-            Action::StartMidden | Action::DigLatrine => Some(ActionType::Building),
+            Action::StartMidden | Action::DigLatrine | Action::PutUpThornHedge => Some(ActionType::Building),
             Action::Slaughter { .. } => Some(ActionType::Combat), // As a hunt is
             Action::HarvestPlant { .. } => Some(ActionType::Crafting), // Plant farming
             Action::Cook { .. } => Some(ActionType::Cooking),
@@ -508,10 +508,12 @@ impl Simulation {
             Action::Cache | Action::PutUpRack | Action::LayBedding => Some(ActionType::Building),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
-            Action::ScatterSeed => Some(ActionType::Farming),
+            Action::ScatterSeed | Action::BurnOff | Action::DigDitch | Action::DigOutMidden => {
+                Some(ActionType::Farming)
+            }
             Action::TendField => Some(ActionType::Farming),
             Action::TakeFrom { .. } | Action::RobFishTrap { .. } => Some(ActionType::Social),
-            Action::FleeFrom { .. } => Some(ActionType::Combat),
+            Action::FleeFrom { .. } | Action::DriveOff { .. } => Some(ActionType::Combat),
             Action::Examine { .. } => Some(ActionType::Crafting),
             Action::PickUp { .. } | Action::PutDown { .. } => Some(ActionType::Mining),
             Action::Trade { .. } | Action::GiveTo { .. } => Some(ActionType::Social),

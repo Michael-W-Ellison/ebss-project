@@ -6323,6 +6323,8 @@ name = "Thorn barriers"
 path = "defensive_infrastructure"
 stage = 0
 role = "technique"
+model = ["do:PutUpThornHedge"]
+note = "A ring of cut brush round a camp that beasts have troubled, which no beast a fox's size or more pushes through (#378)."
 
 [[tech]]
 id = "defensive_infrastructure.0.night_watches"
@@ -6330,6 +6332,8 @@ name = "Night watches"
 path = "defensive_infrastructure"
 stage = 0
 role = "technique"
+model = ["do:KeepWatch"]
+note = "Turns through the night at a camp a beast has troubled, with no thorn ring closed round it (#379)."
 
 [[tech]]
 id = "defensive_infrastructure.0.hidden_stores"
@@ -9908,6 +9912,8 @@ name = "Selective harvesting"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["know:selective_harvest"]
+note = "Taking from a wild stand near home and leaving a quarter of it, the young plants and the seed, which keeps the stand. Found out by coming back to the stands near home often enough (Agent::RETURNS_BEFORE_SPARING) (#380)."
 
 [[tech]]
 id = "agricultural.1.broadcast_sowing_of_gathered_seed"
@@ -9933,6 +9939,8 @@ name = "Controlled burning"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["do:BurnOff"]
+note = "A patch near home burnt off in the dry season, off the camp's own ground, where what stands is less than the flush would add; the flush carries up to twice and comes back up to twice as fast, fading over a year. Found out by gathering often enough on ground a fire went over (lightning fires, World::the_dry_country_burns), or by watching it done (#381)."
 
 [[tech]]
 id = "agricultural.1.coppicing_and_pruning_of_useful_trees"
@@ -9940,6 +9948,8 @@ name = "Coppicing and pruning of useful trees/shrubs"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["know:coppice", "know:selective_harvest"]
+note = "Wood near home cut back to the stool, which comes back up to twice as fast and carries up to twice, growing out over about three years uncut. Found out by cutting wood near home often enough, about six months of it (Agent::CUTS_BEFORE_COPPICING) (#382). The fruit and nut shrubs are kept by selective harvesting (#380)."
 
 [[tech]]
 id = "agricultural.1.water_diversion_on_a_very_small"
@@ -9947,6 +9957,8 @@ name = "Water diversion on a very small scale"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["do:DigDitch"]
+note = "A ditch from water within four cells to a patch of wild stands near home on ground drier than a plant likes (hills, mountain, desert, salt flat), which brings what the ground holds up to the middle of what a plant does best on, silting up over half a year. Found out by gathering often enough from such stands with water close by, or by watching it done (#383)."
 
 [[tech]]
 id = "agricultural.1.larger_stands_of_desired_grains_nuts"
@@ -9954,6 +9966,9 @@ name = "Larger stands of desired grains, nuts, berries, and tubers"
 path = "agricultural"
 stage = 1
 role = "product"
+model = ["know:selective_harvest"]
+same_as = ["agricultural.1.selective_harvesting"]
+note = "What selective harvesting comes to: a kept stand carries up to twice what the wild one did and comes back as much faster (ResourceNode::tended, #380)."
 
 [[tech]]
 id = "agricultural.2.digging_sticks_and_hoes"
@@ -9961,6 +9976,8 @@ name = "Digging sticks and hoes"
 path = "agricultural"
 stage = 2
 role = "technique"
+model = ["make:diggingstick", "make:hoe"]
+note = "The stick is born knowledge (tool.0.digging_sticks). The hoe, a blade lashed across a haft, is found out by breaking ground for a garden often enough (making::GROUND_BROKEN_FOR_A_GARDEN), and weeds a garden twice as fast as bare hands (#385)."
 
 [[tech]]
 id = "agricultural.2.small_garden_plots_near_dwellings"
@@ -9980,6 +9997,7 @@ stage = 2
 role = "technique"
 model = ["do:TakeCutting", "do:PlantCutting"]
 needs = ["agricultural.2.small_garden_plots_near_dwellings"]
+note = "A slip of a plant lifted from a stand far off and put in beside the camp; roots go in as a piece of the tuber (#384), and saved seed is what sowing takes first (#365)."
 
 [[tech]]
 id = "agricultural.2.composting_and_midden_enrichment"
@@ -9987,8 +10005,9 @@ name = "Composting and midden enrichment"
 path = "agricultural"
 stage = 2
 role = "technique"
-model = ["do:SpreadMuck"]
+model = ["do:SpreadMuck", "do:DigOutMidden"]
 needs = ["agricultural.2.small_garden_plots_near_dwellings"]
+note = "Fold dung and what went off in a pack go on a field as muck; what goes onto the camp's midden rots down over two months and is dug out and carried to the garden as compost (Midden::rotted) (#386)."
 
 [[tech]]
 id = "agricultural.2.reliable_vegetables_legumes_tubers_herbs_and"
@@ -9996,6 +10015,9 @@ name = "Reliable vegetables, legumes, tubers, herbs, and small grains"
 path = "agricultural"
 stage = 2
 role = "product"
+model = ["do:TillSoil"]
+same_as = ["agricultural.2.small_garden_plots_near_dwellings"]
+note = "What the gardens come to: a field sown with grain, legumes, roots (#384), berries or herbs."
 
 [[tech]]
 id = "agricultural.3.deliberate_seed_saving"
@@ -10758,6 +10780,8 @@ name = "People protect or cull animals informally"
 path = "animal_husbandry"
 stage = 0
 role = "technique"
+model = ["do:DriveOff"]
+note = "Driving a beast off the camp's ground, everybody about together (#377). Culling is the hunt."
 
 [[tech]]
 id = "animal_husbandry.0.proto_dogs_from_scavenging_canids"

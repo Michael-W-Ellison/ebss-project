@@ -477,6 +477,13 @@ impl Simulation {
             return (action, false);
         }
 
+        // And a beast settled on the camp's ground, which those about could
+        // drive off together (#377). Not a want either: nobody gets on with
+        // their evening with a boar lying by the fire.
+        if let Some(action) = self.a_beast_on_our_ground(agent, agent_position) {
+            return (action, false);
+        }
+
         // A child of one's own that is hungry, and food to spare in the pack.
         //
         // Not a want either, and the ordinary counterpart of the sacrifice
@@ -1192,9 +1199,12 @@ impl Simulation {
             DriveType::Sustenance => self
                 .cooking_action(agent, agent_position)
                 .or_else(|| self.muck_action(agent, agent_position))
+                .or_else(|| self.compost_to_dig(agent, agent_position))
                 .or_else(|| self.moving_to_farmland(agent, agent_position))
                 .or_else(|| self.farming_action(agent, agent_position))
                 .or_else(|| self.sowing_action(agent, agent_position))
+                .or_else(|| self.a_patch_to_burn(agent, agent_position))
+                .or_else(|| self.a_ditch_to_dig(agent, agent_position))
                 .or_else(|| self.transplanting_action(agent, agent_position))
                 .or_else(|| self.a_young_one_to_catch(agent, agent_position))
                 .or_else(|| self.moving_on(agent, agent_position))
@@ -1242,6 +1252,38 @@ impl Simulation {
                 if !agent.should_attempt_reproduction() {
                     return None;
                 }
+
+                // **And only on a day a child could come of it** (#375).
+                // A pair can conceive on one day a cycle, the carrier's, and
+                // partnered adults coupled about 1.4 times a day every day of
+                // it (#338): twenty-nine days in thirty spent on a turn that
+                // could come to nothing. On the other days the wish waits,
+                // and the turn goes to whatever presses next.
+                //
+                // **But partners still go to each other when they are far
+                // apart** (#376). The walk halfway came with the wish, and the
+                // wish came about daily, so it was what kept a pair in one
+                // place. Kept to the fertile day, partners were twice as far
+                // apart (28 cells against 14 over eight settlement-pairs) and
+                // more than fifty cells apart on 6,758 days against 2,910;
+                // the two who starved on smooth seed 3 had partners two
+                // hundred cells off.
+                let partner = agent.my_partner()?;
+                let them = self
+                    .population
+                    .agents
+                    .iter()
+                    .find(|them| them.id == partner && them.state.is_alive)?;
+                if !crate::agents::reproduction::could_these_two_conceive_today(agent, them, self.current_turn) {
+                    let (x, y, _) = them.state.position;
+                    let paces = (x - agent_position.0).abs().max((y - agent_position.1).abs());
+                    if paces <= Self::A_PARTNER_IS_MISSED_FROM {
+                        return None;
+                    }
+                    let halfway = ((x + agent_position.0).div_euclid(2), (y + agent_position.1).div_euclid(2));
+                    return Some(Action::Move { target: (halfway.0, halfway.1, agent_position.2) });
+                }
+
                 self.somebody_to_have_a_child_with(agent, agent_position)
                     .map(|them| Action::Mate {
                         target_agent_id: them,
@@ -1306,13 +1348,17 @@ impl Simulation {
             // step that cannot be taken, and getting the hammerstone out
             // before trying to use it.
             DriveType::Utility => agent
-                .what_i_would_work_on()
+                .what_i_would_work_on_with(
+                    self.nearest_fire_from(agent_position, Self::FIRE_REACH, true).is_some(),
+                )
                 .map(|(verb, to)| Action::Work { verb, to })
                 .or_else(|| {
                     agent
                         .what_i_have_to_work_with(crate::agents::SkillType::Crafting)?;
                     agent
-                        .what_vessel_i_would_rather_have()
+                        .what_vessel_i_would_rather_have_with(
+                            self.nearest_fire_from(agent_position, Self::FIRE_REACH, true).is_some(),
+                        )
                         .map(|(verb, to)| Action::Work {
                             verb: verb.to_string(),
                             to: to.to_string(),
@@ -1519,8 +1565,12 @@ impl Simulation {
                 let a_fire_is_to_hand = self
                     .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
                     .is_some();
+                // At the pace ideas come (#389): the thought of doing it comes
+                // as seldom as any other
                 if let Some((verb, to)) = agent.what_working_i_would_try_out(a_fire_is_to_hand) {
-                    return Some(Action::Work { verb, to });
+                    if crate::core::discovery::does_it_occur_now(1) {
+                        return Some(Action::Work { verb, to });
+                    }
                 }
 
                 // And putting the wrong thing where a part goes, which is
@@ -1529,7 +1579,8 @@ impl Simulation {
                 // anything comes of it.
                 let feeling_experimental = {
                     use rand::Rng;
-                    crate::core::dice::roll().gen_bool(Self::HOW_OFTEN_ANYBODY_TRIES_A_SWAP)
+                    crate::core::dice::roll()
+                        .gen_bool(crate::core::discovery::at_this_pace(Self::HOW_OFTEN_ANYBODY_TRIES_A_SWAP))
                 };
 
                 if feeling_experimental {

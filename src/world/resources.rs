@@ -996,6 +996,45 @@ pub struct ResourceNode {
     /// it home (`agents::hire`, #374).
     #[serde(default)]
     pub killed_by: Option<uuid::Uuid>,
+
+    /// How well kept this wild stand is, from nothing to one (#380).
+    ///
+    /// "Selective harvesting" and "Larger stands of desired grains, nuts,
+    /// berries, and tubers", stage 1 of the agricultural path: a stand
+    /// picked sparingly, the young plants and the seed left, season after
+    /// season, comes to carry more and come back faster than one stripped
+    /// whenever anybody passes. Fades when nobody keeps it.
+    #[serde(default)]
+    pub tended: f32,
+
+    /// How fresh the growth is that a fire brought on here, from nothing to
+    /// one, one the day it burnt (#381).
+    ///
+    /// "Controlled burning", stage 1 of the agricultural path: old growth
+    /// burnt off in the dry season comes back as a flush of young shoots,
+    /// seed and fruit, the ash feeding it, which is why people who lived by
+    /// gathering set fire to the country round them. Fades over a year.
+    #[serde(default)]
+    pub burnt: f32,
+
+    /// How well this stand of wood is coppiced, from nothing to one (#382).
+    ///
+    /// "Coppicing and pruning of useful trees/shrubs", stage 1 of the
+    /// agricultural path: wood cut back to the stool, near home, again and
+    /// again, sends up a crown of straight poles that comes back far faster
+    /// than a tree grows from seed. A stool left uncut grows out, slowly:
+    /// overstood coppice is still coppice for years.
+    #[serde(default)]
+    pub coppiced: f32,
+
+    /// How well a ditch waters this stand, from nothing to one (#383).
+    ///
+    /// "Water diversion on a very small scale", stage 1 of the agricultural
+    /// path: a ditch scratched from a stream or a spring to a patch of wild
+    /// seed and roots on dry ground, as the Paiute watered the wild grasses
+    /// of Owens Valley. Silts up over half a year unless it is dug out again.
+    #[serde(default)]
+    pub watered: f32,
 }
 
 impl ResourceNode {
@@ -1058,6 +1097,10 @@ impl ResourceNode {
             killed_on: None,
             sown_by: None,
             killed_by: None,
+            tended: 0.0,
+            burnt: 0.0,
+            coppiced: 0.0,
+            watered: 0.0,
         }
     }
 
@@ -1297,8 +1340,146 @@ impl ResourceNode {
     pub fn how_heavy_a_crop_it_carries(&self, what_the_ground_yields: f32) -> u32 {
         ((self.max_amount as f32)
             * Self::WHAT_ORDINARY_WILD_GROUND_CARRIES
-            * what_the_ground_yields.max(0.0))
+            * what_the_ground_yields.max(0.0)
+            * self.what_is_done_for_it())
         .round() as u32
+    }
+
+    /// How much more a stand carries, and how much faster it comes back, for
+    /// being well kept: twice, kept as well as a stand can be (#380).
+    pub const A_KEPT_STAND_CARRIES: f32 = 1.0;
+
+    /// How much one sparing harvest does for how well a stand is kept: a
+    /// season of somebody coming back to it every few days.
+    pub const WHAT_A_SPARING_HARVEST_KEEPS: f32 = 0.05;
+
+    /// How much of what stands a sparing harvest leaves: a quarter, the young
+    /// plants and the seed.
+    pub const WHAT_A_SPARING_HARVEST_LEAVES: f32 = 0.25;
+
+    /// How fast a kept stand goes back to the wild when nobody keeps it, a
+    /// day: about two hundred days from as kept as it gets.
+    pub const HOW_FAST_KEEPING_FADES_A_DAY: f32 = 0.005;
+
+    /// What being kept does for this stand: one for the wild, up to twice
+    /// for one kept as well as it can be.
+    pub fn what_keeping_it_does(&self) -> f32 {
+        1.0 + self.tended.clamp(0.0, 1.0) * Self::A_KEPT_STAND_CARRIES
+    }
+
+    /// How much more a stand carries, and how much faster it comes back, the
+    /// season after a fire went over it: twice, fresh from the burn (#381).
+    pub const WHAT_A_BURN_BRINGS_ON: f32 = 1.0;
+
+    /// How fast the flush a fire brought on goes, a day: a year from the burn
+    /// to the old growth again.
+    pub const HOW_FAST_A_BURN_FADES_A_DAY: f32 = 1.0 / 365.0;
+
+    /// What the last fire to go over it does for this stand: one long after,
+    /// up to twice the day after it burnt.
+    pub fn what_the_fire_did(&self) -> f32 {
+        1.0 + self.burnt.clamp(0.0, 1.0) * Self::WHAT_A_BURN_BRINGS_ON
+    }
+
+    /// How much more a stand of wood carries, and how much faster it comes
+    /// back, coppiced: twice, cut to the stool as often as it will bear
+    /// (#382).
+    pub const A_COPPICE_CARRIES: f32 = 1.0;
+
+    /// How much one cut to the stool does for how well a stand is coppiced:
+    /// a stool is made over a few seasons of cutting, not at one.
+    pub const WHAT_A_CUT_TO_THE_STOOL_DOES: f32 = 0.05;
+
+    /// How fast a coppice nobody cuts grows out, a day: about three years
+    /// from as well coppiced as it gets.
+    pub const HOW_FAST_A_COPPICE_GROWS_OUT_A_DAY: f32 = 1.0 / (3.0 * 365.0);
+
+    /// What being coppiced does for this stand: one for wood never cut to the
+    /// stool, up to twice for a coppice cut as often as it will bear.
+    pub fn what_coppicing_does(&self) -> f32 {
+        1.0 + self.coppiced.clamp(0.0, 1.0) * Self::A_COPPICE_CARRIES
+    }
+
+    /// Everything done for this stand: how well it is kept, how lately a
+    /// fire went over it, and how well it is coppiced.
+    pub fn what_is_done_for_it(&self) -> f32 {
+        self.what_keeping_it_does() * self.what_the_fire_did() * self.what_coppicing_does()
+    }
+
+    /// What the ground under a stand holds when a ditch waters it as well as
+    /// a ditch can: the middle of what a plant does best on (#383).
+    pub const WHAT_A_DITCH_BRINGS: f32 = 0.6;
+
+    /// Below this, the ground is drier than a plant does best on: hills,
+    /// mountain, desert and salt flat, whatever the sky does - see
+    /// `regenerate_in_ground`.
+    pub const DRIER_THAN_A_PLANT_LIKES: f32 = 0.4;
+
+    /// How fast a ditch nobody digs out silts up, a day: half a year from
+    /// new.
+    pub const HOW_FAST_A_DITCH_SILTS_A_DAY: f32 = 1.0 / 180.0;
+
+    /// What this stand has to drink, from what the ground holds of itself:
+    /// a ditch brings dry ground up towards `WHAT_A_DITCH_BRINGS`, by how
+    /// well it waters it, and does nothing for ground already wet enough.
+    pub fn what_it_has_to_drink(&self, ground_water: f32) -> f32 {
+        let brought = Self::WHAT_A_DITCH_BRINGS - ground_water;
+        if brought <= 0.0 {
+            return ground_water;
+        }
+        ground_water + brought * self.watered.clamp(0.0, 1.0)
+    }
+
+    /// Whether this is a stand of wood, which is what can be coppiced.
+    pub fn is_a_stand_of_wood(&self) -> bool {
+        !self.on_a_field && self.resource_type == ResourceType::Wood
+    }
+
+    /// A day gone by for what was done for this stand: the keeping, the
+    /// flush and the coppice all go back towards the wild, and the ditch
+    /// silts up.
+    pub fn a_day_since_it_was_seen_to(&mut self) {
+        if self.tended > 0.0 {
+            self.tended = (self.tended - Self::HOW_FAST_KEEPING_FADES_A_DAY).max(0.0);
+        }
+        if self.burnt > 0.0 {
+            self.burnt = (self.burnt - Self::HOW_FAST_A_BURN_FADES_A_DAY).max(0.0);
+        }
+        if self.coppiced > 0.0 {
+            self.coppiced = (self.coppiced - Self::HOW_FAST_A_COPPICE_GROWS_OUT_A_DAY).max(0.0);
+        }
+        if self.watered > 0.0 {
+            self.watered = (self.watered - Self::HOW_FAST_A_DITCH_SILTS_A_DAY).max(0.0);
+        }
+    }
+
+    /// Whether a fire through the grass and the brush burns this and brings
+    /// it on: a wild stand of something people eat, but not the nut trees,
+    /// which a ground fire passes under.
+    pub fn is_brought_on_by_fire(&self) -> bool {
+        self.is_a_wild_food_stand() && self.resource_type != ResourceType::Nuts
+    }
+
+    /// A fire goes over it: what stood is burnt off, and the flush begins.
+    pub fn goes_up_in_flames(&mut self) {
+        self.amount = 0;
+        self.burnt = 1.0;
+    }
+
+    /// Whether this is a wild stand of something people eat, which is what
+    /// can be kept by harvesting it sparingly.
+    pub fn is_a_wild_food_stand(&self) -> bool {
+        !self.on_a_field
+            && matches!(
+                self.resource_type,
+                ResourceType::Food
+                    | ResourceType::Greens
+                    | ResourceType::Roots
+                    | ResourceType::Nuts
+                    | ResourceType::Legumes
+                    | ResourceType::Grain
+                    | ResourceType::Herbs
+            )
     }
 
     /// How fast this water refills, given the ground it sits on and the
@@ -1680,7 +1861,8 @@ impl ResourceNode {
             * precip_modifier
             * season_modifier
             * ground_factor
-            * kept;
+            * kept
+            * self.what_is_done_for_it();
 
         // Carry the fraction over rather than rounding it away: wild food
         // regrows slowly enough that rounding to whole units each pass loses most

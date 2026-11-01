@@ -37,6 +37,11 @@ fn zz_discovery_watch() {
     let mut sim = Simulation::new(crate::world::World::new(cfg), population);
     sim.bring_everybody_to_the_middle();
     crate::core::dice::seed(seed * 7919 + 3);
+    // At the development pace unless told otherwise (#389)
+    if let Some(pace) = std::env::var("PACE").ok().and_then(|p| p.parse::<f64>().ok()) {
+        crate::core::discovery::set(pace);
+    }
+    println!("STORE slowness {}", crate::core::discovery::slowness() as u64);
 
     let mut first: BTreeMap<String, u32> = BTreeMap::new();
     let note = |sim: &Simulation, first: &mut BTreeMap<String, u32>, day: u32| {
@@ -50,12 +55,34 @@ fn zz_discovery_watch() {
     let at_start: Vec<String> = first.keys().cloned().collect();
     println!("START {}", at_start.join(","));
 
+    // How far apart partners are, and how many days people spend living
+    // off their own reserve, once a day (#376)
+    let (mut partner_days, mut partners_apart, mut partners_far, mut wasting_days) = (0u64, 0u64, 0u64, 0u64);
     for day in 0..days {
         for _ in 0..PLANNING_PERIODS_PER_DAY {
             sim.take_a_turn();
         }
         note(&sim, &mut first, day + 1);
+        for agent in sim.population.agents.iter().filter(|a| a.state.is_alive) {
+            if agent.state.physiology.is_wasting() {
+                wasting_days += 1;
+            }
+            let Some(partner) = agent.my_partner() else { continue };
+            let Some(them) = sim.population.agents.iter().find(|a| a.id == partner && a.state.is_alive) else { continue };
+            let apart = (agent.state.position.0 - them.state.position.0)
+                .abs()
+                .max((agent.state.position.1 - them.state.position.1).abs()) as u64;
+            partner_days += 1;
+            partners_apart += apart;
+            if apart > 50 {
+                partners_far += 1;
+            }
+        }
     }
+    println!("STORE partner_days {partner_days}");
+    println!("STORE partner_cells_apart {partners_apart}");
+    println!("STORE partner_days_far_apart {partners_far}");
+    println!("STORE wasting_person_days {wasting_days}");
 
     let alive: Vec<_> = sim.population.agents.iter().filter(|a| a.state.is_alive).collect();
     for animal in sim.world.animals.get_all().iter().filter(|a| a.is_alive() && a.is_kept()) {
@@ -77,6 +104,35 @@ fn zz_discovery_watch() {
         ("carriers_taken_on", sim.world.carriers_taken_on),
         ("joints_carried_for_a_share", sim.world.joints_carried_for_a_share),
         ("joints_kept_as_pay", sim.world.joints_kept_as_pay),
+        ("beasts_driven_off", sim.world.beasts_driven_off),
+        ("thorn_hedges_closed", sim.world.thorn_hedges_closed),
+        ("beasts_the_thorns_turned", sim.world.beasts_the_thorns_turned),
+        ("watches_kept", sim.world.watches_kept),
+        ("woken_by_the_watch", sim.world.woken_by_the_watch),
+        ("beasts_struck_by_night", sim.world.beasts_struck_by_night),
+        ("beasts_struck_by_day", sim.world.beasts_struck_by_day),
+        ("beasts_warned_by_night", sim.world.beasts_warned_by_night),
+        ("beasts_warned_by_day", sim.world.beasts_warned_by_day),
+        ("sparing_harvests", sim.world.sparing_harvests),
+        (
+            "stands_kept",
+            sim.world.resources.iter().filter(|node| node.tended >= 0.5).count() as u64,
+        ),
+        ("wildfires", sim.world.wildfires),
+        ("burns_set", sim.world.burns_set),
+        ("stands_burnt", sim.world.stands_burnt),
+        ("cuts_to_the_stool", sim.world.cuts_to_the_stool),
+        ("ditches_dug", sim.world.ditches_dug),
+        ("compost_dug", sim.world.compost_dug),
+        ("lessons_taught", sim.world.lessons_taught),
+        (
+            "stands_watered",
+            sim.world.resources.iter().filter(|node| node.watered >= 0.5).count() as u64,
+        ),
+        (
+            "stools_kept",
+            sim.world.resources.iter().filter(|node| node.coppiced >= 0.5).count() as u64,
+        ),
     ] {
         println!("STORE {what} {how_many}");
     }

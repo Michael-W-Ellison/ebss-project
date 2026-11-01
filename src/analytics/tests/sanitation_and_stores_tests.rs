@@ -186,7 +186,7 @@ fn vermin_take_by_how_a_store_is_shut() {
     store((70, 10), true, Some("basket"));
     store((100, 10), true, Some("stoneware"));
     store((130, 10), true, None);
-    simulation.world.middens.push(crate::world::Midden { at: Position::new(133, 10), started: 0 });
+    simulation.world.middens.push(crate::world::Midden { at: Position::new(133, 10), started: 0, holds: 0.0, rotted: 0.0 });
 
     for _ in 0..10 {
         simulation.world.what_the_vermin_take();

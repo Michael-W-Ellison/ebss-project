@@ -399,6 +399,26 @@ impl Simulation {
             // see how heavy it stands
             self.looking_at_the_crop(agent_index, resource_index);
 
+            // Taken sparingly from a stand somebody comes back to, if they
+            // know to (#380): a quarter of what stands is left, and the stand
+            // is the better kept for it
+            let sparing = self.would_this_one_harvest_sparingly(agent_index, resource_index);
+            let (harvest_amount, sparing) = if sparing {
+                let node = &self.world.resources[resource_index];
+                let leave = (node.amount as f32 * crate::world::ResourceNode::WHAT_A_SPARING_HARVEST_LEAVES).ceil() as u32;
+                let spared = harvest_amount.min(node.amount.saturating_sub(leave));
+                if spared > 0 { (spared, true) } else { (harvest_amount, false) }
+            } else {
+                (harvest_amount, false)
+            };
+            let a_stand_near_home = self.is_this_a_stand_near_home(agent_index, resource_index);
+            let wood_near_home = self.is_this_wood_near_home(agent_index, resource_index);
+            let to_the_stool = wood_near_home && self.population.agents[agent_index].knows_the_way("coppice");
+            let dry_by_water =
+                a_stand_near_home && self.would_a_ditch_water_this(&self.world.resources[resource_index]);
+            let on_burnt_ground =
+                self.world.resources[resource_index].burnt >= Self::BURNT_WITHIN_THE_YEAR;
+
             // Harvest resource
             let where_it_grew = self.world.resources[resource_index].position;
             let killed_on = self.world.resources[resource_index].killed_on;
@@ -408,6 +428,16 @@ impl Simulation {
             let harvested = {
                 let node = &mut self.world.resources[resource_index];
                 let taken = node.harvest(harvest_amount);
+                if sparing && taken > 0 {
+                    node.tended = (node.tended + crate::world::ResourceNode::WHAT_A_SPARING_HARVEST_KEEPS).min(1.0);
+                    self.world.sparing_harvests += 1;
+                }
+                // Cut back to the stool, by somebody who knows to, near home
+                // (#382)
+                if to_the_stool && taken > 0 {
+                    node.coppiced = (node.coppiced + crate::world::ResourceNode::WHAT_A_CUT_TO_THE_STOOL_DOES).min(1.0);
+                    self.world.cuts_to_the_stool += 1;
+                }
 
                 // A spring down to its springline still gives a drink:
                 // you take it from the water coming out of the ground
@@ -472,6 +502,58 @@ impl Simulation {
                 }
             }
 
+            // Coming back to the same stands near home, season after season,
+            // is how anybody notices that the ones not stripped come back best
+            // (#380)
+            if harvested > 0 && a_stand_near_home {
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.made_one(crate::agents::Agent::A_STAND_NEAR_HOME_GATHERED);
+                if agent.skills.times_made(crate::agents::Agent::A_STAND_NEAR_HOME_GATHERED)
+                    >= crate::agents::Agent::RETURNS_BEFORE_SPARING
+                    && agent.it_comes_to_me("know:selective_harvest", crate::agents::Agent::RETURNS_BEFORE_SPARING)
+                {
+                    debug!("Agent {} thought of leaving the young plants standing", agent.id);
+                }
+            }
+
+            // Coming back to cut the same wood near home is how anybody sees
+            // the stumps sprout, and thinks to cut to the stool (#382)
+            if harvested > 0 && wood_near_home {
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.made_one(crate::agents::Agent::WOOD_CUT_NEAR_HOME);
+                if agent.skills.times_made(crate::agents::Agent::WOOD_CUT_NEAR_HOME)
+                    >= crate::agents::Agent::CUTS_BEFORE_COPPICING
+                    && agent.it_comes_to_me("know:coppice", crate::agents::Agent::CUTS_BEFORE_COPPICING)
+                {
+                    debug!("Agent {} thought of cutting to the stool", agent.id);
+                }
+            }
+
+            // Gathering often enough from stands near home on dry ground, with
+            // the water right there, is how anybody thinks to lead it to them
+            // (#383)
+            if harvested > 0 && dry_by_water {
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.made_one(Self::GATHERED_DRY_BY_WATER);
+                if agent.skills.times_made(Self::GATHERED_DRY_BY_WATER) >= Self::GATHERED_DRY_BY_WATER_BEFORE_DITCHING
+                    && agent.it_comes_to_me("do:DigDitch", Self::GATHERED_DRY_BY_WATER_BEFORE_DITCHING)
+                {
+                    debug!("Agent {} thought of leading the water to the stands", agent.id);
+                }
+            }
+
+            // Gathering often enough where a fire went over, in the flush that
+            // came up after, is how anybody thinks to set one (#381)
+            if harvested > 0 && on_burnt_ground {
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.made_one(Self::GATHERED_ON_BURNT_GROUND);
+                if agent.skills.times_made(Self::GATHERED_ON_BURNT_GROUND) >= Self::BURNT_GROUND_GATHERED_BEFORE_BURNING
+                    && agent.it_comes_to_me("do:BurnOff", Self::BURNT_GROUND_GATHERED_BEFORE_BURNING)
+                {
+                    debug!("Agent {} thought of setting the dry growth alight", agent.id);
+                }
+            }
+
             // What a stand you sowed yourself teaches: that sowing on purpose
             // works (Stage 1), and, often enough, that the ground could be
             // broken for it (Stage 2, `GATHERED_FROM_SOWN_BEFORE_GARDENS`).
@@ -484,7 +566,7 @@ impl Simulation {
                 if agent.skills.times_made(crate::agents::Agent::A_SOWN_STAND_GATHERED)
                     >= crate::agents::Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS
                     && agent.knows_how_to_do("ScatterSeed")
-                    && agent.found_out_how_to("do:TillSoil")
+                    && agent.it_comes_to_me("do:TillSoil", crate::agents::Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS)
                 {
                     agent
                         .practices
@@ -1932,5 +2014,34 @@ impl Simulation {
             .with_drive_change(DriveType::Sustenance, -0.1)
             .with_energy_cost(Self::WHAT_A_ROUND_COSTS)
             .with_message(format!("Took {carrying} out of the snares"))
+    }
+}
+
+impl Simulation {
+    /// Whether this node is a wild food stand within a forage of this one's
+    /// home: a stand they come back to (#380).
+    pub(in crate::analytics) fn is_this_a_stand_near_home(&self, agent_index: usize, resource_index: usize) -> bool {
+        let node = &self.world.resources[resource_index];
+        let home = Self::where_this_one_lives(&self.population.agents[agent_index]);
+        node.is_a_wild_food_stand()
+            && Self::within((node.position.x, node.position.y), home, Self::FORAGE_RADIUS as i32)
+    }
+
+    /// Whether this node is a stand of wood within a forage of this one's
+    /// home: wood they come back to cut (#382).
+    pub(in crate::analytics) fn is_this_wood_near_home(&self, agent_index: usize, resource_index: usize) -> bool {
+        let node = &self.world.resources[resource_index];
+        let home = Self::where_this_one_lives(&self.population.agents[agent_index]);
+        node.is_a_stand_of_wood() && Self::within((node.position.x, node.position.y), home, Self::FORAGE_RADIUS as i32)
+    }
+
+    /// Whether this one takes from this stand sparingly (#380): they know
+    /// selective harvesting, it is a stand near home they come back to, and
+    /// they are not starving, when a man takes what is there.
+    pub(in crate::analytics) fn would_this_one_harvest_sparingly(&self, agent_index: usize, resource_index: usize) -> bool {
+        let agent = &self.population.agents[agent_index];
+        agent.knows_the_way("selective_harvest")
+            && !agent.state.is_starving()
+            && self.is_this_a_stand_near_home(agent_index, resource_index)
     }
 }

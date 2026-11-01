@@ -30,6 +30,16 @@ pub fn does_this_one_carry(one: &Agent, other: &Agent, now: u32) -> bool {
     }
 }
 
+/// Whether a child could come of these two today: one of them can carry
+/// one, it is their fertile day, and their chance this cycle is not spent.
+///
+/// The one day in `Agent::DAYS_IN_A_CYCLE` a coupling can come to anything.
+/// Asked before anybody goes to their partner for one (#375).
+pub fn could_these_two_conceive_today(one: &Agent, other: &Agent, now: u32) -> bool {
+    let can = |agent: &Agent| agent.can_carry_a_child() && agent.could_conceive_now(now);
+    can(one) || can(other)
+}
+
 /// Mate selection criteria
 #[derive(Debug, Clone)]
 pub struct MateSelectionCriteria {
