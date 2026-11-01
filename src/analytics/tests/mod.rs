@@ -156,6 +156,7 @@ mod hoe_tests;
 mod tool_priority_tests;
 mod pace_tests;
 mod teaching_tests;
+mod trait_technology_tests;
 mod tubers_tests;
 mod keeping_stands_tests;
 pub mod kit_tests;

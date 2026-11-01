@@ -69,7 +69,10 @@ impl Simulation {
         // Most of the time it tells you nothing, which is why this
         // does not collapse the chain into an afternoon's inspection.
         let hand = agent.skills.hand_for(crate::agents::SkillType::Crafting);
-        let odds = crate::core::discovery::at_this_pace((Self::WHAT_LOOKING_CLOSELY_IS_WORTH * hand).clamp(0.0, 0.5) as f64);
+        let odds = crate::core::discovery::at_this_pace_for(
+            (Self::WHAT_LOOKING_CLOSELY_IS_WORTH * hand).clamp(0.0, 0.5) as f64,
+            agent.how_inventive_i_am(),
+        );
 
         if !rng.gen_bool(odds) {
             return ActionResult::failure(format!("Turned the {what} over, none the wiser"))
@@ -77,7 +80,7 @@ impl Simulation {
                 .with_energy_cost(1.0);
         }
 
-        agent.found_out_how_to(worth_a_look);
+        agent.came_to_it_myself(worth_a_look);
 
         debug!(
             "Agent {} looked at a {what} and saw what it is for ({worth_a_look})",
@@ -195,9 +198,9 @@ impl Simulation {
                     && !agent.knows_how_to_make(shows);
                 if could_see_it
                     && agent.how_many_i_have(beside) >= how_many
-                    && rng.gen_bool(crate::core::discovery::at_this_pace(odds))
+                    && rng.gen_bool(crate::core::discovery::at_this_pace_for(odds, agent.how_inventive_i_am()))
                 {
-                    agent.found_out_how_to(shows);
+                    agent.came_to_it_myself(shows);
                     debug!("Agent {} saw a {beside} run in the pot fire ({shows})", agent.id);
                 }
             }

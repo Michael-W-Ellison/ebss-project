@@ -1964,6 +1964,13 @@ pub struct Agent {
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
     found_out: std::collections::BTreeSet<String>,
+    /// What of that this one came to themselves, not shown or taught (#390).
+    #[serde(default)]
+    came_to_myself: std::collections::BTreeSet<String>,
+    /// What this one has come to since the camp last took notice of it
+    /// (#390): `Simulation::what_the_camp_makes_of_it`.
+    #[serde(default)]
+    pub lately_came_to: Vec<String>,
     /// Every swap this one has tried, by `what_that_swap_is_called`.
     ///
     /// Kept apart from `lessons` for the same reason as `times_laid_up`. A
@@ -2229,6 +2236,8 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
             found_out: Self::what_anybody_is_born_knowing(),
+            came_to_myself: std::collections::BTreeSet::new(),
+            lately_came_to: Vec::new(),
             swaps_tried: std::collections::BTreeSet::new(),
             what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
@@ -4345,10 +4354,89 @@ impl Agent {
     /// at the pace ideas come (`core::discovery`, #389). Nothing is rolled
     /// for somebody who knows it already. True if it came now.
     pub fn it_comes_to_me(&mut self, what: &str, experience_needed: u32) -> bool {
-        if self.found_out.contains(what) || !crate::core::discovery::does_it_occur_now(experience_needed) {
+        if self.found_out.contains(what)
+            || !crate::core::discovery::does_it_occur_now_for(experience_needed, self.how_inventive_i_am())
+        {
             return false;
         }
-        self.found_out_how_to(what)
+        self.came_to_it_myself(what)
+    }
+
+    /// Something this one came to themselves, by experience or by noticing:
+    /// known now, and remembered as their own (#390). True if it was new.
+    pub fn came_to_it_myself(&mut self, what: &str) -> bool {
+        if !self.found_out_how_to(what) {
+            return false;
+        }
+        self.came_to_myself.insert(what.to_string());
+        self.lately_came_to.push(what.to_string());
+        true
+    }
+
+    /// Whether this one came to this themselves, rather than being shown or
+    /// taught it (#390).
+    pub fn did_i_come_to_it_myself(&self, what: &str) -> bool {
+        self.came_to_myself.contains(what)
+    }
+
+    /// How readily new ideas come to this one, against anybody else (#390):
+    /// twice for the curious, half again for the imaginative, half for the
+    /// stubborn, the traditional and the ignorant. Multiplies the chance of
+    /// an idea at any pace slower than the development pace.
+    pub fn how_inventive_i_am(&self) -> f64 {
+        use crate::core::traits::Trait;
+        let mut inventive = 1.0;
+        if self.traits.has(Trait::Curious) {
+            inventive *= 2.0;
+        }
+        if self.traits.has(Trait::Imaginative) {
+            inventive *= 1.5;
+        }
+        for set_in_their_ways in [Trait::Stubborn, Trait::Traditionalist, Trait::Ignorant] {
+            if self.traits.has(set_in_their_ways) {
+                inventive *= 0.5;
+            }
+        }
+        inventive
+    }
+
+    /// How readily this one takes up what somebody else knows, from being
+    /// taught it or seeing it done (#390): half again for the curious and for
+    /// a copycat, half for the stubborn and the traditional.
+    pub fn how_readily_i_learn(&self) -> f64 {
+        use crate::core::traits::Trait;
+        let mut readily = 1.0;
+        for eager in [Trait::Curious, Trait::Copycat] {
+            if self.traits.has(eager) {
+                readily *= 1.5;
+            }
+        }
+        for set_in_their_ways in [Trait::Stubborn, Trait::Traditionalist] {
+            if self.traits.has(set_in_their_ways) {
+                readily *= 0.5;
+            }
+        }
+        readily
+    }
+
+    /// How readily this one teaches what they know (#390): half again for an
+    /// extrovert and for the charismatic, less for an introvert, and half for
+    /// somebody mute, who can only show.
+    pub fn how_readily_i_teach(&self) -> f64 {
+        use crate::core::traits::Trait;
+        let mut readily = 1.0;
+        for outgoing in [Trait::Extrovert, Trait::Charismatic] {
+            if self.traits.has(outgoing) {
+                readily *= 1.5;
+            }
+        }
+        if self.traits.has(Trait::Introvert) {
+            readily *= 0.6;
+        }
+        if self.traits.has(Trait::Mute) {
+            readily *= 0.5;
+        }
+        readily
     }
 
     /// Everything this agent has found out that it was not born knowing.

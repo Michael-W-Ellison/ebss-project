@@ -87,16 +87,34 @@ pub fn slowness() -> f64 {
 /// pace is exactly what the model did before; otherwise with a chance of one
 /// in `experience_needed` times the slowness.
 pub fn does_it_occur_now(experience_needed: u32) -> bool {
+    does_it_occur_now_for(experience_needed, 1.0)
+}
+
+/// The same, for somebody to whom ideas come `inventive` times as readily as
+/// to anybody else (`Agent::how_inventive_i_am`, #390). At the development
+/// pace it comes at the count whoever it is.
+pub fn does_it_occur_now_for(experience_needed: u32, inventive: f64) -> bool {
     use rand::Rng;
     let slowness = slowness();
     if slowness <= THE_DEVELOPMENT_PACE {
         return true;
     }
-    let chance = 1.0 / (experience_needed.max(1) as f64 * slowness);
+    let chance = inventive / (experience_needed.max(1) as f64 * slowness);
     crate::core::dice::roll().gen_bool(chance.clamp(0.0, 1.0))
 }
 
 /// What odds of noticing something come to at this pace.
 pub fn at_this_pace(odds: f64) -> f64 {
     odds / slowness()
+}
+
+/// The same, for somebody to whom ideas come `inventive` times as readily as
+/// to anybody else (#390). At the development pace the odds are as written,
+/// whoever it is.
+pub fn at_this_pace_for(odds: f64, inventive: f64) -> f64 {
+    let slowness = slowness();
+    if slowness <= THE_DEVELOPMENT_PACE {
+        return odds;
+    }
+    odds * inventive / slowness
 }
