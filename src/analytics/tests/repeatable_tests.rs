@@ -676,7 +676,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // knows.
     // Up 1.4% to 1,008,543 for #387's correction: a tool is wanted for a trade
     // only if it would save more than its making costs, and gathering is one.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_008_543;
+    // Down 6.7% to 940,615 for #390: the stubborn and the traditional may see
+    // a thing done and leave it, and taking it up, or being taught it, warms
+    // people to each other.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 940_615;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
