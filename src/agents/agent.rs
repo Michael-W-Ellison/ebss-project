@@ -3980,8 +3980,8 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 4] =
-        ["selective_harvest", "coppice", "clean_water", "line_the_store"];
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 5] =
+        ["selective_harvest", "coppice", "clean_water", "line_the_store", "seal_the_store"];
 
     /// What the practice record calls a gather from a wild stand within a
     /// forage of home, and how many before somebody notices that the stands

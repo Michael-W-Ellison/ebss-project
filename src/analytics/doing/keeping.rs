@@ -80,7 +80,7 @@ impl Simulation {
         if put == 0 {
             return ActionResult::failure(format!("No {} in inventory to store", item_type));
         }
-        self.line_the_store_here(agent_index, store);
+        self.line_the_store_here(agent_index, store, put);
         self.what_opening_the_store_shows(agent_index, store);
         if let Some(pit) = self.world.pit_at_mut(store) {
             for item in going {
@@ -251,7 +251,7 @@ impl Simulation {
         // A vessel goes in first, if there is one to spare (#357), or
         // whatever this one has, to somebody who knows to line a store
         // (#392)
-        self.line_the_store_here(agent_index, here);
+        self.line_the_store_here(agent_index, here, putting_by);
         self.what_opening_the_store_shows(agent_index, here);
 
         let mut holds = 0u32;
@@ -720,16 +720,25 @@ impl Simulation {
     /// doubles what the hole is worth; a fired pot, which nothing gnaws
     /// through, was never put in until #357.
     ///
-    /// Somebody who knows to line a store (#392), "woven bins", puts in the
-    /// only vessel they have, and with none makes a basket of two lashings
-    /// for it there and then. A spare was all that ever went in, and nearly
-    /// half of what a people put by lay in bare earth for want of one.
-    pub(in crate::analytics) fn line_the_store_here(&mut self, agent_index: usize, at: crate::world::Position) {
+    /// Somebody who knows to line a store (#392), "woven bins", with no
+    /// vessel to spare weaves a basket for it there and then, of lashings
+    /// they can spare, for a store worth it. A spare was all that ever went
+    /// in, and nearly half of what a people put by lay in bare earth for want
+    /// of one.
+    ///
+    /// The first cut had them put in the only basket they had, which is what
+    /// a foraging trip brings back more than an armful in, and births across
+    /// forty worlds fell from 181 to 98 with #393 alongside it.
+    pub(in crate::analytics) fn line_the_store_here(&mut self, agent_index: usize, at: crate::world::Position, going_in: u32) {
         if !self.world.pit_at(at).is_some_and(|pit| !pit.is_lined()) {
             return;
         }
         let knows_to = self.population.agents[agent_index].knows_the_way("line_the_store");
-        let enough = if knows_to { 0 } else { 1 };
+        let worth_it = self
+            .world
+            .pit_at(at)
+            .is_some_and(|pit| pit.how_much_is_in_it() + going_in >= Self::A_STORE_WORTH_A_BASKET);
+        let enough = 1;
         let lining = {
             let agent = &self.population.agents[agent_index];
             crate::environment::tags::EVERYTHING_THAT_KEEPS
@@ -747,8 +756,9 @@ impl Simulation {
                 vessel
             }
             None if knows_to
+                && worth_it
                 && self.population.agents[agent_index].how_many_i_have("lashing")
-                    >= Self::LASHINGS_A_BASKET_FOR_A_STORE_TAKES =>
+                    >= Self::LASHINGS_A_BASKET_FOR_A_STORE_TAKES + Self::LASHINGS_KEPT_BACK =>
             {
                 self.population.agents[agent_index]
                     .inventory
@@ -760,10 +770,12 @@ impl Simulation {
         if knows_to {
             self.world.stores_lined += 1;
         }
-        // And a basket daubed shut, by somebody who knows to and has the clay
-        // for it (#393)
+        // And a basket daubed shut as it goes in, by somebody who knows to and
+        // has the clay for it (#393). Only here: a sealed basket carries
+        // nothing, and made as a vessel like any other, people turned the
+        // baskets they foraged with into them.
         let vessel = if vessel == "basket"
-            && self.population.agents[agent_index].knows_how_to_make("sealedbasket")
+            && self.population.agents[agent_index].knows_the_way("seal_the_store")
             && self.population.agents[agent_index].how_many_i_have("clay") > 0
         {
             self.population.agents[agent_index].inventory.remove_item("clay", 1);
@@ -789,6 +801,15 @@ impl Simulation {
     /// basket always takes (`making::BASKET`).
     pub(in crate::analytics) const LASHINGS_A_BASKET_FOR_A_STORE_TAKES: u32 = 2;
 
+    /// Lashings kept back from a basket for a store, for the tools they are
+    /// wanted for: a pair.
+    pub(in crate::analytics) const LASHINGS_KEPT_BACK: u32 = 2;
+
+    /// What a store has to hold, or be about to, for a basket to be woven for
+    /// it: what halving the vermin saves on a store this size over a season
+    /// is a few units, about what the weaving costs.
+    pub(in crate::analytics) const A_STORE_WORTH_A_BASKET: u32 = 60;
+
     /// What opening a store shows (#392): what vermin have carried off since
     /// it was last opened. Seen often enough, in stores of one's own or the
     /// camp's, and somebody thinks to put something between the food and the
@@ -809,7 +830,7 @@ impl Simulation {
             if agent.skills.times_made(crate::agents::Agent::A_LINED_STORE_GNAWED)
                 >= crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_SEALING
             {
-                agent.it_comes_to_me("sealedbasket", crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_SEALING);
+                agent.it_comes_to_me("know:seal_the_store", crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_SEALING);
             }
         }
         agent.skills.made_one(crate::agents::Agent::A_GNAWED_STORE_SEEN);
