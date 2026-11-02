@@ -686,7 +686,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // turned their foraging baskets into sealed baskets; 954,243, up 1.4% on
     // #390, with sealing only as a store is lined and the forager's basket
     // kept.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 954_243;
+    // Up 1.1% to 964,810 for #394: what stores lose is reckoned as they are
+    // opened, a bare store plainly worse than a lined one is how lining is
+    // found out, and those bothered by waste line the camp's stores.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 964_810;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
