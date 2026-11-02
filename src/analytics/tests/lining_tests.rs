@@ -164,6 +164,27 @@ fn a_bare_store_of_the_camps_is_lined() {
     assert_eq!(simulation.a_store_to_line(&agent, agent.state.position), None, "nothing left bare");
 }
 
+/// With nothing to line it with, the lashings are made of wood in hand, or
+/// the wood fetched for them.
+#[test]
+fn with_nothing_to_line_it_the_makings_are_got() {
+    let mut simulation = at_a_bare_store();
+    simulation.world.pits[0].holds[0].quantity = 200;
+    simulation.population.agents[0].found_out_how_to("know:line_the_store");
+    simulation.population.agents[0].hearth = Some(STORE);
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(
+        simulation.a_store_to_line(&agent, agent.state.position),
+        Some(Action::Gather { resource_type: "wood".to_string() })
+    );
+    simulation.population.agents[0].inventory.add_item(InventoryItem::new_with_weight("wood".to_string(), 1, 1.0));
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(
+        simulation.a_store_to_line(&agent, agent.state.position),
+        Some(Action::Craft { item_type: "lashing".to_string() })
+    );
+}
+
 /// Somebody who knows to seal a lining, with clay to hand, daubs the basket
 /// shut as it goes in, and vermin take from it as little as from a fired pot
 /// (#393).

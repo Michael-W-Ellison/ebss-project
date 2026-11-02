@@ -820,9 +820,11 @@ impl Simulation {
     }
 
     /// The next of lining a store of the camp's that is lying bare (#394):
-    /// lined where this one stands at it, else walked to. Only by somebody
-    /// who knows to and has a vessel or lashings to spare for it, for a store
-    /// near home worth lining to them.
+    /// lined where this one stands at it, else walked to, by somebody who
+    /// knows to, for a store near home worth lining to them. With no vessel
+    /// or lashings to spare, the lashings are made first, or the wood for
+    /// them fetched: in a probe, few had either, and a world lined seventeen
+    /// stores in two years.
     pub(in crate::analytics) fn a_store_to_line(
         &self,
         agent: &crate::agents::Agent,
@@ -838,9 +840,6 @@ impl Simulation {
         });
         let lashings_to_spare = agent.how_many_i_have("lashing")
             >= Self::LASHINGS_A_BASKET_FOR_A_STORE_TAKES + Self::LASHINGS_KEPT_BACK;
-        if !a_vessel_to_spare && !lashings_to_spare {
-            return None;
-        }
         let home = Self::where_this_one_lives(agent);
         let store = self
             .world
@@ -852,6 +851,14 @@ impl Simulation {
             })
             .filter(|pit| self.is_lining_this_worth_it(agent, pit.how_much_is_in_it()))
             .max_by_key(|pit| pit.how_much_is_in_it())?;
+        // Nothing to line it with: the lashings made, of wood, or the wood
+        // fetched for them. Somebody who minds the waste goes to the trouble.
+        if !a_vessel_to_spare && !lashings_to_spare {
+            if agent.how_many_i_have("wood") > 0 && agent.knows_how_to_make("lashing") {
+                return Some(Action::Craft { item_type: "lashing".to_string() });
+            }
+            return Some(Action::Gather { resource_type: "wood".to_string() });
+        }
         let at = (store.where_it_is.x, store.where_it_is.y);
         if Self::within((here.0, here.1), at, 1) {
             Some(Action::LineStore)
