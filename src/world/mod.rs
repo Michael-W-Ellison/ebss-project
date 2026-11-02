@@ -345,6 +345,9 @@ pub struct World {
     /// was over (#395).
     #[serde(default)]
     pub field_crop_fallen: u64,
+    /// Units of field crop that went into somebody's pack (#395).
+    #[serde(default)]
+    pub field_crop_brought_in: u64,
     /// Field crops that ripened at their full stand, and that ripened short
     /// on the last day of their season (#395).
     #[serde(default)]
@@ -2011,6 +2014,7 @@ impl World {
             stores_lined: 0,
             stores_sealed: 0,
             field_crop_fallen: 0,
+            field_crop_brought_in: 0,
             crops_ripened_full: 0,
             crops_ripened_short: 0,
             fields_hedged: 0,

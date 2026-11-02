@@ -292,7 +292,7 @@ fn a_ripe_crop_seen_to_fall_is_how_the_seasons_come_to_mind() {
     let mut simulation = a_farmer_at_home();
     let far = simulation.population.agents[0].clone();
     simulation.population.agents.push(far);
-    simulation.population.agents[1].id = uuid::Uuid::new_v4();
+    simulation.population.agents[1].id = uuid::Uuid::from_u128(0x5ea5_0115);
     simulation.population.agents[1].hearth = Some((HOME.0 + 15, HOME.1 + 15));
     for _ in 0..Agent::CROPS_LOST_BEFORE_THE_SEASONS {
         assert!(!simulation.population.agents[0].knows_the_way("seasons"));

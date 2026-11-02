@@ -452,6 +452,7 @@ impl Simulation {
             // A ripe field crop, which seed can be saved off: what it was bred
             // from, and whether it stood full, which is the stand somebody
             // choosing would save from (#396, #397)
+            let off_a_field = self.world.resources[resource_index].on_a_field;
             let seed_off_it = {
                 let node = &self.world.resources[resource_index];
                 (node.on_a_field && node.ripe_stand > 0 && node.resource_type == ResourceType::Grain).then(|| {
@@ -822,6 +823,9 @@ impl Simulation {
                 // seed on purpose (#396)
                 if let (true, Some((bred, stood_full))) = (went_in_the_pack, seed_off_it) {
                     self.population.agents[agent_index].save_seed_off(bred, took, stood_full);
+                }
+                if went_in_the_pack && off_a_field {
+                    self.world.field_crop_brought_in += took as u64;
                 }
                 if it_is_food {
                     self.food_items_into_packs += took as u64;
