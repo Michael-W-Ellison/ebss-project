@@ -2085,7 +2085,7 @@ name = "Woven bins"
 path = "storage"
 stage = 1
 role = "technique"
-model = ["know:line_the_store", "do:LineStore"]
+model = ["know:line_the_store"]
 note = "Found out by comparing: somebody who opens bare stores and lined ones often enough sees the bare lose plainly more to vermin (Agent::what_the_stores_have_shown_me) (#394). They line a store worth it to them - what a season would save at what they have seen, times how much waste bothers them, against what a basket costs - with a vessel to spare or a basket woven of lashings to spare, as it fills or as a bare store of the camp's (#392, #394)."
 
 [[tech]]
