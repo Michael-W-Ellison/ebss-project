@@ -182,7 +182,7 @@ fn burying_something_opens_the_question() {
     let mut simulation = a_settlement(1);
     let here = Position::new(25, 25);
 
-    simulation.world.pits.push(crate::world::Pit { gnawed: 0,
+    simulation.world.pits.push(crate::world::Pit { gnawed: 0, last_opened: None,
         where_it_is: here,
         holds: Vec::new(),
         covered: false,

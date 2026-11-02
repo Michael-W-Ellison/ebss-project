@@ -7,11 +7,15 @@
 //! - with no vessel to spare, somebody who knows weaves a basket for a store
 //!   worth it, of lashings they can spare
 //! - a basket is sealed with clay only as it goes into a store (#393)
-//! - what vermin carry off is kept on the store until somebody opens it
-//! - opening a gnawed store three times is how it is found out
+//! - opening a store reckons what it lost: food, days and what is gone
+//! - comparing bare stores with lined ones is how lining is found out (#394)
+//! - the frugal line what the lazy leave bare (#394)
+//! - a bare store of the camp's is walked to and lined (#394)
 
 use crate::agents::{Agent, AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
+use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::Action;
 use crate::world::{Belongs, Pit, Position, World, WorldConfig};
 
 const STORE: (i32, i32) = (25, 25);
@@ -25,6 +29,7 @@ fn at_a_bare_store() -> Simulation {
     grain.food_data = crate::world::nutrition::FoodDatabase::new().create_food_data(&crate::world::ItemType::Grain, 0);
     world.pits.push(Pit {
         gnawed: 0,
+        last_opened: None,
         where_it_is: Position::new(STORE.0, STORE.1),
         holds: vec![grain],
         covered: true,
@@ -86,22 +91,77 @@ fn a_basket_is_woven_for_a_store_worth_it() {
     assert!(!lined(&empty), "not for ten units");
 }
 
-/// What vermin carry off is kept on the store, and opening it three times
-/// to find it gnawed is how somebody comes to line the next one.
+/// What a store loses is reckoned by somebody opening it: so much food, for
+/// so many days, and so much of it gone.
 #[test]
-fn opening_a_gnawed_store_is_how_it_is_found_out() {
+fn opening_a_store_reckons_what_it_lost() {
     let mut simulation = at_a_bare_store();
     let here = Position::new(STORE.0, STORE.1);
-    for time in 0..Agent::GNAWED_STORES_BEFORE_LINING {
-        for _ in 0..20 {
-            simulation.world.what_the_vermin_take();
-        }
-        assert!(simulation.world.pits[0].gnawed > 0, "vermin have been at it");
-        assert!(!simulation.population.agents[0].knows_the_way("line_the_store"), "not yet, at {time}");
-        simulation.what_opening_the_store_shows(0, here);
-        assert_eq!(simulation.world.pits[0].gnawed, 0, "seen, and counted once");
-    }
-    assert!(simulation.population.agents[0].knows_the_way("line_the_store"));
+    simulation.world.pits[0].gnawed = 5;
+    simulation.current_turn = 10 * TICKS_PER_DAY;
+    simulation.what_opening_the_store_shows(0, here);
+    let (food_days, lost) = simulation.population.agents[0].store_losses["bare"];
+    assert_eq!(lost, 5.0);
+    assert!((food_days - 105.0 * 10.0).abs() < 1e-6, "{food_days}");
+    assert_eq!(simulation.world.pits[0].gnawed, 0);
+    assert_eq!(simulation.world.pits[0].last_opened, Some(10 * TICKS_PER_DAY));
+}
+
+/// Somebody who has watched bare stores and lined ones lose what they lose
+/// sees which keeps better; somebody who has seen only bare ones does not.
+#[test]
+fn comparing_bare_stores_with_lined_ones_is_how_it_is_found_out() {
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.what_i_saw_of_a_store("bare", 1_000.0, 2.0);
+    assert!(!agent.what_the_stores_have_shown_me(), "nothing to compare it with");
+    agent.what_i_saw_of_a_store("lined", 1_000.0, 1.6);
+    assert!(!agent.what_the_stores_have_shown_me(), "not plainly worse");
+    agent.what_i_saw_of_a_store("lined", 1_000.0, 0.0);
+    assert!(agent.what_the_stores_have_shown_me());
+    assert!(agent.knows_the_way("line_the_store"));
+    assert!(agent.did_i_come_to_it_myself("know:line_the_store"));
+}
+
+/// Whether a store is worth lining is a matter of temperament: a frugal man
+/// lines a store a lazy one leaves bare.
+#[test]
+fn the_frugal_line_what_the_lazy_leave() {
+    use crate::core::traits::{Trait, TraitSet};
+    let simulation = at_a_bare_store();
+    let with = |t: Trait| {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.traits = TraitSet::new();
+        agent.traits.add_trait(t);
+        agent.found_out_how_to("know:line_the_store");
+        agent
+    };
+    let frugal = with(Trait::Frugal);
+    let lazy = with(Trait::Lazy);
+    assert!(simulation.is_lining_this_worth_it(&frugal, 60));
+    assert!(!simulation.is_lining_this_worth_it(&lazy, 60));
+    assert!(simulation.is_lining_this_worth_it(&lazy, 400), "a big enough store even for him");
+}
+
+/// A bare store of the camp's is walked to and lined by somebody who knows
+/// to and has lashings to spare.
+#[test]
+fn a_bare_store_of_the_camps_is_lined() {
+    let mut simulation = at_a_bare_store();
+    simulation.world.pits[0].holds[0].quantity = 200;
+    simulation.population.agents[0].found_out_how_to("know:line_the_store");
+    simulation.population.agents[0].inventory.add_item(InventoryItem::new_with_weight("lashing".to_string(), 4, 0.2));
+    simulation.population.agents[0].hearth = Some(STORE);
+    simulation.population.agents[0].state.position = (STORE.0 + 5, STORE.1, 0);
+    let agent = simulation.population.agents[0].clone();
+    assert!(matches!(simulation.a_store_to_line(&agent, agent.state.position), Some(Action::Move { .. })));
+    simulation.population.agents[0].state.position = (STORE.0, STORE.1, 0);
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_store_to_line(&agent, agent.state.position), Some(Action::LineStore));
+    let result = simulation.execute_action(&Action::LineStore, 0);
+    assert!(result.success, "{result:?}");
+    assert!(lined(&simulation));
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_store_to_line(&agent, agent.state.position), None, "nothing left bare");
 }
 
 /// Somebody who knows to seal a lining, with clay to hand, daubs the basket

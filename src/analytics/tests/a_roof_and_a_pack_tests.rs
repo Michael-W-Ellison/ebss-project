@@ -259,7 +259,7 @@ fn a_pit_with_room_in_it_is_not_enough_hole_for_a_winter() {
     let here = Position::new(25, 25);
 
     // One empty hole, twenty paces off so it is within reach and not underfoot.
-    simulation.world.pits.push(Pit { gnawed: 0,
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(30, 25),
         holds: Vec::new(),
         covered: true,
@@ -297,7 +297,7 @@ fn nobody_digs_on_top_of_a_hole_that_is_still_going_spare() {
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
     crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.world.pits.clear();
-    simulation.world.pits.push(Pit { gnawed: 0,
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: Vec::new(),
         covered: true,
@@ -339,7 +339,7 @@ fn somebody_standing_on_a_full_pit() -> crate::analytics::Simulation {
     buried.food_data = simulation
         .food_database
         .create_food_data(&ItemType::Food, 0);
-    let mut pit = Pit { gnawed: 0,
+    let mut pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: Vec::new(),
         covered: true,

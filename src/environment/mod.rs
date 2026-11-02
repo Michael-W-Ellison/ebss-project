@@ -291,6 +291,8 @@ pub enum Action {
     /// garden: Stage 2 of the agricultural path, "composting and midden
     /// enrichment" (#386)
     DigOutMidden,
+    /// Line a bare store of the camp's where the agent stands at it (#394)
+    LineStore,
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
     /// Go over a standing field pulling weeds out of it and picking pests off
@@ -469,6 +471,7 @@ impl Action {
             Action::BurnOff => Some(DriveType::Sustenance), // A burn is next season's flush
             Action::DigDitch => Some(DriveType::Sustenance), // Watered stands bear in the dry
             Action::DigOutMidden => Some(DriveType::Sustenance), // Compost is next year's crop
+            Action::LineStore => Some(DriveType::Preparedness), // What vermin do not take is put by
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::TakeFrom { .. } => Some(DriveType::Utility),

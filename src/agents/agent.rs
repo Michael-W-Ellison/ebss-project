@@ -1971,6 +1971,12 @@ pub struct Agent {
     /// (#390): `Simulation::what_the_camp_makes_of_it`.
     #[serde(default)]
     pub lately_came_to: Vec<String>,
+    /// What this one has seen stores lose to vermin, by how they were shut
+    /// (#394): food-days of keeping watched, and what was gone at the end of
+    /// them. What lets somebody who opens both bare and lined stores see
+    /// which keeps better.
+    #[serde(default)]
+    pub store_losses: std::collections::BTreeMap<String, (f64, f64)>,
     /// Every swap this one has tried, by `what_that_swap_is_called`.
     ///
     /// Kept apart from `lessons` for the same reason as `times_laid_up`. A
@@ -2238,6 +2244,7 @@ impl Agent {
             found_out: Self::what_anybody_is_born_knowing(),
             came_to_myself: std::collections::BTreeSet::new(),
             lately_came_to: Vec::new(),
+            store_losses: std::collections::BTreeMap::new(),
             swaps_tried: std::collections::BTreeSet::new(),
             what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
@@ -3521,11 +3528,80 @@ impl Agent {
     /// (#391), "selection of preferred springs over surface water".
     pub const ILL_FROM_FOUL_WATER_BEFORE_CHOOSING: u32 = 2;
 
-    /// What the practice record calls opening a store to find vermin have
-    /// been at it, and how many times before somebody lines the next one
-    /// (#392): "woven bins".
-    pub const A_GNAWED_STORE_SEEN: &'static str = "a gnawed store";
-    pub const GNAWED_STORES_BEFORE_LINING: u32 = 3;
+    /// How many food-days of keeping somebody has to have watched a kind of
+    /// store over before they go by what it loses (#394): a store of fifty
+    /// opened after a week, give or take.
+    pub const FOOD_DAYS_TO_GO_ON: f64 = 300.0;
+
+    /// How much more a bare store has to be seen to lose than a lined one
+    /// before somebody takes it for the lining and not the luck (#394).
+    pub const PLAINLY_WORSE: f64 = 1.5;
+
+    /// What opening a store showed this one (#394): `food_days` of keeping in
+    /// a store shut `how`, and `lost` of it gone to vermin.
+    pub fn what_i_saw_of_a_store(&mut self, how: &str, food_days: f64, lost: f64) {
+        let seen = self.store_losses.entry(how.to_string()).or_insert((0.0, 0.0));
+        seen.0 += food_days;
+        seen.1 += lost;
+    }
+
+    /// What a store shut `how` loses to vermin a day, a share of what is in
+    /// it, as this one has seen it - if they have seen enough of it to go on.
+    pub fn what_i_have_seen_a_store_lose(&self, how: &str) -> Option<f64> {
+        self.store_losses
+            .get(how)
+            .filter(|(food_days, _)| *food_days >= Self::FOOD_DAYS_TO_GO_ON)
+            .map(|(food_days, lost)| lost / food_days)
+    }
+
+    /// What a store shut `how` loses a day, as this one reckons it: what they
+    /// have seen, or, for somebody shown or taught to line a store without
+    /// having watched it themselves, what they were told
+    /// (`Pit::what_vermin_get_at`).
+    pub fn what_i_reckon_a_store_loses(&self, how: &str) -> f64 {
+        self.what_i_have_seen_a_store_lose(how).unwrap_or(match how {
+            "lined" => crate::world::Pit::VERMIN_PAST_A_LINING as f64,
+            "sealed" => crate::world::Pit::VERMIN_PAST_A_POT as f64,
+            _ => crate::world::Pit::VERMIN_UNDER_EARTH as f64,
+        })
+    }
+
+    /// Whether what this one has seen of bare stores and lined ones tells
+    /// them the lining is the difference (#394): enough of both watched, and
+    /// the bare plainly the worse. Comparing two things in front of them, not
+    /// an idea, so it is not slowed by the pace ideas come at.
+    pub fn what_the_stores_have_shown_me(&mut self) -> bool {
+        if self.knows_the_way("line_the_store") {
+            return false;
+        }
+        let (Some(bare), Some(lined)) =
+            (self.what_i_have_seen_a_store_lose("bare"), self.what_i_have_seen_a_store_lose("lined"))
+        else {
+            return false;
+        };
+        bare > 0.0 && bare >= lined * Self::PLAINLY_WORSE && self.came_to_it_myself("know:line_the_store")
+    }
+
+    /// How much waste bothers this one, against anybody else (#394): twice
+    /// for the frugal, half again for a survivalist, the diligent, a
+    /// pragmatist and the greedy, a third for the lazy. What they will go to
+    /// the trouble of saving is what it would save times this.
+    pub fn how_much_waste_bothers_me(&self) -> f64 {
+        use crate::core::traits::Trait;
+        let mut bothers = 1.0;
+        if self.traits.has(Trait::Frugal) {
+            bothers *= 2.0;
+        }
+        for careful in [Trait::Survivalist, Trait::Diligent, Trait::Pragmatist, Trait::Greedy] {
+            if self.traits.has(careful) {
+                bothers *= 1.5;
+            }
+        }
+        if self.traits.has(Trait::Lazy) {
+            bothers *= 0.3;
+        }
+        bothers
+    }
 
     /// And opening a store already lined to find vermin have been at it
     /// anyway, and how many times before somebody daubs the lining shut with
@@ -8464,6 +8540,7 @@ impl Agent {
             Action::BurnOff => "burnoff".to_string(),
             Action::DigDitch => "digditch".to_string(),
             Action::DigOutMidden => "digoutmidden".to_string(),
+            Action::LineStore => "linestore".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),

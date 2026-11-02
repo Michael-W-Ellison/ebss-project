@@ -511,6 +511,7 @@ impl Simulation {
             Action::ScatterSeed | Action::BurnOff | Action::DigDitch | Action::DigOutMidden => {
                 Some(ActionType::Farming)
             }
+            Action::LineStore => Some(ActionType::Building),
             Action::TendField => Some(ActionType::Farming),
             Action::TakeFrom { .. } | Action::RobFishTrap { .. } => Some(ActionType::Social),
             Action::FleeFrom { .. } | Action::DriveOff { .. } => Some(ActionType::Combat),

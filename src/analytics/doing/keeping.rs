@@ -32,7 +32,7 @@ impl Simulation {
             .map(|building| building.position)
             .find(|there| (there.x - at.0).abs().max((there.y - at.1).abs()) <= Self::AT_THE_STOREHOUSE)?;
         if self.world.pit_at(storehouse).is_none() {
-            self.world.pits.push(crate::world::Pit { gnawed: 0,
+            self.world.pits.push(crate::world::Pit { gnawed: 0, last_opened: None,
                 where_it_is: storehouse,
                 holds: Vec::new(),
                 covered: true,
@@ -561,7 +561,7 @@ impl Simulation {
             .skills
             .practise(crate::agents::SkillType::Mining, 10, turn_now);
         let whose = agent.id;
-        self.world.pits.push(Pit { gnawed: 0,
+        self.world.pits.push(Pit { gnawed: 0, last_opened: None,
             where_it_is: here,
             holds: Vec::new(),
             covered: true,
@@ -734,10 +734,9 @@ impl Simulation {
             return;
         }
         let knows_to = self.population.agents[agent_index].knows_the_way("line_the_store");
-        let worth_it = self
-            .world
-            .pit_at(at)
-            .is_some_and(|pit| pit.how_much_is_in_it() + going_in >= Self::A_STORE_WORTH_A_BASKET);
+        let worth_it = self.world.pit_at(at).is_some_and(|pit| {
+            self.is_lining_this_worth_it(&self.population.agents[agent_index], pit.how_much_is_in_it() + going_in)
+        });
         let enough = 1;
         let lining = {
             let agent = &self.population.agents[agent_index];
@@ -805,39 +804,121 @@ impl Simulation {
     /// wanted for: a pair.
     pub(in crate::analytics) const LASHINGS_KEPT_BACK: u32 = 2;
 
-    /// What a store has to hold, or be about to, for a basket to be woven for
-    /// it: what halving the vermin saves on a store this size over a season
-    /// is a few units, about what the weaving costs.
-    pub(in crate::analytics) const A_STORE_WORTH_A_BASKET: u32 = 60;
+    /// What lining a store costs, in what it would save (#394): a basket's
+    /// lashings and the turn it takes to weave it, a few units of food.
+    pub(in crate::analytics) const WHAT_LINING_A_STORE_COSTS: f64 = 4.0;
 
-    /// What opening a store shows (#392): what vermin have carried off since
-    /// it was last opened. Seen often enough, in stores of one's own or the
-    /// camp's, and somebody thinks to put something between the food and the
-    /// ground.
+    /// Whether lining a bare store of `holding` is worth it to this one
+    /// (#394): what a season of keeping in it would save, at what they have
+    /// seen bare and lined stores lose a day, times how much waste bothers
+    /// them, against what the lining costs. So a frugal man lines a store of
+    /// fifty and a lazy one leaves a store of two hundred bare.
+    pub(in crate::analytics) fn is_lining_this_worth_it(&self, agent: &crate::agents::Agent, holding: u32) -> bool {
+        let a_day_saved = (agent.what_i_reckon_a_store_loses("bare") - agent.what_i_reckon_a_store_loses("lined")).max(0.0);
+        let season = crate::environment::seasons::DAYS_PER_SEASON as f64;
+        holding as f64 * a_day_saved * season * agent.how_much_waste_bothers_me() >= Self::WHAT_LINING_A_STORE_COSTS
+    }
+
+    /// The next of lining a store of the camp's that is lying bare (#394):
+    /// lined where this one stands at it, else walked to. Only by somebody
+    /// who knows to and has a vessel or lashings to spare for it, for a store
+    /// near home worth lining to them.
+    pub(in crate::analytics) fn a_store_to_line(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<crate::environment::Action> {
+        use crate::environment::Action;
+        if !agent.knows_the_way("line_the_store") || !agent.immediate_needs_met() {
+            return None;
+        }
+        let a_vessel_to_spare = crate::environment::tags::EVERYTHING_THAT_KEEPS.iter().any(|keeps| {
+            crate::environment::tags::is_this_a(keeps.called, crate::environment::tags::Tag::FoodContainer)
+                && agent.how_many_i_have(keeps.called) > 1
+        });
+        let lashings_to_spare = agent.how_many_i_have("lashing")
+            >= Self::LASHINGS_A_BASKET_FOR_A_STORE_TAKES + Self::LASHINGS_KEPT_BACK;
+        if !a_vessel_to_spare && !lashings_to_spare {
+            return None;
+        }
+        let home = Self::where_this_one_lives(agent);
+        let store = self
+            .world
+            .pits
+            .iter()
+            .filter(|pit| pit.how_it_is_shut() == "bare")
+            .filter(|pit| {
+                Self::within((pit.where_it_is.x, pit.where_it_is.y), home, Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS)
+            })
+            .filter(|pit| self.is_lining_this_worth_it(agent, pit.how_much_is_in_it()))
+            .max_by_key(|pit| pit.how_much_is_in_it())?;
+        let at = (store.where_it_is.x, store.where_it_is.y);
+        if Self::within((here.0, here.1), at, 1) {
+            Some(Action::LineStore)
+        } else {
+            Some(Action::Move { target: (at.0, at.1, here.2) })
+        }
+    }
+
+    /// `Action::LineStore`: the bare store this one stands at lined, opened to
+    /// do it (#394).
+    pub(in crate::analytics) fn lining_a_store(&mut self, agent_index: usize) -> crate::environment::ActionResult {
+        use crate::environment::ActionResult;
+        let here = self.population.agents[agent_index].state.position;
+        let Some(at) = self
+            .world
+            .pits
+            .iter()
+            .filter(|pit| pit.how_it_is_shut() == "bare")
+            .map(|pit| pit.where_it_is)
+            .find(|at| Self::within((here.0, here.1), (at.x, at.y), 1))
+        else {
+            return ActionResult::failure("No bare store here".to_string());
+        };
+        self.what_opening_the_store_shows(agent_index, at);
+        self.line_the_store_here(agent_index, at, 0);
+        if !self.world.pit_at(at).is_some_and(|pit| pit.is_lined()) {
+            return ActionResult::failure("Nothing to line it with".to_string());
+        }
+        ActionResult::success()
+            .with_drive_change(crate::core::DriveType::Preparedness, -0.15)
+            .with_energy_cost(4.0)
+            .with_message("Lined a store".to_string())
+    }
+
+    /// What opening a store shows (#392, #394): how much it held, for how
+    /// long, and what vermin have carried off since it was last opened, by how
+    /// it is shut. Somebody who opens bare stores and lined ones often enough
+    /// sees which keeps better (`Agent::what_the_stores_have_shown_me`); and
+    /// somebody who lines their stores and still finds them gnawed thinks to
+    /// daub the next one shut (#393).
     pub(in crate::analytics) fn what_opening_the_store_shows(&mut self, agent_index: usize, at: crate::world::Position) {
+        let now = self.current_turn;
         let Some(pit) = self.world.pit_at_mut(at) else {
             return;
         };
-        if std::mem::take(&mut pit.gnawed) == 0 {
+        let how = pit.how_it_is_shut();
+        let gnawed = std::mem::take(&mut pit.gnawed);
+        let since = pit.last_opened.replace(now).unwrap_or(pit.dug);
+        let days = now.saturating_sub(since) as f64 / crate::environment::seasons::TICKS_PER_DAY as f64;
+        let held = (pit.how_much_is_in_it() + gnawed) as f64;
+        if how == "open" || held <= 0.0 {
             return;
         }
-        let lined_already = pit.is_lined();
         let agent = &mut self.population.agents[agent_index];
+        agent.what_i_saw_of_a_store(how, held * days, gnawed as f64);
+        if agent.what_the_stores_have_shown_me() {
+            debug!("Agent {} saw the bare stores lose what the lined ones kept", agent.id);
+        }
         // Gnawed through a lining, and somebody who lines their stores thinks
         // to daub the next one shut (#393)
-        if lined_already && agent.knows_the_way("line_the_store") {
+        if gnawed > 0 && how == "lined" && agent.knows_the_way("line_the_store") {
             agent.skills.made_one(crate::agents::Agent::A_LINED_STORE_GNAWED);
             if agent.skills.times_made(crate::agents::Agent::A_LINED_STORE_GNAWED)
                 >= crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_SEALING
             {
                 agent.it_comes_to_me("know:seal_the_store", crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_SEALING);
             }
-        }
-        agent.skills.made_one(crate::agents::Agent::A_GNAWED_STORE_SEEN);
-        if agent.skills.times_made(crate::agents::Agent::A_GNAWED_STORE_SEEN)
-            >= crate::agents::Agent::GNAWED_STORES_BEFORE_LINING
-        {
-            agent.it_comes_to_me("know:line_the_store", crate::agents::Agent::GNAWED_STORES_BEFORE_LINING);
         }
     }
 }

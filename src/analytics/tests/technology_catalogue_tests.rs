@@ -109,6 +109,7 @@ fn every_action() -> BTreeSet<String> {
         Action::BurnOff,
         Action::DigDitch,
         Action::DigOutMidden,
+        Action::LineStore,
         Action::TillSoil,
         Action::TendField,
         Action::Dry { what: s() },

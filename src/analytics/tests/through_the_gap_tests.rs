@@ -489,7 +489,7 @@ fn a_long_walk_takes_supper_along() {
 
     let mut roots = crate::agents::InventoryItem::new_with_weight("roots".to_string(), 40, 1.0);
     roots.food_data = simulation.food_database.create_food_data(&crate::world::ItemType::Roots, 0);
-    let mut pit = Pit { gnawed: 0,
+    let mut pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(here.0, here.1),
         holds: Vec::new(),
         covered: true,

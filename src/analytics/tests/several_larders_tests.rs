@@ -32,7 +32,7 @@ fn somebody_and_a_full_pit() -> crate::analytics::Simulation {
         .food_database
         .create_food_data(&crate::world::ItemType::Food, 0);
 
-    let mut pit = Pit { gnawed: 0,
+    let mut pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(13, 10),
         holds: Vec::new(),
         covered: true,

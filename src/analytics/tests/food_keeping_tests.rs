@@ -129,7 +129,7 @@ fn a_cache_goes_where_a_pit_will_not() {
         if let Some(tile) = world.grid.get_tile_mut(&at) {
             tile.terrain.terrain_type = TerrainType::Plains;
         }
-        world.pits.push(crate::world::Pit { gnawed: 0,
+        world.pits.push(crate::world::Pit { gnawed: 0, last_opened: None,
             where_it_is: at,
             holds: vec![a_meal(ItemType::Meat, "meatportions", 10)],
             covered: true,

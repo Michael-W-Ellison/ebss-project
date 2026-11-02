@@ -658,9 +658,29 @@ pub struct Pit {
     /// units (#392): what somebody sees when they do.
     #[serde(default)]
     pub gnawed: u32,
+    /// The tick it was last opened, if it has been since it was dug (#394):
+    /// what somebody opening it reckons how long its food lay there by.
+    #[serde(default)]
+    pub last_opened: Option<u32>,
 }
 
 impl Pit {
+    /// How it is shut, as somebody opening it would name it (#394): bare
+    /// earth, lined with a vessel, or sealed (a fired pot or a sealed
+    /// basket), which is what vermin go by (`what_vermin_get_at`). An open
+    /// hole is not a store anybody reckons by.
+    pub fn how_it_is_shut(&self) -> &'static str {
+        if !self.covered {
+            "open"
+        } else if self.holds.iter().any(|item| item.item_id == "stoneware" || item.item_id == "sealedbasket") {
+            "sealed"
+        } else if self.is_lined() {
+            "lined"
+        } else {
+            "bare"
+        }
+    }
+
     /// What vermin take of a store in a day, by how it is shut (#357).
     pub fn what_vermin_get_at(&self) -> f32 {
         if !self.covered {
