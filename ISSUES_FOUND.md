@@ -28071,9 +28071,10 @@ later entry. These were not. Each line names the entry that left it.
   has not been seen in a measurement, nobody born in a run being six by the
   end of it. Traits bear on who comes to ideas, who teaches and who takes
   them up (#390).
-- Lining stores (#392) and sealing them (#393) do not show in what vermin
-  take: only new stores are lined, and clay is seldom carried. Days wasting
-  rose at the edge of noise with them (#393). Clean water cut illness from
+- Lining stores comes of comparing bare ones with lined ones, and the
+  camp's stores are lined by those whom waste bothers (#394): vermin take a
+  seventh less. Sealing (#393) is still seldom done, clay being seldom
+  carried. Births in the scattered worlds fell within noise with it (#394). Clean water cut illness from
   foul water by a quarter (#391). A fire never gets away into a camp, and game is not drawn to
   burnt ground (#381). Poles are not a thing apart from wood (#382).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
@@ -29851,3 +29852,67 @@ hardly take from it; lined stores gnawed is how sealing is found out.
 **Full suite**: 3,069 passed, 0 failed, 6 ignored.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns) and 954,243 (seed 0, a year).
+
+### 394. Comparing a bare store with a lined one
+
+#392 made lining a store come to somebody who opened a gnawed store three
+times, and lined only what was going in. Two things were wrong with that. Any
+store is gnawed, so being gnawed teaches nothing; what tells is that a bare
+store loses plainly more than a lined one, and anybody who opens both often
+enough can see it. And a store already full and lying in bare earth was left
+there, so lining did nothing measurable to what vermin took.
+
+**What changed.**
+
+- Opening a store reckons what it lost (`what_opening_the_store_shows`):
+  so much food, for so many days since it was last opened (`Pit::last_opened`),
+  and so much gone (`Pit::gnawed`). Each person keeps a tally by how the store
+  is shut - bare, lined, sealed (`Agent::store_losses`,
+  `what_i_saw_of_a_store`).
+- With three hundred food-days of each seen, a bare store losing half again
+  as much as a lined one is how lining is found out
+  (`what_the_stores_have_shown_me`, `PLAINLY_WORSE`). It is a comparison of
+  two things seen, not an idea, and comes at no pace.
+- Whether it is acted on is temperament (`how_much_waste_bothers_me`): the
+  frugal twice as much, the survivalist, diligent, pragmatic and greedy half
+  as much again, the lazy a third. A store is worth lining when what it would
+  save over a season, weighted by that, is more than a basket's making
+  (`is_lining_this_worth_it`, `WHAT_LINING_A_STORE_COSTS`). What it would
+  save is what they have seen stores lose, or a guess before they have.
+- Somebody who knows walks to the camp's bare stores worth lining, largest
+  first, and lines them (`a_store_to_line`, `Action::LineStore`), under
+  preparedness. With no vessel or lashings to spare they make lashings of
+  wood in hand, or fetch wood for them.
+
+**Probe**, three worlds before the makings were fetched: lining came by the
+comparison on days 41 to 98 and 17 to 44 stores were lined in each. With the
+makings fetched, 49 to 60.
+
+**Measured** against #391 to #393:
+
+| | #391 to #393 | #394 | t |
+|---|---|---|---|
+| births | 174 | 161 | -1.39 |
+| deaths | 2 | 4 | +1.00 |
+| alive at two years | 652 | 637 | -1.64 |
+| vermin | 281,773 | 241,055 | -3.46 |
+| stores lined | 941 | 2,298 | +8.46 |
+| stores sealed | 6 | 119 | +6.95 |
+| rotted | 43,756 | 42,117 | -0.75 |
+| person-days wasting | 663 | 709 | +0.19 |
+
+Found out in all forty worlds, median day 46. Vermin took a seventh less,
+lower in 29 worlds of 40. Sealing, which comes to those who line, went from
+six to 119. Births are down within noise, most of it in the scattered worlds
+(49 to 38, t -1.46); that is where people are fewest and a lashing spent on a
+store counts for most, and it wants watching.
+
+**Tests** (`lining_tests`): opening a store reckons what it lost; comparing
+bare stores with lined ones is how lining is found out; the frugal line what
+the lazy leave; a bare store of the camp's is lined; with nothing to line it,
+the makings are got.
+
+**Full suite**: `cargo test --lib`, 3,078 tests: 3,072 passed, 0 failed, 6
+ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns) and 964,810 (seed 0, a year).
