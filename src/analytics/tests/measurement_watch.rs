@@ -131,6 +131,13 @@ fn zz_discovery_watch() {
         ("crops_ripened_full", sim.world.crops_ripened_full),
         ("crops_ripened_short", sim.world.crops_ripened_short),
         ("fields_hedged", sim.world.fields_hedged),
+        // How far the best seed anybody keeps has been bred, in hundredths
+        // (#397)
+        (
+            "best_seed_line_x100",
+            (sim.population.agents.iter().filter(|a| a.state.is_alive).map(|a| a.seed_line).fold(0.0f32, f32::max)
+                * 100.0) as u64,
+        ),
         (
             "stands_watered",
             sim.world.resources.iter().filter(|node| node.watered >= 0.5).count() as u64,
