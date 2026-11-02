@@ -137,6 +137,8 @@ fn choosing_the_heaviest_breeds_the_seed_on() {
     agent.save_seed_off(0.2, 5, true);
     assert!((agent.seed_line - (0.2 + Agent::WHAT_CHOOSING_THE_HEAVIEST_DOES)).abs() < 1e-6, "{}", agent.seed_line);
     let line = agent.seed_line;
+    agent.save_seed_off(0.2, 5, true);
+    assert!((agent.seed_line - line).abs() < 1e-6, "the same field again breeds nothing more: {}", agent.seed_line);
     agent.save_seed_off(0.0, 5, false);
     assert!((agent.seed_line - line).abs() < 1e-6, "wild seed does not undo it");
 }

@@ -4504,8 +4504,8 @@ impl Agent {
     pub const HARVESTS_SAVED_FROM_BEFORE_SELECTING: u32 = 5;
 
     /// How much choosing the heaviest stand to save from breeds the seed on,
-    /// a harvest: twenty harvests chosen from to breed it as far as it goes,
-    /// some ten years of a camp's fields (#397).
+    /// a sowing: twenty sowings, each from seed chosen off the last, to breed
+    /// it as far as it goes - twenty years, grain ripening once a year (#397).
     pub const WHAT_CHOOSING_THE_HEAVIEST_DOES: f32 = 0.05;
 
     /// Seed saved off a ripe stand bred `bred`, `how_much` of the grain just
@@ -4524,7 +4524,10 @@ impl Agent {
         } else {
             0.0
         };
-        let line = (self.seed_line.max(bred) + step).min(1.0);
+        // A step on from what the field was bred from, not from the seed in
+        // hand: choosing off the same field twice gets the same seed, and a
+        // line goes on only a sowing at a time
+        let line = (bred + step).min(1.0).max(self.seed_line);
         if setting_aside == 0 && line <= self.seed_line {
             return 0;
         }
