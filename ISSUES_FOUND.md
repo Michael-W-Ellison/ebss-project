@@ -28069,7 +28069,12 @@ later entry. These were not. Each line names the entry that left it.
   measurements use. A people's pace cannot be run long enough to be watched;
   what it comes to is reckoned from the development pace. Teaching (#388)
   has not been seen in a measurement, nobody born in a run being six by the
-  end of it. A fire never gets away into a camp, and game is not drawn to
+  end of it. Traits bear on who comes to ideas, who teaches and who takes
+  them up (#390).
+- Lining stores (#392) and sealing them (#393) do not show in what vermin
+  take: only new stores are lined, and clay is seldom carried. Days wasting
+  rose at the edge of noise with them (#393). Clean water cut illness from
+  foul water by a quarter (#391). A fire never gets away into a camp, and game is not drawn to
   burnt ground (#381). Poles are not a thing apart from wood (#382).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
@@ -29756,3 +29761,93 @@ ideas first shows at a people's pace, which cannot be run long enough to see.
 who learns and who teaches readily; an eager child with a willing teacher
 learns more; a lesson warms teacher and taught; the proud are pleased and
 the envious resent it.
+
+### 391. Choosing where to drink
+
+Of the stage 0 to 2 listings that would make work go better on what the
+model already has: water drawn beside fouled ground carries the fouling and
+lays people up (#357), some 2,600 times in forty worlds over two years, and
+nobody ever chose where they drank.
+
+**What changed.** "Selection of preferred springs over surface water"
+(`know:clean_water`): somebody who knows to passes by water with fouled
+ground about it for clean water they know of within reach, and with nothing
+clean to go to drinks what there is (`the_node_this_gather_takes`). Found out
+by being laid up from foul water twice, at the pace ideas come
+(`Agent::ILL_FROM_FOUL_WATER_BEFORE_CHOOSING`).
+
+**Measured** with #392 and #393, against #390: found out in all forty worlds,
+median day 43. Illness from foul water fell from 2,613 to 1,873 (t -6.15,
+lower in 31 worlds of 40).
+
+**Tests** (`clean_water_tests`): somebody who knows passes by foul water for
+clean; with nothing clean, a drink is a drink; laid up twice is how it is
+found out.
+
+### 392. Lining a store
+
+Vermin take most of what is lost from stores - some 284,000 units in forty
+worlds over two years, against 46,000 rotted. A probe found nearly half of
+what a people put by in pits covered with bare earth and unlined, which lose
+a thousandth a day, twice that beside a midden: only a vessel to spare ever
+went in as a lining, and few had one.
+
+**What changed.** "Woven bins" (`know:line_the_store`,
+`line_the_store_here`): somebody who knows to, with no vessel to spare,
+weaves a basket for a store worth it - sixty units or more in it, or about
+to be (`A_STORE_WORTH_A_BASKET`) - of lashings they can spare, two kept back
+for tools. A store keeps what vermin carry off until somebody opens it
+(`Pit::gnawed`); opening a gnawed store three times is how it is found out
+(`Agent::GNAWED_STORES_BEFORE_LINING`). Both ways into a store, caching and
+the storehouse, line it.
+
+**How it got there.** The first cut had them put in the only basket they
+had - what a foraging trip brings more than an armful home in - and with
+#393 as first made, births across forty worlds fell from 181 to 98.
+
+**Measured** with #391 and #393, against #390: found out in all forty
+worlds, median day 64; 941 stores lined. Vermin took 281,773 against 284,088
+(t -0.21): no measurable change. Only new stores going in are lined, and the
+food already lying in bare earth stays there.
+
+**Tests** (`lining_tests`): nobody gives up the only basket they forage with;
+a basket is woven for a store worth it, of lashings to spare; opening a
+gnawed store is how it is found out.
+
+### 393. Sealed baskets for stores
+
+**What changed.** "Sealed baskets" (`know:seal_the_store`): a basket daubed
+shut with clay as it goes into a store, by somebody who knows to and carries
+clay, which vermin take from as little as from a fired pot. Only as it goes
+in. It comes to somebody who lines their stores and opens a lined one
+gnawed three times (`Agent::LINED_STORES_GNAWED_BEFORE_SEALING`).
+
+**How it got there.** First it was a making like any other, found out by
+day ten by the general noticing, and since it kept food better than a basket
+it was the vessel people made of the baskets they foraged with - and a
+sealed basket carries nothing. Births in the scattered worlds fell from 55 to
+6. A probe of four of them, with sealing only as a store is lined, came back
+at seventeen births against seventeen.
+
+**Measured** with #391 and #392, against #390:
+
+| | #390 | #391 to #393 | t |
+|---|---|---|---|
+| births | 181 | 174 | -0.82 |
+| deaths | 7 | 2 | -1.40 |
+| alive at two years | 654 | 652 | -0.20 |
+| ill from foul water | 2,613 | 1,873 | -6.15 |
+| vermin | 284,088 | 281,773 | -0.21 |
+| person-days wasting | 271 | 663 | +2.07 |
+
+Sealing came to all forty worlds, median day 121, and was done six times:
+clay is seldom carried. Days wasting are up at the edge of noise, mostly in
+three scattered worlds (seeds 7, 9 and 3); weaving baskets for stores spends
+lashings, and that has not been looked at.
+
+**Tests** (`lining_tests`): a basket with clay to hand is sealed and vermin
+hardly take from it; lined stores gnawed is how sealing is found out.
+
+**Full suite**: 3,069 passed, 0 failed, 6 ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns) and 954,243 (seed 0, a year).
