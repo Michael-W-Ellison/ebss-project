@@ -307,6 +307,7 @@ impl Simulation {
             Some(which) => which,
             None => {
                 self.world.thorn_hedges.push(ThornHedge {
+                    round_fields: false,
                     around: crate::world::Position::new(home.0, home.1),
                     started: turn_now,
                     laid: 0,

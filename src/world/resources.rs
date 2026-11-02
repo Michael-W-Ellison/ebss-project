@@ -176,6 +176,18 @@ impl Bearing {
         }
     }
 
+    /// How many days of the window are left after this one, if it is open on
+    /// it (#395): nought on its last day.
+    pub fn days_left(&self, day_of_year: u32) -> Option<u32> {
+        use crate::environment::seasons::DAYS_PER_YEAR;
+        let day = day_of_year % DAYS_PER_YEAR;
+        match *self {
+            Bearing::NeverStops => None,
+            Bearing::Between { closes, .. } if self.covers(day) => Some((closes + DAYS_PER_YEAR - day) % DAYS_PER_YEAR),
+            Bearing::Between { .. } => None,
+        }
+    }
+
     /// How many days of the year this window covers.
     pub fn how_many_days(&self) -> u32 {
         use crate::environment::seasons::DAYS_PER_YEAR;
@@ -1035,6 +1047,24 @@ pub struct ResourceNode {
     /// of Owens Valley. Silts up over half a year unless it is dug out again.
     #[serde(default)]
     pub watered: f32,
+
+    /// How far the seed this stand came of has been bred from the wild, from
+    /// nothing to one (#397).
+    ///
+    /// "Selection for larger seeds/fruits, non-shattering grain heads,
+    /// reduced bitterness, uniform ripening", stage 3 of the agricultural
+    /// path, taken together as one figure: seed kept back from the heaviest
+    /// stands, year on year, comes to carry more than the wild seed it began
+    /// as. Wild ground, and anything sown of grain off a wild stand, is
+    /// nought.
+    #[serde(default)]
+    pub bred: f32,
+
+    /// When this stand was sown, if somebody sowed it (#395): which part of
+    /// its season it was put in at, which is what a crop sown too late shows
+    /// when it ripens thin.
+    #[serde(default)]
+    pub sown_on: Option<u32>,
 }
 
 impl ResourceNode {
@@ -1101,6 +1131,8 @@ impl ResourceNode {
             burnt: 0.0,
             coppiced: 0.0,
             watered: 0.0,
+            bred: 0.0,
+            sown_on: None,
         }
     }
 
@@ -1403,7 +1435,19 @@ impl ResourceNode {
     /// Everything done for this stand: how well it is kept, how lately a
     /// fire went over it, and how well it is coppiced.
     pub fn what_is_done_for_it(&self) -> f32 {
-        self.what_keeping_it_does() * self.what_the_fire_did() * self.what_coppicing_does()
+        self.what_keeping_it_does() * self.what_the_fire_did() * self.what_coppicing_does() * self.what_breeding_does()
+    }
+
+    /// How much more a stand of seed bred as far as it goes carries, and how
+    /// much faster it comes on, than the wild seed it began as: half again
+    /// (#397). Fuller heads that hold their seed, on a plant that ripens all
+    /// at once.
+    pub const A_BRED_CROP_CARRIES: f32 = 0.5;
+
+    /// What the seed it came of does for this stand: one for wild seed, up to
+    /// half again for seed bred as far as it goes.
+    pub fn what_breeding_does(&self) -> f32 {
+        1.0 + self.bred.clamp(0.0, 1.0) * Self::A_BRED_CROP_CARRIES
     }
 
     /// What the ground under a stand holds when a ditch waters it as well as

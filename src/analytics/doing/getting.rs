@@ -449,6 +449,18 @@ impl Simulation {
             // Read before the harvest: an emptied stand is taken up
             // (`did_that_empty_it`) and its index goes to another node
             let sown_by = self.world.resources[resource_index].sown_by;
+            // A ripe field crop, which seed can be saved off: what it was bred
+            // from, and whether it stood full, which is the stand somebody
+            // choosing would save from (#396, #397)
+            let seed_off_it = {
+                let node = &self.world.resources[resource_index];
+                (node.on_a_field && node.ripe_stand > 0 && node.resource_type == ResourceType::Grain).then(|| {
+                    let full = node.how_heavy_a_crop_it_carries(
+                        self.world.grid.what_it_yields_here_for(&node.position, node.resource_type),
+                    );
+                    (node.bred, full > 0 && node.ripe_stand >= full)
+                })
+            };
             let harvested = {
                 let node = &mut self.world.resources[resource_index];
                 let taken = node.harvest(harvest_amount);
@@ -806,6 +818,11 @@ impl Simulation {
                     self.cut_for_somebody_else(agent_index, where_it_grew, took);
                 }
                 let went_in_the_pack = took > 0;
+                // Seed kept back off the harvest itself, by somebody who saves
+                // seed on purpose (#396)
+                if let (true, Some((bred, stood_full))) = (went_in_the_pack, seed_off_it) {
+                    self.population.agents[agent_index].save_seed_off(bred, took, stood_full);
+                }
                 if it_is_food {
                     self.food_items_into_packs += took as u64;
                 }

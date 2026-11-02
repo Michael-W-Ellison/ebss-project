@@ -293,6 +293,9 @@ pub enum Action {
     DigOutMidden,
     /// Line a bare store of the camp's where the agent stands at it (#394)
     LineStore,
+    /// Lay the brush in hand along the edge round the camp's fields where the
+    /// agent stands (#398)
+    HedgeAField,
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
     /// Go over a standing field pulling weeds out of it and picking pests off
@@ -472,6 +475,7 @@ impl Action {
             Action::DigDitch => Some(DriveType::Sustenance), // Watered stands bear in the dry
             Action::DigOutMidden => Some(DriveType::Sustenance), // Compost is next year's crop
             Action::LineStore => Some(DriveType::Preparedness), // What vermin do not take is put by
+            Action::HedgeAField => Some(DriveType::Sustenance), // What beasts do not trample is eaten
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::TakeFrom { .. } => Some(DriveType::Utility),

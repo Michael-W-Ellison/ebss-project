@@ -512,6 +512,7 @@ impl Simulation {
                 Some(ActionType::Farming)
             }
             Action::LineStore => Some(ActionType::Building),
+            Action::HedgeAField => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
             Action::TakeFrom { .. } | Action::RobFishTrap { .. } => Some(ActionType::Social),
             Action::FleeFrom { .. } | Action::DriveOff { .. } => Some(ActionType::Combat),

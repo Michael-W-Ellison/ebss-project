@@ -100,6 +100,10 @@ impl Simulation {
         let mut stand = ResourceNode::new(crop, here, Self::WHAT_ONE_SEED_COMES_TO);
         stand.amount = 1;
         stand.sown_by = Some(sower);
+        stand.sown_on = Some(self.world.turn);
+        if seed == crate::agents::Agent::SEED {
+            stand.bred = self.population.agents[agent_index].seed_line;
+        }
         self.world.put_a_node_down(stand);
 
         ActionResult::success()
@@ -213,6 +217,7 @@ impl Simulation {
         // The seed itself goes in the ground. Sowing was free before
         // this, which made a field a thing you got for a day's digging
         // rather than for a day's digging and a meal you did not eat.
+        let mut sown_of = None;
         for (called, crop, _) in Self::what_can_be_sown() {
             if crop != sown {
                 continue;
@@ -220,17 +225,41 @@ impl Simulation {
             let agent = &mut self.population.agents[agent_index];
             if agent.how_many_i_have(called) > 0 {
                 agent.inventory.remove_item(called, 1);
+                sown_of = Some(called);
                 break;
             }
         }
 
-        // A newly sown field starts empty and fills as it grows
+        // Ground broken with no seed kept back for it, often enough, is how
+        // anybody thinks to keep the next year's seed back off the harvest
+        // (#396)
+        {
+            let agent = &mut self.population.agents[agent_index];
+            if sown_of != Some(crate::agents::Agent::SEED) {
+                agent.skills.made_one(crate::agents::Agent::SOWN_WITHOUT_SEED);
+                if agent.skills.times_made(crate::agents::Agent::SOWN_WITHOUT_SEED)
+                    >= crate::agents::Agent::TIMES_SOWN_WITHOUT_SEED_BEFORE_SAVING
+                {
+                    agent.it_comes_to_me(
+                        "know:save_seed",
+                        crate::agents::Agent::TIMES_SOWN_WITHOUT_SEED_BEFORE_SAVING,
+                    );
+                }
+            }
+        }
+
+        // A newly sown field starts empty and fills as it grows: of seed bred
+        // as far as the sower's has been, if it was kept seed (#397)
         let mut field = ResourceNode::new(
             sown,
             tile_position,
             Self::FIELD_YIELD,
         );
         field.amount = 0;
+        field.sown_on = Some(now);
+        if sown_of == Some(crate::agents::Agent::SEED) {
+            field.bred = self.population.agents[agent_index].seed_line;
+        }
         self.world.put_a_node_down(field);
 
         let agent = &mut self.population.agents[agent_index];
@@ -443,6 +472,24 @@ impl Simulation {
             return ActionResult::failure("Nothing wants doing here".to_string());
         }
 
+        // What share of it is pests, on a field a hedge keeps the beasts off
+        // or not: weeding both is how anybody sees what a hedge does (#398)
+        let pests_share = f64::from(tile.soil.pests / before);
+        let hedged = {
+            let now = self.world.turn;
+            self.world
+                .thorn_hedges
+                .iter()
+                .any(|hedge| hedge.is_closed(now) && hedge.takes_in((tile_position.x, tile_position.y)))
+        };
+        {
+            let agent = &mut self.population.agents[agent_index];
+            agent.what_i_saw_of_a_field(hedged, pests_share);
+            if agent.what_the_fields_have_shown_me() {
+                debug!("Agent {} saw the hedged fields fare better", agent.id);
+            }
+        }
+
         // A walk out to a field that is still bare after all this work
         // is what teaches an agent that it sowed the wrong thing - and a walk
         // round a crop is a look at how heavy it stands.
@@ -611,5 +658,70 @@ impl Simulation {
         ActionResult::success()
             .with_energy_cost(3.0)
             .with_message(format!("Spread {} of muck on the ground", tipped))
+    }
+
+    /// `Action::HedgeAField`: the brush in hand laid into the edge round the
+    /// camp's fields about where this one stands, begun if it was not, and
+    /// closed when it holds what an edge takes (#398). Inside it, beasts do
+    /// not come at a crop.
+    pub(in crate::analytics) fn hedging_a_field(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::{Position, ThornHedge};
+
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_the_way("hedge_fields") {
+            return ActionResult::failure("Nobody here hedges fields".to_string());
+        }
+        let here = (agent.state.position.0, agent.state.position.1);
+        let wood = agent.how_many_i_have("wood");
+        if wood == 0 {
+            return ActionResult::failure("No brush in hand".to_string());
+        }
+
+        let begun = self
+            .world
+            .thorn_hedges
+            .iter()
+            .position(|hedge| hedge.round_fields && hedge.closed_on.is_none() && hedge.takes_in(here));
+        let which = match begun {
+            Some(which) => which,
+            None => {
+                let a_field = self
+                    .world
+                    .grid
+                    .get_tile(&Position::new(here.0, here.1))
+                    .is_some_and(|tile| tile.terrain.is_cultivated());
+                if !a_field || self.is_this_field_hedged(here) {
+                    return ActionResult::failure("No open field here to hedge".to_string());
+                }
+                self.world.thorn_hedges.push(ThornHedge {
+                    around: Position::new(here.0, here.1),
+                    started: turn_now,
+                    laid: 0,
+                    closed_on: None,
+                    round_fields: true,
+                });
+                self.world.thorn_hedges.len() - 1
+            }
+        };
+        let hedge = &mut self.world.thorn_hedges[which];
+        let laying = wood.min(hedge.what_it_takes().saturating_sub(hedge.laid));
+        hedge.laid += laying;
+        let closed = hedge.laid >= hedge.what_it_takes();
+        if closed {
+            hedge.closed_on = Some(turn_now);
+            self.world.fields_hedged += 1;
+        }
+
+        let agent = &mut self.population.agents[agent_index];
+        agent.inventory.remove_item("wood", laying);
+        agent.skills.practise(crate::agents::SkillType::Farming, 3, turn_now);
+
+        ActionResult::success()
+            .with_energy_cost(6.0)
+            .with_message(if closed {
+                "Closed the edge round the fields".to_string()
+            } else {
+                format!("Laid {laying} of brush along the fields' edge")
+            })
     }
 }

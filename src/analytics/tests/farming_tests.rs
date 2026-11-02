@@ -57,7 +57,7 @@ fn a_field_nobody_works_goes_over_to_weeds() {
     for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
         * crate::environment::seasons::TICKS_PER_DAY)
     {
-        soil.nobody_weeded_this(1.0, 1.0);
+        soil.nobody_weeded_this(1.0, 1.0, false);
     }
 
     assert!(
@@ -83,7 +83,7 @@ fn bare_ground_grows_no_weeds_worth_pulling() {
     let mut soil = Soil::default();
 
     for _ in 0..1000 {
-        soil.nobody_weeded_this(0.0, 1.0);
+        soil.nobody_weeded_this(0.0, 1.0, false);
     }
 
     assert_eq!(soil.weeds, 0.0, "nothing growing, nothing to compete with");
@@ -102,12 +102,12 @@ fn what_the_weeds_leave_is_what_the_crop_keeps() {
 
     let mut going_over = Soil::default();
     for _ in 0..200 {
-        going_over.nobody_weeded_this(1.0, 1.0);
+        going_over.nobody_weeded_this(1.0, 1.0, false);
     }
 
     let mut overrun = Soil::default();
     for _ in 0..2000 {
-        overrun.nobody_weeded_this(1.0, 1.0);
+        overrun.nobody_weeded_this(1.0, 1.0, false);
     }
 
     assert!(
@@ -142,7 +142,7 @@ fn a_worked_field_carries_a_crop_and_a_neglected_one_does_not() {
             * crate::world::soil::WHAT_BROKEN_GROUND_YIELDS_OVER_WILD;
 
         for turn in 0..1200 {
-            soil.nobody_weeded_this(1.0, 1.0);
+            soil.nobody_weeded_this(1.0, 1.0, false);
 
             // A turn round the field every few days, which is what a farmer
             // with a field actually does with a season
@@ -179,7 +179,7 @@ fn working_a_field_puts_it_right_for_a_while() {
     let mut soil = Soil::default();
 
     for _ in 0..400 {
-        soil.nobody_weeded_this(1.0, 1.0);
+        soil.nobody_weeded_this(1.0, 1.0, false);
     }
 
     let gone_over = soil.weeds + soil.pests;
@@ -192,7 +192,7 @@ fn working_a_field_puts_it_right_for_a_while() {
     );
 
     for _ in 0..800 {
-        soil.nobody_weeded_this(1.0, 1.0);
+        soil.nobody_weeded_this(1.0, 1.0, false);
     }
 
     assert!(
@@ -213,7 +213,7 @@ fn an_agent_can_work_a_field_that_wants_working() {
 
     if let Some(tile) = simulation.world.grid.get_tile_mut(&where_it_is) {
         for _ in 0..400 {
-            tile.soil.nobody_weeded_this(1.0, 1.0);
+            tile.soil.nobody_weeded_this(1.0, 1.0, false);
         }
     }
 
@@ -261,7 +261,7 @@ fn there_is_nothing_to_work_in_clean_ground_or_open_country() {
     if let Some(tile) = simulation.world.grid.get_tile_mut(&where_it_is) {
         tile.terrain = Terrain::new(TerrainType::Plains);
         for _ in 0..400 {
-            tile.soil.nobody_weeded_this(1.0, 1.0);
+            tile.soil.nobody_weeded_this(1.0, 1.0, false);
         }
     }
 

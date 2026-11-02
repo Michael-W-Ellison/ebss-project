@@ -612,14 +612,23 @@ impl Soil {
     /// `growing` is how good the weather is for growing anything at all, which
     /// is the same weather the crop wants: weeds do best exactly when the
     /// wheat does.
-    pub fn nobody_weeded_this(&mut self, growing: f32, turns: f32) {
+    ///
+    /// `hedged` is whether a closed ring of thorn or a field's edge keeps the
+    /// beasts off it (#398), which are half of what comes for a crop.
+    pub fn nobody_weeded_this(&mut self, growing: f32, turns: f32, hedged: bool) {
         let coming_on = growing.clamp(0.0, 1.0) * Self::WHAT_A_FIELD_LOSES_TO_NEGLECT * turns;
 
         self.weeds = (self.weeds + coming_on).clamp(0.0, Self::OVERRUN);
         // Vermin follow the crop rather than the weather, and are slower to
         // find a field than the weeds in it are.
-        self.pests = (self.pests + coming_on * 0.6).clamp(0.0, Self::OVERRUN);
+        let kept_off = if hedged { Self::WHAT_A_HEDGE_KEEPS_OFF } else { 0.0 };
+        self.pests = (self.pests + coming_on * 0.6 * (1.0 - kept_off)).clamp(0.0, Self::OVERRUN);
     }
+
+    /// How much of what comes for a crop a hedge keeps off: the beasts that
+    /// browse and trample it, half; the mice, birds and grubs go through
+    /// (#398).
+    pub const WHAT_A_HEDGE_KEEPS_OFF: f32 = 0.5;
 
     /// Somebody spent a turn in the field pulling things up and picking things
     /// off.

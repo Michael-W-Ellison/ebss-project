@@ -10032,6 +10032,8 @@ name = "Deliberate seed saving"
 path = "agricultural"
 stage = 3
 role = "technique"
+model = ["know:save_seed"]
+note = "Seed for every field a camp sows kept back off the harvest itself as it comes in, not a handful out of what is left in the pack (Agent::save_seed_off, A_SEASONS_SEED). Found out by breaking ground with no seed kept back often enough (Agent::TIMES_SOWN_WITHOUT_SEED_BEFORE_SAVING) (#396)."
 
 [[tech]]
 id = "agricultural.3.selection_for_larger_seeds_fruits_non"
@@ -10039,6 +10041,9 @@ name = "Selection for larger seeds/fruits, non-shattering grain heads, reduced b
 path = "agricultural"
 stage = 3
 role = "technique"
+model = ["know:select_seed"]
+needs = ["agricultural.3.deliberate_seed_saving"]
+note = "Seed saved off the stands that stood full, by somebody who saves seed: the seed they keep is bred a step on each harvest, and a stand sown of seed bred as far as it goes carries half again what wild seed does (ResourceNode::bred, Agent::seed_line). The five traits are one figure. Grain only. Found out by saving seed off enough harvests (Agent::HARVESTS_SAVED_FROM_BEFORE_SELECTING) (#397)."
 
 [[tech]]
 id = "agricultural.3.basic_seasonality_knowledge"
@@ -10046,6 +10051,8 @@ name = "Basic seasonality knowledge"
 path = "agricultural"
 stage = 3
 role = "technique"
+model = ["know:seasons"]
+note = "A ripe crop of the camp's brought in before its season is out, hungry or not, by somebody who keeps the seasons in mind: within a month of the end, and enough standing to be worth the walk to them by how much waste bothers them (Simulation::a_harvest_to_bring_in). Found out by seeing ripe crops of the camp's fall in the field, nobody having brought them in (Agent::CROPS_LOST_BEFORE_THE_SEASONS). When to sow hardly matters in the model: a field sown out of season waits for its season (#395)."
 
 [[tech]]
 id = "agricultural.3.primitive_field_boundaries"
@@ -10053,6 +10060,8 @@ name = "Primitive field boundaries"
 path = "agricultural"
 stage = 3
 role = "technique"
+model = ["know:hedge_fields"]
+note = "An edge of brush banked round a clump of the camp's fields, eight armfuls, standing a year (ThornHedge::round_fields): beasts are turned at it as at a camp's ring of thorn, and pests come on a field inside a closed hedge at half the pace (Soil::WHAT_A_HEDGE_KEEPS_OFF). Found out by weeding fields inside the camp's thorn and fields outside it, and seeing the open ones plainly the worse for pests (Agent::what_the_fields_have_shown_me); laid where the open fields it would take in are worth the brush to somebody, by how much waste bothers them (#398)."
 
 [[tech]]
 id = "agricultural.4.permanent_or_semi_permanent_fields"

@@ -258,6 +258,9 @@ impl Simulation {
         // takes notice of whoever came to something first (#390)
         self.the_young_are_taught();
         self.what_the_camp_makes_of_it();
+        // And the camp sees what its fields lost to the turn of the season
+        // (#395)
+        self.what_the_fields_lost();
 
         // Turn world (building construction progress, etc.) - having told it
         // where the living are, so that ground nobody is near can sleep. See

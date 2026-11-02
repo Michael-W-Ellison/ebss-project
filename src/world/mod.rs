@@ -341,6 +341,23 @@ pub struct World {
     /// Stores lined with a basket daubed shut with clay (#393).
     #[serde(default)]
     pub stores_sealed: u64,
+    /// What fell off ripe field crops nobody brought in before their season
+    /// was over (#395).
+    #[serde(default)]
+    pub field_crop_fallen: u64,
+    /// Field crops that ripened at their full stand, and that ripened short
+    /// on the last day of their season (#395).
+    #[serde(default)]
+    pub crops_ripened_full: u64,
+    #[serde(default)]
+    pub crops_ripened_short: u64,
+    /// Edges closed round a clump of fields (#398).
+    #[serde(default)]
+    pub fields_hedged: u64,
+    /// Where a ripe field crop nobody brought in began to fall, its season
+    /// over, since the people about were last told (#395).
+    #[serde(default)]
+    pub crops_lost_to_the_season: Vec<Position>,
     /// Things a child was taught that a grown person of their camp knew
     /// (#388).
     #[serde(default)]
@@ -480,6 +497,10 @@ pub struct ThornHedge {
     pub laid: u32,
     /// When the ring was closed, after which it keeps beasts out.
     pub closed_on: Option<u32>,
+    /// Whether this is an edge round a clump of fields rather than a ring
+    /// round a camp (#398): smaller, and standing a year.
+    #[serde(default)]
+    pub round_fields: bool,
 }
 
 impl ThornHedge {
@@ -503,14 +524,36 @@ impl ThornHedge {
     /// bigger. A hare goes under it.
     pub const THE_SMALLEST_IT_TURNS_KG: f32 = 6.0;
 
+    /// How far out an edge round fields goes from the field it is laid
+    /// about: a clump of five by five (#398).
+    pub const HOW_FAR_A_FIELD_EDGE_GOES: i32 = 2;
+
+    /// How much brush closes an edge round fields: a third of a camp's ring.
+    pub const WHAT_A_FIELD_EDGE_TAKES: u32 = 8;
+
+    /// How long an edge round fields stands: a year, banked as well as
+    /// brushed, and seen to as the fields are.
+    pub const HOW_LONG_A_FIELD_EDGE_STANDS: u32 = crate::environment::seasons::TICKS_PER_YEAR;
+
+    /// How far out this one goes.
+    pub fn how_far_it_goes(&self) -> i32 {
+        if self.round_fields { Self::HOW_FAR_A_FIELD_EDGE_GOES } else { Self::HOW_FAR_IT_GOES_ROUND }
+    }
+
+    /// How much brush closes this one.
+    pub fn what_it_takes(&self) -> u32 {
+        if self.round_fields { Self::WHAT_A_FIELD_EDGE_TAKES } else { Self::WHAT_IT_TAKES }
+    }
+
     /// Whether a place is inside the ring.
     pub fn takes_in(&self, at: (i32, i32)) -> bool {
-        (at.0 - self.around.x).abs().max((at.1 - self.around.y).abs()) <= Self::HOW_FAR_IT_GOES_ROUND
+        (at.0 - self.around.x).abs().max((at.1 - self.around.y).abs()) <= self.how_far_it_goes()
     }
 
     /// Whether it keeps anything out: closed, and still standing.
     pub fn is_closed(&self, now: u32) -> bool {
-        self.closed_on.is_some_and(|then| now.saturating_sub(then) < Self::HOW_LONG_IT_STANDS)
+        let stands = if self.round_fields { Self::HOW_LONG_A_FIELD_EDGE_STANDS } else { Self::HOW_LONG_IT_STANDS };
+        self.closed_on.is_some_and(|then| now.saturating_sub(then) < stands)
     }
 }
 
@@ -1967,6 +2010,11 @@ impl World {
             compost_dug: 0,
             stores_lined: 0,
             stores_sealed: 0,
+            field_crop_fallen: 0,
+            crops_ripened_full: 0,
+            crops_ripened_short: 0,
+            fields_hedged: 0,
+            crops_lost_to_the_season: Vec::new(),
             lessons_taught: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
@@ -3081,7 +3129,7 @@ impl World {
     /// The thorn ring round the hearth at `hearth`, closed or not.
     pub fn thorn_hedge_round(&self, hearth: (i32, i32)) -> Option<usize> {
         self.thorn_hedges.iter().position(|hedge| {
-            (hedge.around.x - hearth.0).abs().max((hedge.around.y - hearth.1).abs()) <= 2
+            !hedge.round_fields && (hedge.around.x - hearth.0).abs().max((hedge.around.y - hearth.1).abs()) <= 2
         })
     }
 
@@ -4331,6 +4379,11 @@ impl World {
 
         let mut oldest_sleep = today;
 
+        // The rings of thorn and the edges round fields standing closed today,
+        // inside which beasts do not come at a crop (#398)
+        let hedges_closed: Vec<ThornHedge> =
+            self.thorn_hedges.iter().filter(|hedge| hedge.is_closed(self.turn)).cloned().collect();
+
         for resource in &mut self.resources {
             let terrain_type = self.grid.get_tile(&resource.position)
                 .map(|t| t.terrain.terrain_type)
@@ -4378,7 +4431,9 @@ impl World {
                 let ground_water =
                     crate::world::soil::Soil::humidity(terrain_type, day.precipitation);
                 let growing = (day.season_modifier * ground_water).clamp(0.0, 1.0);
-                tile.soil.nobody_weeded_this(growing, 1.0);
+                let at = (resource.position.x, resource.position.y);
+                let hedged = hedges_closed.iter().any(|hedge| hedge.takes_in(at));
+                tile.soil.nobody_weeded_this(growing, 1.0, hedged);
 
                 // And what is taking it before the farmer does. A field is the
                 // best ground there is and everything else knows it: what a
@@ -4391,8 +4446,18 @@ impl World {
             };
 
             let ripe_before = resource.on_a_field && resource.ripe_stand > 0;
+            let standing_before = resource.amount;
             let a_growing_day =
                 Self::a_day_for_a_node(resource, terrain_type, what_the_ground_yields, kept, &day);
+            if ripe_before && !resource.resource_type.is_it_bearing(day.today) {
+                self.field_crop_fallen += u64::from(standing_before.saturating_sub(resource.amount));
+                // The first day of it, which the people about see (#395)
+                let yesterday = (day.today + crate::environment::seasons::DAYS_PER_YEAR - 1)
+                    % crate::environment::seasons::DAYS_PER_YEAR;
+                if standing_before > 0 && resource.resource_type.is_it_bearing(yesterday) {
+                    self.crops_lost_to_the_season.push(resource.position);
+                }
+            }
 
             // And a field crop ripens when it comes to its full stand, or when
             // its season is on its last day and it has to be whatever it has
@@ -4406,6 +4471,11 @@ impl World {
                 let come_to_it = (a_full_stand > 0 && resource.amount >= a_full_stand)
                     || (the_last_day && resource.amount > 0);
                 if come_to_it {
+                    if a_full_stand > 0 && resource.amount >= a_full_stand {
+                        self.crops_ripened_full += 1;
+                    } else {
+                        self.crops_ripened_short += 1;
+                    }
                     resource.it_has_ripened();
                     if resource.resource_type.feeds_the_ground() {
                         self.grid.a_bean_crop_came_in(&resource.position, self.turn);

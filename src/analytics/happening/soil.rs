@@ -434,4 +434,32 @@ impl Simulation {
     /// is most of a settlement and over a week is almost nobody. Fouling
     /// breaks down, so this is a pressure to move rather than a sentence.
     pub(in crate::analytics) const HOW_OFTEN_FOUL_GROUND_TELLS: f64 = 0.05;
+
+    /// The people of a camp see a ripe crop of theirs fall in the field, its
+    /// season over and nobody having brought it in (#395): everybody grown
+    /// whose home is within a walk of the field. Seen often enough, it comes
+    /// to somebody to keep the seasons in mind, and bring a harvest in
+    /// before its season is out.
+    pub(in crate::analytics) fn what_the_fields_lost(&mut self) {
+        use crate::agents::Agent;
+        let lost = std::mem::take(&mut self.world.crops_lost_to_the_season);
+        for field in lost {
+            for agent in self.population.agents.iter_mut() {
+                if !agent.state.is_alive
+                    || agent.state.years_old() < Agent::OLD_ENOUGH_TO_KEEP_A_KIT
+                    || !Self::within(
+                        Self::where_this_one_lives(agent),
+                        (field.x, field.y),
+                        Self::FIELD_WALK_RADIUS as i32,
+                    )
+                {
+                    continue;
+                }
+                agent.skills.made_one(Agent::A_CROP_LOST_TO_THE_SEASON);
+                if agent.skills.times_made(Agent::A_CROP_LOST_TO_THE_SEASON) >= Agent::CROPS_LOST_BEFORE_THE_SEASONS {
+                    agent.it_comes_to_me("know:seasons", Agent::CROPS_LOST_BEFORE_THE_SEASONS);
+                }
+            }
+        }
+    }
 }

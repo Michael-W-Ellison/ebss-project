@@ -1977,6 +1977,19 @@ pub struct Agent {
     /// which keeps better.
     #[serde(default)]
     pub store_losses: std::collections::BTreeMap<String, (f64, f64)>,
+    /// How far the seed this one keeps has been bred from the wild, from
+    /// nothing to one (#397): what a stand sown of it carries
+    /// (`ResourceNode::bred`). Taken on with seed saved off a better stand,
+    /// and raised by choosing the heaviest to save from.
+    #[serde(default)]
+    pub seed_line: f32,
+    /// What this one has seen of pests on fields they weeded, by whether a
+    /// hedge kept the beasts off them (#398): how many fields, and the share
+    /// of what wanted clearing that was pests. What lets somebody who weeds
+    /// fields inside the camp's thorn and fields outside it see which fare
+    /// better.
+    #[serde(default)]
+    pub field_pests: std::collections::BTreeMap<String, (f64, f64)>,
     /// Every swap this one has tried, by `what_that_swap_is_called`.
     ///
     /// Kept apart from `lessons` for the same reason as `times_laid_up`. A
@@ -2245,6 +2258,8 @@ impl Agent {
             came_to_myself: std::collections::BTreeSet::new(),
             lately_came_to: Vec::new(),
             store_losses: std::collections::BTreeMap::new(),
+            seed_line: 0.0,
+            field_pests: std::collections::BTreeMap::new(),
             swaps_tried: std::collections::BTreeSet::new(),
             what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
@@ -2696,7 +2711,7 @@ impl Agent {
             // The cord for the next knife - see `what_my_kit_is_short_of`
             "lashing" => 2,
             // Next year's field - see `keep_seed_back`
-            Self::SEED => Self::A_HANDFUL_OF_SEED,
+            Self::SEED => Self::A_SEASONS_SEED,
             _ => 0,
         }
     }
@@ -3582,6 +3597,53 @@ impl Agent {
         bare > 0.0 && bare >= lined * Self::PLAINLY_WORSE && self.came_to_it_myself("know:line_the_store")
     }
 
+    /// What the practice record calls a ripe crop of the camp's seen to fall
+    /// in the field, its season over and nobody having brought it in, and how
+    /// many before somebody keeps the seasons in mind and brings the harvest
+    /// in before it goes: "basic seasonality knowledge", stage 3 of the
+    /// agricultural path (#395). An idea, at the pace ideas come.
+    pub const A_CROP_LOST_TO_THE_SEASON: &'static str = "acroplosttotheseason";
+    pub const CROPS_LOST_BEFORE_THE_SEASONS: u32 = 2;
+
+    /// How many fields of each kind somebody has to have weeded before they
+    /// go by what they saw of the pests on them (#398).
+    pub const FIELDS_TO_GO_ON: f64 = 10.0;
+
+    /// What weeding a field showed this one (#398): whether a hedge kept the
+    /// beasts off it, and what share of what wanted clearing was pests.
+    pub fn what_i_saw_of_a_field(&mut self, hedged: bool, pests_share: f64) {
+        let key = if hedged { "hedged" } else { "open" };
+        let seen = self.field_pests.entry(key.to_string()).or_insert((0.0, 0.0));
+        seen.0 += 1.0;
+        seen.1 += pests_share.clamp(0.0, 1.0);
+    }
+
+    /// The share of the work on a field that pests come to, on fields
+    /// `hedged` or not, as this one has seen it - if they have seen enough.
+    pub fn what_i_have_seen_pests_come_to(&self, hedged: bool) -> Option<f64> {
+        let key = if hedged { "hedged" } else { "open" };
+        self.field_pests
+            .get(key)
+            .filter(|(fields, _)| *fields >= Self::FIELDS_TO_GO_ON)
+            .map(|(fields, share)| share / fields)
+    }
+
+    /// Whether what this one has seen of fields inside a hedge and fields
+    /// outside tells them the hedge is the difference (#398): enough of both
+    /// weeded, and the open fields plainly the worse for pests. A comparison
+    /// of two things in front of them, not an idea, so it comes at no pace.
+    pub fn what_the_fields_have_shown_me(&mut self) -> bool {
+        if self.knows_the_way("hedge_fields") {
+            return false;
+        }
+        let (Some(open), Some(hedged)) =
+            (self.what_i_have_seen_pests_come_to(false), self.what_i_have_seen_pests_come_to(true))
+        else {
+            return false;
+        };
+        open > 0.0 && open >= hedged * Self::PLAINLY_WORSE && self.came_to_it_myself("know:hedge_fields")
+    }
+
     /// How much waste bothers this one, against anybody else (#394): twice
     /// for the frugal, half again for a survivalist, the diligent, a
     /// pragmatist and the greedy, a third for the lazy. What they will go to
@@ -4056,8 +4118,17 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 5] =
-        ["selective_harvest", "coppice", "clean_water", "line_the_store", "seal_the_store"];
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 9] = [
+        "selective_harvest",
+        "coppice",
+        "clean_water",
+        "line_the_store",
+        "seal_the_store",
+        "save_seed",
+        "select_seed",
+        "hedge_fields",
+        "seasons",
+    ];
 
     /// What the practice record calls a gather from a wild stand within a
     /// forage of home, and how many before somebody notices that the stands
@@ -4403,6 +4474,74 @@ impl Agent {
     /// How much seed a farmer keeps back: a few fields' worth.
     pub const A_HANDFUL_OF_SEED: u32 = 3;
 
+    /// And how much somebody who saves seed on purpose keeps back: the
+    /// seed for every field a camp sows (#396), `Simulation::FIELDS_WANTED`.
+    pub const A_SEASONS_SEED: u32 = 6;
+
+    /// How much seed this one keeps back: a season's, if they save seed on
+    /// purpose (#396), or a handful.
+    pub fn how_much_seed_i_keep(&self) -> u32 {
+        if self.knows_the_way("save_seed") {
+            Self::A_SEASONS_SEED
+        } else {
+            Self::A_HANDFUL_OF_SEED
+        }
+    }
+
+    /// What the practice record calls breaking ground to sow with no seed
+    /// kept back, and how many times before somebody keeps the seed for the
+    /// next year's fields back from the harvest itself: "deliberate seed
+    /// saving", stage 3 of the agricultural path (#396). An idea, at the pace
+    /// ideas come.
+    pub const SOWN_WITHOUT_SEED: &'static str = "sownwithoutseed";
+    pub const TIMES_SOWN_WITHOUT_SEED_BEFORE_SAVING: u32 = 3;
+
+    /// What the practice record calls seed saved off a harvest, and how many
+    /// harvests saved from before somebody chooses the heaviest stand to save
+    /// from: "selection for larger seeds", stage 3 (#397). An idea, at the
+    /// pace ideas come.
+    pub const SEED_SAVED_OFF_A_HARVEST: &'static str = "seedsavedoffaharvest";
+    pub const HARVESTS_SAVED_FROM_BEFORE_SELECTING: u32 = 5;
+
+    /// How much choosing the heaviest stand to save from breeds the seed on,
+    /// a harvest: twenty harvests chosen from to breed it as far as it goes,
+    /// some ten years of a camp's fields (#397).
+    pub const WHAT_CHOOSING_THE_HEAVIEST_DOES: f32 = 0.05;
+
+    /// Seed saved off a ripe stand bred `bred`, `how_much` of the grain just
+    /// taken from it (#396, #397): set aside as seed up to a season's worth,
+    /// and the seed this one keeps taken to be the better of their own and
+    /// the stand's - bred on a step, if they chose this stand for being
+    /// heavy. Returns how much was set aside.
+    pub fn save_seed_off(&mut self, bred: f32, how_much: u32, chosen_for_it: bool) -> u32 {
+        if !self.knows_the_way("save_seed") {
+            return 0;
+        }
+        let held = self.how_many_i_have(Self::SEED);
+        let setting_aside = how_much.min(self.how_many_i_have("grain")).min(Self::A_SEASONS_SEED.saturating_sub(held));
+        let step = if chosen_for_it && self.knows_the_way("select_seed") {
+            Self::WHAT_CHOOSING_THE_HEAVIEST_DOES
+        } else {
+            0.0
+        };
+        let line = (self.seed_line.max(bred) + step).min(1.0);
+        if setting_aside == 0 && line <= self.seed_line {
+            return 0;
+        }
+        self.seed_line = self.seed_line.max(line);
+        if setting_aside > 0 {
+            let weight = self.inventory.get_item("grain").map(|item| item.weight_per_unit).unwrap_or(1.0);
+            self.inventory.remove_item("grain", setting_aside);
+            self.inventory
+                .add_item(InventoryItem::new_with_weight(Self::SEED.to_string(), setting_aside, weight));
+        }
+        self.skills.made_one(Self::SEED_SAVED_OFF_A_HARVEST);
+        if self.skills.times_made(Self::SEED_SAVED_OFF_A_HARVEST) >= Self::HARVESTS_SAVED_FROM_BEFORE_SELECTING {
+            self.it_comes_to_me("know:select_seed", Self::HARVESTS_SAVED_FROM_BEFORE_SELECTING);
+        }
+        setting_aside
+    }
+
     /// Set grain aside as seed, or give it back to the pot.
     ///
     /// Somebody who knows how to break ground keeps a handful of grain back
@@ -4421,11 +4560,12 @@ impl Agent {
             return true;
         }
 
-        if seed >= Self::A_HANDFUL_OF_SEED || !self.knows_how_to_do("TillSoil") {
+        let keeping = self.how_much_seed_i_keep();
+        if seed >= keeping || !self.knows_how_to_do("TillSoil") {
             return false;
         }
         let grain = self.how_many_i_have("grain");
-        let setting_aside = grain.min(Self::A_HANDFUL_OF_SEED - seed);
+        let setting_aside = grain.min(keeping - seed);
         if setting_aside == 0 {
             return false;
         }
@@ -8541,6 +8681,7 @@ impl Agent {
             Action::DigDitch => "digditch".to_string(),
             Action::DigOutMidden => "digoutmidden".to_string(),
             Action::LineStore => "linestore".to_string(),
+            Action::HedgeAField => "hedgeafield".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
