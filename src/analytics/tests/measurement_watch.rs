@@ -139,6 +139,16 @@ fn zz_discovery_watch() {
             (sim.population.agents.iter().filter(|a| a.state.is_alive).map(|a| a.seed_line).fold(0.0f32, f32::max)
                 * 100.0) as u64,
         ),
+        // The most fields inside an edge and outside one anybody has weeded,
+        // which is what the edge is found out from (#398)
+        (
+            "most_hedged_fields_weeded",
+            sim.population.agents.iter().filter_map(|a| a.field_pests.get("hedged")).map(|(n, _)| *n as u64).max().unwrap_or(0),
+        ),
+        (
+            "most_open_fields_weeded",
+            sim.population.agents.iter().filter_map(|a| a.field_pests.get("open")).map(|(n, _)| *n as u64).max().unwrap_or(0),
+        ),
         (
             "stands_watered",
             sim.world.resources.iter().filter(|node| node.watered >= 0.5).count() as u64,
