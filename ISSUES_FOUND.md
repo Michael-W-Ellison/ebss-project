@@ -30038,3 +30038,113 @@ ignored.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns) and 964,810 (seed 0, a year),
 unchanged.
+
+### 399. Wounds washed
+
+A wound was either dressed or not (#351), and the dirt in it was not
+anything anybody could do something about.
+
+**What changed.** A fresh wound has the dirt of whatever made it in it
+(`AgentState::wound_cleaned` false on every blow that opens one wider).
+Somebody who knows how washes it, at water within a pace or out of a
+waterskin, half a unit (`Action::CleanWound`, `cleaning_a_wound`), and a
+washed wound turns half as often (`WHAT_CLEANING_LEAVES`). A wound that
+turns is seen by the grown within twelve paces (`what_the_camp_saw_of_bodies`,
+a new pass after the fields'); somebody who has seen two is apt to wash the
+next (`do:CleanWound`, at the pace). The catalogue's
+`cleaning_visible_dirt_from_wounds` is that.
+
+### 400. Searing a wound
+
+**What changed.** A wound bleeding hard, twice what is worth pressing on,
+can be seared shut with a brand from a lit fire within reach
+(`Action::Cauterise`, `cauterising`): the bleeding stops at once, the wound
+is seared half shut and clean, and it costs four health and a fright. A
+wound bleeding that hard by a fire, three times, is how it is found out
+(`do:Cauterise`). The coward and the anxious will not sear their own; the
+kind-hearted will not sear somebody else's, and bind it instead. The
+catalogue's `cautery`.
+
+### 401. Sewing a wound
+
+**What changed.** A wound open wider than two fifths can be sewn with a
+point and a length of cordage (`Action::StitchWound`, `stitching_a_wound`):
+it bleeds no more and closes twice as fast (`WHAT_STITCHING_DOES`).
+Binding wounds with a point to hand, three times, is how it is found out
+(`do:StitchWound`). The catalogue's `stitching_simple_closure`.
+
+### 402. Broken limbs and setting them
+
+As asked: a hard blow can break a limb; it slows the person for weeks and,
+left as it is, may leave a lasting limp; setting it lets it knit straight.
+
+**What changed.** A blow harder than fifteen may break a limb, the odds
+rising with the blow to two in five at thirty-five and over
+(`a_blow_may_break_a_bone`). A broken limb halves the pace
+(`what_my_bones_leave`, in `movement_speed_at_turn` and the walking speed)
+and knits in six weeks (`turn_the_bone`). Left, it knits crooked three
+times in five; set, one in ten. A crooked one leaves a limp, a fifth off
+the pace for good, to three fifths at most. Somebody else who knows how
+sets it with a splint of wood and a binding of cordage
+(`Action::SetBone`, `setting_a_bone`), at a fright to the patient. A bone
+seen to knit crooked, twice, is how setting is found out (`do:SetBone`).
+The catalogue's `bone_setting`.
+
+### 403. Births that go hard, and helping at them
+
+As asked: a hard birth can lose the child or the mother; people who attend
+births learn to help, and a helper cuts the risk.
+
+**What changed.** One birth in eight goes hard
+(`Population::how_the_birth_went`). A hard birth loses the child two times
+in five and the mother one in ten; a mother who lives through it loses a
+fifth of her health. Somebody at hand, other than the mother, who knows how
+to help halves both. Everybody grown within two paces of a birth has seen
+one, and three is how helping is found out (`do:AttendBirth`). Somebody who
+knows goes to a mother within a day of her time, within as far as they
+would go for her, and stays by her (`what_a_birth_asks`,
+`Action::AttendBirth`). How far that is is temperament
+(`how_far_i_would_go_for`): twelve paces for kin, a partner, the
+kind-hearted and the altruist; a hand's reach for anybody else; not at all
+for the cold-hearted, the uncaring and the cruel. The same reach decides who
+goes to somebody else's wound. Childbirth is a cause of death
+(`AgentState::CHILDBIRTH`). The catalogue's `midwifery_beginnings`.
+
+The roll was first put in the simulation's birth pass, and the first
+measurement counted no hard birth in about a hundred and twenty. The turn's
+population pass (`Population::process_pregnancies`) delivers every child
+that is due before the simulation's own pass runs, which never sees one.
+The roll is the population's now, both passes call it, and the simulation
+folds the population's count into the world's after the population's turn
+(`count_the_hard_births`).
+
+### 404. Poultices and teas
+
+**What changed.** Somebody who knows poultices and teas makes a tea of a
+remedy, with half a unit of carried water and a lit fire within reach, and
+a tea draws half as much again out of the herb
+(`take_a_remedy_drawn`, `WHAT_A_TEA_DRAWS_OUT`); the cap on what any herbal
+can do still holds. Binding a wound, they lay a remedy herb under the
+dressing, the skin's herb first, and a poulticed wound under a dressing
+turns half as often again (`WHAT_A_POULTICE_LEAVES`). Dosing other people,
+five times, is how it is found out (`know:poultices_and_teas`). The
+catalogue's `basic_poultices_and_teas`.
+
+### 405. The sea is not clean water
+
+Measuring medicine's first stage, two smooth worlds lost five people to
+thirst that had lost none before it. In one, three of a camp died at one
+spot over five days, each choosing to drink every turn and refused every
+turn: `Gather: No water sources nearby`.
+
+Somebody who knows to choose their water (#391) passes by a spring with
+fouled ground about it when they know of clean water within reach. The sea
+counted as clean. These three had a fouled spring a pace away and the sea
+six paces off, and knew of no other water; the gather passed by the spring
+for the sea and then refused the sea as salt. The decision layer does not
+look at fouling, saw water within reach, and chose the same gather again.
+Clean water is now water they would drink. Medicine did not cause it: it
+changed the dice, and the dice found it.
+
+**Test** (`clean_water_tests`): the sea is not clean water to somebody who
+will not drink it.
