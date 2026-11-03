@@ -28071,6 +28071,13 @@ later entry. These were not. Each line names the entry that left it.
   beasts (#398). Hedging comes of comparing weeded fields inside a hedge
   and outside one, and was not seen in two years: weeding is rare, and a
   field is inside a hedge only for the ninety days a camp's ring stands.
+- Medicine's first stage is modelled throughout: wounds are washed
+  (#399), seared (#400) and sewn (#401), broken limbs set (#402), births
+  helped (#403), and teas and poultices made (#404). Births go hard and
+  helping at them is found out; the rest were not seen in two years,
+  because the blows that land are small: a wound rarely turns and a bone
+  rarely breaks (#399 to #405). The sea no longer counts as clean water
+  (#405).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30148,3 +30155,56 @@ changed the dice, and the dice found it.
 
 **Test** (`clean_water_tests`): the sea is not clean water to somebody who
 will not drink it.
+
+**Measured** #399 to #405 against #398, forty settlements over two years:
+
+| | #398 | #399 to #405 | t |
+|---|---|---|---|
+| births | 163 | 163 | 0.00 |
+| deaths | 3 | 3 | 0.00 |
+| alive at two years | 640 | 640 | 0.00 |
+| vermin | 238,404 | 232,719 | |
+| rotted | 41,361 | 42,143 | |
+| person-days wasting | 696 | 611 | |
+
+Fourteen births of about a hundred and sixty-five went hard, one in twelve
+against the one in eight it is set at; two children were lost and no
+mother. Helping at a birth was found out in fourteen worlds (median day
+491), and somebody who knew was at one hard birth. Two wounds turned in
+forty worlds, one bone broke, and it knit straight unset. Nobody washed,
+seared or sewed a wound, set a bone, laid a poultice or made a tea, and
+none of those was found out.
+
+That is the wounds there are, not the treatment. In a probe of one world,
+the blows that landed in two years were twenty-two, from three to ten and
+most of them six: a beast's bite, which opens a wound a quarter wide that
+closes in three days and turns about one time in forty. Searing wants
+bleeding twice what any of those gives, sewing a wound twice as wide, and
+a break a blow over fifteen, which only the big hunters deal. Washing
+comes of seeing two wounds turn, so a camp sees what teaches it once in a
+generation or so at this pace. The figures for how often a wound turns,
+how wide a blow opens one, and what breaks a bone are #351's and this
+stage's, and none was tuned to make medicine show.
+
+The measurement before #405 lost five more people, to thirst, in two
+worlds (#405).
+
+**Tests** (`medicine_tests`, 19): the catalogue knows medicine is found
+out; a washed wound turns half as often; washing comes of seeing wounds
+turn; a brand stops the bleeding and sears the wound; the brand comes of
+wounds bleeding by a fire; the cowardly will not sear their own nor the
+kind another; a sewn wound closes twice as fast; sewing comes of binding
+wounds with a point to hand; a broken limb halves the pace and a crooked
+one limps; a break knits in six weeks; a bone is set with a splint and a
+binding; setting comes of seeing bones knit crooked; how far somebody goes
+for another is temperament; a birth can go hard and help at it is found
+out; the birth roll is made where children are delivered; a midwife goes
+to a mother whose child is near; a tea draws out half as much again; a
+poultice under a dressing halves the turning; teas and poultices come of
+dosing other people.
+
+**Full suite**: `cargo test --lib`, 3,111 tests: 3,105 passed, 0 failed, 6
+ignored (before #405's test, which passes).
+
+**Dice counts**: 6,783 (seed 4242, 120 turns), unchanged; 894,003 (seed 0,
+a year), down 7.3%.
