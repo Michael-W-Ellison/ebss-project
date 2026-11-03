@@ -689,7 +689,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 1.1% to 964,810 for #394: what stores lose is reckoned as they are
     // opened, a bare store plainly worse than a lined one is how lining is
     // found out, and those bothered by waste line the camp's stores.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 964_810;
+    // Down 7.3% to 894,003 for #399 to #404: wounds are washed, seared and
+    // sewn, bones set, births helped, and teas made; the kin and the kind go
+    // further to somebody else's wound than a hand's reach.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 894_003;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
