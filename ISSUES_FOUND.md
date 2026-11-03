@@ -30005,16 +30005,19 @@ The comparison is there to be made; at this pace it is a long way off.
 | births | 161 | 163 | +0.47 |
 | deaths | 4 | 3 | -0.57 |
 | alive at two years | 637 | 640 | +0.65 |
-| vermin | 241,055 | 238,314 | |
-| rotted | 42,117 | 41,360 | |
-| person-days wasting | 709 | 694 | |
+| vermin | 241,055 | 238,404 | |
+| rotted | 42,117 | 41,361 | |
+| person-days wasting | 709 | 696 | |
 
 Seed saving came in 36 worlds of 40 (median day 374), the seasons in 28
 (median day 616), choosing seed in 12 (median day 571), hedging fields in
-none. Over the two years 442,038 units of field crop fell and 75,091 were
+none. Over the two years 442,468 units of field crop fell and 75,384 were
 brought in: the seasons come, at the median, just after the second grain
 window closes, so a two-year run sees the loss that teaches it and not
-much of the harvest that follows. SEEDLINE
+much of the harvest that follows. Seed was bred a step, 0.05, in nine
+worlds, and no further: a second step wants a second sowing of chosen seed.
+The twelve worlds where choosing came were run again after the fix to
+breeding (#397); the other twenty-eight do not reach it and are the same.
 
 **Tests** (`seed_and_field_tests`): a seed saver keeps a season's seed;
 breaking ground without seed is how saving is found out; seed saved off a
