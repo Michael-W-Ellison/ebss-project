@@ -200,6 +200,18 @@ impl Simulation {
                 .how_foul_about((resource.position.x, resource.position.y), Self::WHAT_SEEPS_INTO_WATER)
                 > 0.0
         };
+        // And clean water is water they would drink: the sea is clean, and
+        // somebody who will not drink it has nothing clean to go to. Counting
+        // it left a camp passing by the foul spring at its feet for a sea it
+        // would not touch, and three of them died of thirst there (#405).
+        let salt = |resource: &crate::world::ResourceNode| {
+            !would_drink_the_sea
+                && self
+                    .world
+                    .grid
+                    .get_tile(&resource.position)
+                    .is_some_and(|tile| tile.terrain.is_the_water_salt())
+        };
         let passes_by_foul_water = resource_type_enum == ResourceType::Water
             && self.population.agents[agent_index].knows_the_way("clean_water")
             && self
@@ -211,6 +223,7 @@ impl Simulation {
                         && resource.anything_to_take()
                         && agent_pos.distance_to(&resource.position) <= Self::FORAGE_RADIUS
                         && !fouled(resource)
+                        && !salt(resource)
                 });
         let a_drink_this_one_would_take = |resource: &crate::world::ResourceNode| {
             if resource.resource_type != ResourceType::Water {
@@ -219,12 +232,7 @@ impl Simulation {
             if passes_by_foul_water && fouled(resource) {
                 return false;
             }
-            would_drink_the_sea
-                || !self
-                    .world
-                    .grid
-                    .get_tile(&resource.position)
-                    .is_some_and(|tile| tile.terrain.is_the_water_salt())
+            !salt(resource)
         };
 
         for i in self.nodes_this_one_knows_of(

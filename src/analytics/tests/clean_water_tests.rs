@@ -70,6 +70,21 @@ fn with_nothing_clean_a_drink_is_a_drink() {
     assert_eq!(where_they_would_drink(&simulation), FOUL);
 }
 
+/// The sea is clean, and it is not anything to pass the foul pool by for:
+/// somebody who will not drink the sea has nothing clean within reach, and
+/// drinks at the foul one rather than at nothing. Counting the sea as clean
+/// water left a camp dying of thirst a pace from a spring (#405).
+#[test]
+fn the_sea_is_not_clean_water_to_somebody_who_will_not_drink_it() {
+    let mut simulation = by_a_fouled_pool(true);
+    if let Some(tile) = simulation.world.grid.get_tile_mut(&Position::new(CLEAN.0, CLEAN.1)) {
+        tile.terrain.terrain_type = crate::world::TerrainType::Sea;
+    }
+    simulation.population.agents[0].found_out_how_to("know:clean_water");
+    assert!(!simulation.population.agents[0].would_i_drink_the_sea());
+    assert_eq!(where_they_would_drink(&simulation), FOUL);
+}
+
 /// Laid up from foul water twice, and somebody chooses where they drink.
 #[test]
 fn being_laid_up_from_foul_water_twice_is_how_it_is_found_out() {
