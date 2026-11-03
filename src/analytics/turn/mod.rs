@@ -83,6 +83,8 @@ impl Simulation {
         // Process population lifecycle (aging, starvation, deaths, reproduction)
         // This also increments the turn counter and updates all agents
         self.population.take_a_turn();
+        // Births that went hard in it, into the world's count (#403)
+        self.count_the_hard_births();
 
         // Sync simulation turn with population turn
         self.current_turn = self.population.current_turn;

@@ -347,11 +347,11 @@ fn a_birth_can_go_hard_and_help_at_it_is_found_out() {
         hard += (simulation.world.hard_births - before) as usize;
     }
     let share = hard as f64 / trials as f64;
-    assert!((share - Simulation::A_BIRTH_GOES_HARD).abs() < 0.02, "{share}");
+    assert!((share - crate::agents::Population::A_BIRTH_GOES_HARD).abs() < 0.02, "{share}");
     let lost = simulation.world.children_lost_at_birth as f64 / hard as f64;
     // The second person was at all of them, and knew how after the third
     assert!(simulation.population.agents[1].knows_how_to_do("AttendBirth"));
-    let helped = Simulation::A_HARD_BIRTH_LOSES_THE_CHILD * Simulation::WHAT_A_MIDWIFE_LEAVES;
+    let helped = crate::agents::Population::A_HARD_BIRTH_LOSES_THE_CHILD * crate::agents::Population::WHAT_A_MIDWIFE_LEAVES;
     assert!((lost - helped).abs() < 0.06, "{lost} of hard births lost, against {helped}");
     assert!(simulation.world.births_with_a_midwife as usize >= hard - 3);
 }
@@ -448,4 +448,33 @@ fn teas_and_poultices_come_of_dosing_other_people() {
         simulation.execute_action(&Action::Treat { who: Some(them) }, 0);
     }
     assert!(simulation.population.agents[0].knows_the_way("poultices_and_teas"));
+}
+
+/// The birth roll is made where children are actually delivered. The turn's
+/// population pass takes every pregnancy that is due before the simulation's
+/// own birth pass runs, so a roll made only in the latter is never made at
+/// all: the first measurement of #403 counted no hard birth in a hundred and
+/// twenty.
+#[test]
+fn the_birth_roll_is_made_where_children_are_delivered() {
+    crate::core::dice::seed(11);
+    let mut simulation = people(2);
+    let father = simulation.population.agents[1].id;
+    let trials = 400;
+    for _ in 0..trials {
+        let mother = &mut simulation.population.agents[0];
+        mother.state.health = 100.0;
+        mother.state.is_alive = true;
+        let now = simulation.population.current_turn;
+        let mut pregnancy = crate::agents::PregnancyState::new(now, father);
+        pregnancy.due_turn = now;
+        mother.pregnancy = Some(pregnancy);
+        simulation.population.process_pregnancies();
+        simulation.population.agents.truncate(2);
+    }
+    simulation.count_the_hard_births();
+    let hard = simulation.world.hard_births as f64;
+    let expected = crate::agents::Population::A_BIRTH_GOES_HARD * trials as f64;
+    assert!((hard - expected).abs() < expected * 0.5, "{hard} hard births against {expected}");
+    assert_eq!(simulation.population.stats.births_gone_hard, Default::default());
 }
