@@ -28064,6 +28064,13 @@ later entry. These were not. Each line names the entry that left it.
   midden (#386). Nobody made a hoe inside two years in probes (#385); tools
   are now made in the order of the time they save net of their making
   (#387), which has not been looked at for the hoe.
+- Agriculture's third stage is modelled throughout: the seasons come of
+  seeing ripe crops fall, and the harvest is brought in before the window
+  closes (#395); seed is saved on purpose (#396) and chosen off the
+  heaviest stand, a sowing at a time (#397); fields are hedged against
+  beasts (#398). Hedging comes of comparing weeded fields inside a hedge
+  and outside one, and was not seen in two years: weeding is rare, and a
+  field is inside a hedge only for the ninety days a camp's ring stands.
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -29916,3 +29923,114 @@ the makings are got.
 ignored.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns) and 964,810 (seed 0, a year).
+
+### 395. Keeping the seasons in mind
+
+Field crops ripened and were mostly left where they stood: a probe of a
+smooth world found 789 units fallen off the fields after four full
+ripenings, and a scattered one 122. A crop out of its season falls a quarter
+a day, so whatever nobody took in by the window's last day was lost.
+
+**What changed.**
+
+- A field crop's window can say how many days it has left
+  (`Bearing::days_left`). The world counts ripe field crop that falls once
+  its season is out (`field_crop_fallen`), crops that ripen at a full stand
+  and short on the last day (`crops_ripened_full`, `crops_ripened_short`),
+  and field crop that goes into a pack (`field_crop_brought_in`).
+- The first day a ripe crop is seen to fall, its place is noted
+  (`crops_lost_to_the_season`). Every grown person living within a field's
+  walk of it sees it (`what_the_fields_lost`), and somebody who has seen two
+  is apt to keep the seasons in mind (`know:seasons`, at the pace).
+- Somebody who keeps the seasons, fed and rested, brings in a ripe field
+  of the camp's in the last thirty days of its window, nearest first, if what
+  it would give, by how much waste bothers them, is worth the walk
+  (`a_harvest_to_bring_in`, `harvest_action`, under sustenance before
+  farming).
+
+**Probe**, one scattered world to day 980: the seasons came on day 616, two
+days after the grain window closed. Up to then 469 units were brought in and
+1,418 fell. Over the next window (days 885 to 974) 9,186 were brought in and
+2,102 fell.
+
+### 396. Seed saved on purpose
+
+Seed was a handful kept back from the pot by whoever broke ground; nobody
+set it aside off a harvest, and a field broken with no seed was sown of
+whatever grain was to hand.
+
+**What changed.** Breaking ground with no seed in hand, three times, makes
+somebody apt to save it on purpose (`know:save_seed`). Somebody who knows
+keeps a season's seed, six, rather than three (`how_much_seed_i_keep`), and
+sets it aside off a ripe grain field as they take it in (`save_seed_off`).
+A field sown of saved seed carries what that seed was bred to (`bred`,
+`sown_on`).
+
+### 397. Seed chosen off the heaviest stand
+
+**What changed.** Somebody who has saved seed off five harvests is apt to
+save it from the heaviest stand (`know:select_seed`). Seed saved off a
+field that stood full, by somebody who knows, is bred a step,
+`WHAT_CHOOSING_THE_HEAVIEST_DOES` (0.05), on from what the field was sown
+of. A field of seed bred all the way carries half again
+(`what_breeding_does`, `A_BRED_CROP_CARRIES`). Grain only, and the larger
+seed, fruit and the rest taken as one figure.
+
+The first version stepped the line on from the seed already in hand, so a
+dozen gathers off one field bred it the whole way within a season; four
+worlds of forty had it fully bred inside two years. It steps on from the
+field now, a sowing at a time: twenty years, grain ripening once a year.
+
+### 398. Fields hedged against beasts
+
+**What changed.** A field inside a closed hedge has half the pests come on
+it (`WHAT_A_HEDGE_KEEPS_OFF`). Weeding a field, somebody notes what share
+of what they cleared was pests and whether it was hedged
+(`what_i_saw_of_a_field`). With ten of each weeded and the open fields
+plainly worse, half again, the hedge is found out (`know:hedge_fields`), a
+comparison and not an idea. Somebody who knows and is bothered enough by
+waste lays an edge round two fields or more (`a_field_to_hedge`,
+`Action::HedgeAField`): a smaller ring than a camp's, two cells out, that
+takes eight brush and stands a year (`ThornHedge::round_fields`).
+
+It was not found out in any world. Weeding is rare: in two probes the most
+fields anybody weeded inside two years was eight open and none hedged, and
+a field is hedged only inside a camp's ring for the ninety days it stands.
+The comparison is there to be made; at this pace it is a long way off.
+
+**Measured** #395 to #398 against #394, forty settlements over two years:
+
+| | #394 | #395 to #398 | t |
+|---|---|---|---|
+| births | 161 | 163 | +0.47 |
+| deaths | 4 | 3 | -0.57 |
+| alive at two years | 637 | 640 | +0.65 |
+| vermin | 241,055 | 238,314 | |
+| rotted | 42,117 | 41,360 | |
+| person-days wasting | 709 | 694 | |
+
+Seed saving came in 36 worlds of 40 (median day 374), the seasons in 28
+(median day 616), choosing seed in 12 (median day 571), hedging fields in
+none. Over the two years 442,038 units of field crop fell and 75,091 were
+brought in: the seasons come, at the median, just after the second grain
+window closes, so a two-year run sees the loss that teaches it and not
+much of the harvest that follows. SEEDLINE
+
+**Tests** (`seed_and_field_tests`): a seed saver keeps a season's seed;
+breaking ground without seed is how saving is found out; seed saved off a
+ripe field carries its breeding on; choosing the heaviest breeds the seed
+on, a sowing at a time; saving seed off harvests is how choosing is found
+out; a stand of bred seed carries half again; a hedge keeps half the pests
+off; weeding hedged and open fields is how hedging is found out; the frugal
+hedge a field the lazy leave open; an edge is laid round the fields and
+closed; a season says how many days it has left; a ripe crop seen to fall
+is how the seasons come to mind; somebody who keeps the seasons brings the
+harvest in.
+
+The seasons test first gave its second person an id from `Uuid::new_v4`,
+which the one-stream guard forbids; it takes a fixed one.
+
+**Full suite**: FULLSUITE
+
+**Dice counts**: 6,783 (seed 4242, 120 turns) and 964,810 (seed 0, a year),
+unchanged.

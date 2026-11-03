@@ -28,7 +28,7 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #394, at comparing stores):
+**Last full run** (ISSUES_FOUND #398, at agriculture's third stage):
 `cargo test --lib` in one piece, 3,078 tests: 3,072 passed, 0 failed, 6
 ignored.
 - The dice counts are 6,783 (seed 4242, 120 turns) and 964,810 (seed 0, a
