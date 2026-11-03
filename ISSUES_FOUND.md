@@ -30033,7 +30033,8 @@ harvest in.
 The seasons test first gave its second person an id from `Uuid::new_v4`,
 which the one-stream guard forbids; it takes a fixed one.
 
-**Full suite**: FULLSUITE
+**Full suite**: `cargo test --lib`, 3,091 tests: 3,085 passed, 0 failed, 6
+ignored.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns) and 964,810 (seed 0, a year),
 unchanged.
