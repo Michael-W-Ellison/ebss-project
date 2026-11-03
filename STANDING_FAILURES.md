@@ -28,8 +28,8 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #404, at medicine's first stage):
-`cargo test --lib` in one piece, 3,111 tests: 3,105 passed, 0 failed, 6
+**Last full run** (ISSUES_FOUND #405, at medicine's first stage):
+`cargo test --lib` in one piece, 3,112 tests: 3,106 passed, 0 failed, 6
 ignored.
 - The dice counts are 6,783 (seed 4242, 120 turns) and 894,003 (seed 0, a
   year).

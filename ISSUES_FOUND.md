@@ -30203,8 +30203,8 @@ to a mother whose child is near; a tea draws out half as much again; a
 poultice under a dressing halves the turning; teas and poultices come of
 dosing other people.
 
-**Full suite**: `cargo test --lib`, 3,111 tests: 3,105 passed, 0 failed, 6
-ignored (before #405's test, which passes).
+**Full suite**: `cargo test --lib`, 3,112 tests: 3,106 passed, 0 failed, 6
+ignored.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns), unchanged; 894,003 (seed 0,
 a year), down 7.3%.
