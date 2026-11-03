@@ -261,6 +261,9 @@ impl Simulation {
         // And the camp sees what its fields lost to the turn of the season
         // (#395)
         self.what_the_fields_lost();
+        // And what happened to anybody's body is seen by the people round
+        // them (#399, #402)
+        self.what_the_camp_saw_of_bodies();
 
         // Turn world (building construction progress, etc.) - having told it
         // where the living are, so that ground nobody is near can sleep. See

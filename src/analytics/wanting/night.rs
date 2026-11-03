@@ -293,6 +293,8 @@ impl Simulation {
                 | Action::Eat { .. }
                 | Action::PressOnWound { .. }
                 | Action::Bandage { .. }
+                | Action::Cauterise { .. }
+                | Action::AttendBirth { .. }
         ) {
             return action;
         }

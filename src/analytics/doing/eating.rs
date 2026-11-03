@@ -1331,9 +1331,30 @@ impl Simulation {
             return ActionResult::failure("Nothing in the pack for it".to_string());
         }
 
+        // Steeped in hot water, by somebody who knows to, with water to hand
+        // and a fire lit (#404)
+        let here = self.population.agents[agent_index].state.position;
+        let a_tea = self.population.agents[agent_index].knows_the_way("poultices_and_teas")
+            && self.population.agents[agent_index].how_much_water_i_carry() >= Self::WHAT_A_TEA_TAKES
+            && self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some();
+        if a_tea {
+            self.population.agents[agent_index].draw_from_what_i_carry(Self::WHAT_A_TEA_TAKES);
+            self.world.teas_made += 1;
+        }
+        let drawn = if a_tea { Self::WHAT_A_TEA_DRAWS_OUT } else { 1.0 };
         let eased = self.population.agents[patient]
-            .take_a_remedy(&remedy, turn_now)
+            .take_a_remedy_drawn(&remedy, turn_now, drawn)
             .unwrap_or(0.0);
+
+        // Dosing other people is how steeping and binding herbs in comes to
+        // mind (#404)
+        if patient != agent_index {
+            let carer = &mut self.population.agents[agent_index];
+            carer.skills.made_one(Self::A_DOSE_GIVEN);
+            if carer.skills.times_made(Self::A_DOSE_GIVEN) >= Self::DOSES_GIVEN_BEFORE_A_TEA {
+                carer.it_comes_to_me("know:poultices_and_teas", Self::DOSES_GIVEN_BEFORE_A_TEA);
+            }
+        }
 
         self.population.agents[agent_index].skills.practise(
             crate::agents::SkillType::Herbalism,
@@ -1370,6 +1391,16 @@ impl Simulation {
             .with_energy_cost(Self::WHAT_DOSING_SOMEBODY_COSTS)
             .with_message(format!("Eased it with {remedy}"))
     }
+
+    /// What a tea takes in carried water, and how much more of a herb it
+    /// draws out than chewing it (#404).
+    pub(in crate::analytics) const WHAT_A_TEA_TAKES: f32 = 0.5;
+    pub(in crate::analytics) const WHAT_A_TEA_DRAWS_OUT: f32 = 1.5;
+
+    /// What the practice record calls a remedy given to somebody else, and
+    /// how many before teas and poultices come to mind (#404).
+    pub(in crate::analytics) const A_DOSE_GIVEN: &'static str = "dosegiven";
+    pub(in crate::analytics) const DOSES_GIVEN_BEFORE_A_TEA: u32 = 5;
 
     /// The best thing in a pack for a trouble of this sort.
     ///

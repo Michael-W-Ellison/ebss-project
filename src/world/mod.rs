@@ -357,6 +357,38 @@ pub struct World {
     /// Edges closed round a clump of fields (#398).
     #[serde(default)]
     pub fields_hedged: u64,
+    /// What medicine's first stage did (#399-#404): wounds washed, seared,
+    /// sewn and poulticed, remedies drawn as a tea, wounds that turned,
+    /// bones broken, set and knit, and births that went hard, what they
+    /// cost, and how many had somebody at them who knew how to help.
+    #[serde(default)]
+    pub wounds_cleaned: u64,
+    #[serde(default)]
+    pub wounds_cauterised: u64,
+    #[serde(default)]
+    pub wounds_stitched: u64,
+    #[serde(default)]
+    pub poultices_laid: u64,
+    #[serde(default)]
+    pub teas_made: u64,
+    #[serde(default)]
+    pub wounds_turned: u64,
+    #[serde(default)]
+    pub bones_broken: u64,
+    #[serde(default)]
+    pub bones_set: u64,
+    #[serde(default)]
+    pub bones_knit_crooked: u64,
+    #[serde(default)]
+    pub bones_knit_straight: u64,
+    #[serde(default)]
+    pub hard_births: u64,
+    #[serde(default)]
+    pub children_lost_at_birth: u64,
+    #[serde(default)]
+    pub mothers_lost_in_childbirth: u64,
+    #[serde(default)]
+    pub births_with_a_midwife: u64,
     /// Where a ripe field crop nobody brought in began to fall, its season
     /// over, since the people about were last told (#395).
     #[serde(default)]
@@ -2018,6 +2050,20 @@ impl World {
             crops_ripened_full: 0,
             crops_ripened_short: 0,
             fields_hedged: 0,
+            wounds_cleaned: 0,
+            wounds_cauterised: 0,
+            wounds_stitched: 0,
+            poultices_laid: 0,
+            teas_made: 0,
+            wounds_turned: 0,
+            bones_broken: 0,
+            bones_set: 0,
+            bones_knit_crooked: 0,
+            bones_knit_straight: 0,
+            hard_births: 0,
+            children_lost_at_birth: 0,
+            mothers_lost_in_childbirth: 0,
+            births_with_a_midwife: 0,
             crops_lost_to_the_season: Vec::new(),
             lessons_taught: 0,
             food_the_scavengers_took: 0,

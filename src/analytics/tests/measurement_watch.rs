@@ -132,6 +132,20 @@ fn zz_discovery_watch() {
         ("crops_ripened_full", sim.world.crops_ripened_full),
         ("crops_ripened_short", sim.world.crops_ripened_short),
         ("fields_hedged", sim.world.fields_hedged),
+        ("wounds_cleaned", sim.world.wounds_cleaned),
+        ("wounds_cauterised", sim.world.wounds_cauterised),
+        ("wounds_stitched", sim.world.wounds_stitched),
+        ("poultices_laid", sim.world.poultices_laid),
+        ("teas_made", sim.world.teas_made),
+        ("wounds_turned", sim.world.wounds_turned),
+        ("bones_broken", sim.world.bones_broken),
+        ("bones_set", sim.world.bones_set),
+        ("bones_knit_crooked", sim.world.bones_knit_crooked),
+        ("bones_knit_straight", sim.world.bones_knit_straight),
+        ("hard_births", sim.world.hard_births),
+        ("children_lost_at_birth", sim.world.children_lost_at_birth),
+        ("mothers_lost_in_childbirth", sim.world.mothers_lost_in_childbirth),
+        ("births_with_a_midwife", sim.world.births_with_a_midwife),
         // How far the best seed anybody keeps has been bred, in hundredths
         // (#397)
         (

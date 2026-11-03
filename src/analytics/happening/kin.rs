@@ -128,6 +128,11 @@ impl Simulation {
             let pregnancy = self.population.agents[mother_idx].pregnancy.take();
 
             if let Some(preg) = pregnancy {
+                // How it went: one in eight goes hard, and a hard one can
+                // take the child or the mother (#403)
+                if !self.how_the_birth_went(mother_idx) {
+                    continue;
+                }
                 // Create offspring
                 let offspring = if let Some(f_idx) = father_idx {
                     let mother = &self.population.agents[mother_idx];

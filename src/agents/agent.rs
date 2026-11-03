@@ -1208,6 +1208,41 @@ pub struct AgentState {
     /// wound closes twice as fast and turns half as often.
     #[serde(default)]
     pub wound_dressed_until: u32,
+
+    /// The dirt washed out of the wound (#399): it turns half as often.
+    /// A fresh blow opens a fresh, dirty one.
+    #[serde(default)]
+    pub wound_cleaned: bool,
+
+    /// The wound stitched shut (#401): it closes twice as fast and bleeds no
+    /// more.
+    #[serde(default)]
+    pub wound_stitched: bool,
+
+    /// A herb bound in under the dressing (#404): the wound turns half as
+    /// often again while the dressing holds.
+    #[serde(default)]
+    pub wound_poulticed: bool,
+
+    /// A broken limb, mending from one to nought (#402). Somebody with one
+    /// gets about at half their pace until it has knit.
+    #[serde(default)]
+    pub a_broken_limb: f32,
+
+    /// Whether the break was pulled straight and splinted (#402).
+    #[serde(default)]
+    pub limb_set: bool,
+
+    /// What a bone that knit crooked takes off getting about, for good
+    /// (#402).
+    #[serde(default)]
+    pub limps: f32,
+
+    /// What happened to this body that the people round it would see, kept
+    /// until the turn's pass hands it on (#399, #402): a wound that turned, a
+    /// bone that broke, a bone that knit.
+    #[serde(default)]
+    pub to_be_seen: Vec<String>,
 }
 
 impl AgentState {
@@ -1254,6 +1289,13 @@ impl AgentState {
             an_open_wound: 0.0,
             bleeding: 0.0,
             wound_dressed_until: 0,
+            wound_cleaned: false,
+            wound_stitched: false,
+            wound_poulticed: false,
+            a_broken_limb: 0.0,
+            limb_set: false,
+            limps: 0.0,
+            to_be_seen: Vec::new(),
         }
     }
 
@@ -1415,12 +1457,54 @@ impl AgentState {
         // `take_damage` is the one place a blow lands - hunger and cold go
         // through `lose_health` and leave nothing to fester.
         let opened = (amount / Self::WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND).clamp(0.0, 1.0);
+        // A wound opened wider than the one there is a fresh one, with the
+        // dirt of whatever made it in it and nothing done to it yet
+        if opened > self.an_open_wound {
+            self.wound_cleaned = false;
+            self.wound_stitched = false;
+            self.wound_poulticed = false;
+        }
         self.an_open_wound = self.an_open_wound.max(opened);
+        // And a hard enough blow breaks something (#402)
+        self.a_blow_may_break_a_bone(amount);
         // And it bleeds, as hard as it is open (#351)
         self.bleeding = self.bleeding.max(opened * Self::WHAT_AN_OPEN_WOUND_BLEEDS);
 
         self.lose_health(amount, Self::A_BLOW);
     }
+
+    /// A blow hard enough may break a limb (#402): none below
+    /// `WHAT_A_BLOW_HAS_TO_BE_TO_BREAK_A_BONE`, and the odds climb with the
+    /// blow to `THE_MOST_A_BLOW_BREAKS`. One break at a time.
+    fn a_blow_may_break_a_bone(&mut self, amount: f32) {
+        use rand::Rng;
+
+        if self.a_broken_limb > 0.0 || amount <= Self::WHAT_A_BLOW_HAS_TO_BE_TO_BREAK_A_BONE {
+            return;
+        }
+        let odds = ((amount - Self::WHAT_A_BLOW_HAS_TO_BE_TO_BREAK_A_BONE) / Self::WHAT_MORE_BREAKS_ONE_FOR_CERTAIN)
+            .clamp(0.0, Self::THE_MOST_A_BLOW_BREAKS);
+        if crate::core::dice::roll().gen_bool(odds as f64) {
+            self.a_broken_limb = 1.0;
+            self.limb_set = false;
+            self.to_be_seen.push(Self::A_BONE_BROKE.to_string());
+        }
+    }
+
+    /// A blow has to be harder than this to break anything: the kick of a
+    /// deer or the charge of a boar, not a scratch (#402).
+    pub const WHAT_A_BLOW_HAS_TO_BE_TO_BREAK_A_BONE: f32 = 15.0;
+
+    /// How much harder than that a blow would have to be to break a limb for
+    /// certain, if anything did, and the most any one blow breaks.
+    pub const WHAT_MORE_BREAKS_ONE_FOR_CERTAIN: f32 = 50.0;
+    pub const THE_MOST_A_BLOW_BREAKS: f32 = 0.4;
+
+    /// What the turn's pass is told happened to a body (#399, #402).
+    pub const A_BONE_BROKE: &'static str = "a bone broke";
+    pub const A_BONE_KNIT_CROOKED: &'static str = "a bone knit crooked";
+    pub const A_BONE_KNIT_STRAIGHT: &'static str = "a bone knit straight";
+    pub const A_WOUND_TURNED: &'static str = "a wound turned";
 
     /// Lose health to a named thing.
     ///
@@ -1481,10 +1565,12 @@ impl AgentState {
     pub const A_POOR_DIET: &'static str = "a poor diet";
     pub const EXHAUSTION: &'static str = "exhaustion";
     pub const OLD_AGE: &'static str = "old age";
+    /// A birth that went hard (#403).
+    pub const CHILDBIRTH: &'static str = "childbirth";
 
     /// Every one of them, so that anything wanting to reason about the whole
     /// vocabulary does not have to keep its own copy and watch it rot.
-    pub const EVERYTHING_THAT_TAKES_HEALTH: [&'static str; 11] = [
+    pub const EVERYTHING_THAT_TAKES_HEALTH: [&'static str; 12] = [
         Self::HUNGER,
         Self::THIRST,
         Self::A_BLOW,
@@ -1496,6 +1582,7 @@ impl AgentState {
         Self::A_POOR_DIET,
         Self::EXHAUSTION,
         Self::OLD_AGE,
+        Self::CHILDBIRTH,
     ];
 
     /// How hard a blow has to be before it leaves anything worth calling a
@@ -3241,19 +3328,95 @@ impl Agent {
         // Only an open wound can turn, and only somebody not already ill can
         // come down with it - nothing in this model stacks.
         if self.state.ailing.is_none() {
-            let odds = Self::HOW_OFTEN_A_WOUND_TURNS
-                * self.state.an_open_wound as f64
-                * if dressed { 0.5 } else { 1.0 };
+            let odds = self.how_likely_my_wound_is_to_turn(now);
             if crate::core::dice::roll().gen_bool(odds.clamp(0.0, 1.0)) {
                 let how_bad = 0.4 + 0.5 * self.state.an_open_wound;
                 self.taken_ill_with(Self::OFF_A_WOUND_THAT_TURNED, how_bad, now);
+                self.state.to_be_seen.push(AgentState::A_WOUND_TURNED.to_string());
             }
         }
 
         let closing = AgentState::HOW_FAST_A_WOUND_CLOSES
             * if dressed { 2.0 } else { 1.0 }
+            * if self.state.wound_stitched { Self::WHAT_STITCHING_DOES } else { 1.0 }
             * if self.fatigue.is_sleeping { 2.0 } else { 1.0 };
         self.state.an_open_wound = (self.state.an_open_wound - closing).max(0.0);
+        if self.state.an_open_wound <= 0.0 {
+            self.state.wound_cleaned = false;
+            self.state.wound_stitched = false;
+            self.state.wound_poulticed = false;
+        }
+    }
+
+    /// How likely an open wound is to turn this half hour (#351, #399,
+    /// #404): as open as it is, half for a dressing, half for washing, and
+    /// half again for a herb bound in under the dressing.
+    pub fn how_likely_my_wound_is_to_turn(&self, now: u32) -> f64 {
+        let dressed = now < self.state.wound_dressed_until;
+        Self::HOW_OFTEN_A_WOUND_TURNS
+            * self.state.an_open_wound as f64
+            * if dressed { 0.5 } else { 1.0 }
+            * if self.state.wound_cleaned { Self::WHAT_CLEANING_LEAVES } else { 1.0 }
+            * if dressed && self.state.wound_poulticed { Self::WHAT_A_POULTICE_LEAVES } else { 1.0 }
+    }
+
+    /// What of its chance of turning a wound keeps once the dirt is washed
+    /// out of it (#399): half.
+    pub const WHAT_CLEANING_LEAVES: f64 = 0.5;
+
+    /// What of it a herb bound in under a dressing leaves (#404): half again.
+    pub const WHAT_A_POULTICE_LEAVES: f64 = 0.5;
+
+    /// How much faster a stitched wound closes (#401): twice, on top of a
+    /// dressing.
+    pub const WHAT_STITCHING_DOES: f32 = 2.0;
+
+    /// A broken limb knits, straight if it was set and as often as not
+    /// crooked if it was left (#402).
+    ///
+    /// Six weeks to knit, set or not. Knit crooked, it takes a fifth off
+    /// getting about for good; two crooked knittings take two fifths.
+    pub(crate) fn turn_the_bone(&mut self) {
+        use rand::Rng;
+
+        if self.state.a_broken_limb <= 0.0 {
+            return;
+        }
+        self.state.a_broken_limb = (self.state.a_broken_limb - Self::HOW_FAST_A_BONE_KNITS).max(0.0);
+        if self.state.a_broken_limb > 0.0 {
+            return;
+        }
+        let odds = if self.state.limb_set { Self::A_SET_BONE_KNITS_CROOKED } else { Self::A_BONE_LEFT_KNITS_CROOKED };
+        if crate::core::dice::roll().gen_bool(odds) {
+            self.state.limps = (self.state.limps + Self::WHAT_A_CROOKED_BONE_TAKES).min(Self::THE_MOST_A_LIMP_TAKES);
+            self.state.to_be_seen.push(AgentState::A_BONE_KNIT_CROOKED.to_string());
+        } else {
+            self.state.to_be_seen.push(AgentState::A_BONE_KNIT_STRAIGHT.to_string());
+        }
+        self.state.limb_set = false;
+    }
+
+    /// How much of a break knits in a turn: six weeks to knit (#402).
+    pub const HOW_FAST_A_BONE_KNITS: f32 =
+        1.0 / (42.0 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32);
+
+    /// How often a bone knits crooked, left and set (#402).
+    pub const A_BONE_LEFT_KNITS_CROOKED: f64 = 0.6;
+    pub const A_SET_BONE_KNITS_CROOKED: f64 = 0.1;
+
+    /// What a crooked knitting takes off getting about, and the most a body
+    /// of them takes (#402).
+    pub const WHAT_A_CROOKED_BONE_TAKES: f32 = 0.2;
+    pub const THE_MOST_A_LIMP_TAKES: f32 = 0.6;
+
+    /// What a broken limb leaves of somebody's pace while it knits (#402).
+    pub const WHAT_A_BROKEN_LIMB_LEAVES: f32 = 0.5;
+
+    /// What this one's bones leave of their pace (#402): half while a limb
+    /// is broken, and less a crooked knitting's limp for good.
+    pub fn what_my_bones_leave(&self) -> f32 {
+        let broken = if self.state.a_broken_limb > 0.0 { Self::WHAT_A_BROKEN_LIMB_LEAVES } else { 1.0 };
+        broken * (1.0 - self.state.limps)
     }
 
     /// How much of its bleeding a wound keeps from one half hour to the next,
@@ -3334,6 +3497,13 @@ impl Agent {
     /// Returns how much came off, or `None` if there was nothing to treat or
     /// the thing was not a remedy at all.
     pub fn take_a_remedy(&mut self, item_id: &str, now: u32) -> Option<f32> {
+        self.take_a_remedy_drawn(item_id, now, 1.0)
+    }
+
+    /// Take a remedy that was drawn out more or less well: steeped in hot
+    /// water, a tea gets `WHAT_A_TEA_DRAWS_OUT` of what chewing it does
+    /// (#404), and the cap on what any herbal can do still holds.
+    pub fn take_a_remedy_drawn(&mut self, item_id: &str, now: u32, drawn: f32) -> Option<f32> {
         use crate::environment::remedies;
 
         let remedy = remedies::what_this_is_good_for(item_id)?;
@@ -3370,7 +3540,7 @@ impl Agent {
         // third off, and a sixth dose curing.
         let already_off = (worst - ailing.severity).max(0.0);
         let room = (worst * remedies::THE_MOST_A_HERBAL_CAN_DO - already_off).max(0.0);
-        let eased = (worst * remedy.takes_off * by_hand * for_the_right_thing).min(room);
+        let eased = (worst * remedy.takes_off * by_hand * for_the_right_thing * drawn).min(room);
 
         if eased <= 0.0 {
             return Some(0.0);
@@ -4118,7 +4288,7 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 9] = [
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 10] = [
         "selective_harvest",
         "coppice",
         "clean_water",
@@ -4128,6 +4298,7 @@ impl Agent {
         "select_seed",
         "hedge_fields",
         "seasons",
+        "poultices_and_teas",
     ];
 
     /// What the practice record calls a gather from a wild stand within a
@@ -7054,6 +7225,7 @@ impl Agent {
         // every turn and then is over
         self.turn_ailment(current_turn);
         self.turn_the_wound(current_turn);
+        self.turn_the_bone();
 
         // And the salt, if this one has been drinking out of the sea
         self.turn_salt();
@@ -8150,7 +8322,7 @@ impl Agent {
 
     /// Get movement speed at a specific turn (includes pregnancy modifier)
     pub fn movement_speed_at_turn(&self, current_turn: u32) -> f32 {
-        let body_speed = self.body.movement_speed_multiplier();
+        let body_speed = self.body.movement_speed_multiplier() * self.what_my_bones_leave();
         let transport_speed = self.transport.speed_modifier();
         let weight_penalty = if self.inventory.is_overweight() {
             0.5 // 50% speed when overweight
@@ -8728,6 +8900,11 @@ impl Agent {
             Action::Treat { .. } => "treat".to_string(),
             Action::PressOnWound { .. } => "pressonwound".to_string(),
             Action::Bandage { .. } => "bandage".to_string(),
+            Action::CleanWound { .. } => "cleanwound".to_string(),
+            Action::Cauterise { .. } => "cauterise".to_string(),
+            Action::StitchWound { .. } => "stitchwound".to_string(),
+            Action::SetBone { .. } => "setbone".to_string(),
+            Action::AttendBirth { .. } => "attendbirth".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
             Action::AskAbout { what, .. } => format!("ask:{what}"),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
@@ -8811,7 +8988,14 @@ impl Agent {
             // and watched them all get better anyway must not learn that he
             // is a hunter, and folding it into `Foraging` would teach him
             // about picking herbs rather than about giving them.
-            Action::Treat { .. } | Action::PressOnWound { .. } | Action::Bandage { .. } => Undertaking::Healing,
+            Action::Treat { .. }
+            | Action::PressOnWound { .. }
+            | Action::Bandage { .. }
+            | Action::CleanWound { .. }
+            | Action::Cauterise { .. }
+            | Action::StitchWound { .. }
+            | Action::SetBone { .. }
+            | Action::AttendBirth { .. } => Undertaking::Healing,
             Action::Fish | Action::ForageShallows | Action::CheckFishTraps => Undertaking::Fishing,
             // Like a snare: setting one is not evidence about whether it pays
             Action::SetFishTrap => return,

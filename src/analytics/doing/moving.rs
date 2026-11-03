@@ -470,7 +470,7 @@ impl Simulation {
 
         // Get movement speed multiplier from leg health
         let agent = &self.population.agents[agent_index];
-        let body_speed = agent.body.movement_speed_multiplier();
+        let body_speed = agent.body.movement_speed_multiplier() * agent.what_my_bones_leave();
 
         // Get transport speed multiplier (mounts provide speed boost!)
         let transport_speed = agent.transport.effective_speed_modifier();
