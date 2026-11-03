@@ -101,6 +101,8 @@ pub struct PopulationStats {
     /// (#403). A population has no world to keep the count in, so it holds
     /// it here until one takes it - see `Simulation::count_the_hard_births`.
     pub births_gone_hard: HardBirths,
+    /// Pits seen to hold well under what they were last seen to (#408).
+    pub stores_found_short: u64,
 }
 
 /// How many births went hard, and what they took (#403).
@@ -1299,6 +1301,14 @@ impl Population {
         (one.0 - other.0).abs().max((one.1 - other.1).abs())
     }
 
+    /// What the practice record calls a pit found holding well under what it
+    /// was last seen to, how many before somebody keeps a tally, and what is
+    /// "well under": under half, of a pit worth reckoning at all (#408).
+    pub const A_STORE_FOUND_SHORT: &'static str = "storefoundshort";
+    pub const STORES_FOUND_SHORT_BEFORE_A_TALLY: u32 = 3;
+    pub const A_STORE_WORTH_RECKONING: u32 = 10;
+    pub const SHORT_IS_UNDER_A_PART_IN: u32 = 2;
+
     /// What the practice record calls a birth seen, and how many before
     /// somebody knows how to help one (#403).
     pub const A_BIRTH_SEEN: &'static str = "birthseen";
@@ -2288,6 +2298,25 @@ impl Population {
                 .collect();
 
             for (where_it_is, holding) in pits_in_view {
+                // A pit seen to hold well under half of what it was last seen
+                // to is a store reckoned wrong: three times, and somebody is
+                // apt to keep a tally of it (#408)
+                let remembered = agent
+                    .memory
+                    .recall_locations(SpatialMemoryType::Storage)
+                    .into_iter()
+                    .find(|pit| pit.position == where_it_is)
+                    .map(|pit| pit.value.max(0.0) as u32)
+                    .unwrap_or(0);
+                if remembered >= Self::A_STORE_WORTH_RECKONING
+                    && holding * Self::SHORT_IS_UNDER_A_PART_IN < remembered
+                {
+                    self.stats.stores_found_short += 1;
+                    agent.skills.made_one(Self::A_STORE_FOUND_SHORT);
+                    if agent.skills.times_made(Self::A_STORE_FOUND_SHORT) >= Self::STORES_FOUND_SHORT_BEFORE_A_TALLY {
+                        agent.it_comes_to_me("know:tally", Self::STORES_FOUND_SHORT_BEFORE_A_TALLY);
+                    }
+                }
                 if holding > 0 {
                     agent.memory.remember_how_much_is_there(
                         SpatialMemoryType::Storage,

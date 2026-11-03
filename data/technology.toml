@@ -4756,6 +4756,8 @@ name = "Household sharing"
 path = "trade_and_exchange_system"
 stage = 0
 role = "technique"
+model = ["do:GoWithout"]
+note = "Going without so that somebody else eats."
 
 [[tech]]
 id = "trade_and_exchange_system.0.gift_exchange"
@@ -4763,6 +4765,8 @@ name = "Gift exchange"
 path = "trade_and_exchange_system"
 stage = 0
 role = "technique"
+model = ["do:GiveTo"]
+note = "Handing over half of what one has spare."
 
 [[tech]]
 id = "trade_and_exchange_system.0.reciprocity"
@@ -4777,6 +4781,8 @@ name = "Immediate barter within small group"
 path = "trade_and_exchange_system"
 stage = 0
 role = "technique"
+model = ["do:Trade"]
+note = "A swap there and then, with somebody near."
 
 [[tech]]
 id = "trade_and_exchange_system.1.exchange_of_food_hides_stone_baskets"
@@ -5313,6 +5319,8 @@ name = "Pebbles"
 path = "writing_counting_and_recordkeeping"
 stage = 1
 role = "technique"
+model = ["know:tally"]
+note = "A tally, as tally sticks."
 
 [[tech]]
 id = "writing_counting_and_recordkeeping.1.knotted_cords"
@@ -5327,6 +5335,8 @@ name = "Tally sticks"
 path = "writing_counting_and_recordkeeping"
 stage = 1
 role = "technique"
+model = ["know:tally"]
+note = "Found out by finding a pit holding well under what it was last seen to: whoever keeps a tally reckons the store by what is in it, where anybody else goes by what they last saw."
 
 [[tech]]
 id = "writing_counting_and_recordkeeping.1.notches_in_wood_or_bone"
@@ -5334,6 +5344,8 @@ name = "Notches in wood or bone"
 path = "writing_counting_and_recordkeeping"
 stage = 1
 role = "technique"
+model = ["know:tally"]
+note = "A tally, as tally sticks."
 
 [[tech]]
 id = "writing_counting_and_recordkeeping.1.counting_baskets_piles_or_tokens"
@@ -5341,6 +5353,8 @@ name = "Counting baskets, piles, or tokens"
 path = "writing_counting_and_recordkeeping"
 stage = 1
 role = "technique"
+model = ["know:tally"]
+note = "A tally, as tally sticks: what goes into the store, counted."
 
 [[tech]]
 id = "writing_counting_and_recordkeeping.2.fixed_units_for_grain_jars_hides"
@@ -5523,6 +5537,8 @@ name = "Speech"
 path = "communication"
 stage = 0
 role = "technique"
+model = ["do:ShareInformation", "do:AskAbout"]
+note = "Telling somebody where something is and asking them; heard at talking distance, six paces, and only ever of places."
 
 [[tech]]
 id = "communication.0.gestures"
@@ -5593,6 +5609,8 @@ name = "Standardized calls for danger, assembly, hunt, or weather"
 path = "communication"
 stage = 1
 role = "technique"
+model = ["know:calls"]
+note = "Found out by being struck by a beast somebody else had been warned off near there that day: whoever knows calls out what warned them off, and everybody in twenty-five paces knows where it is. Danger only; not assembly, hunt or weather."
 
 [[tech]]
 id = "communication.2.trusted_runners"
@@ -5971,6 +5989,8 @@ name = "Recognized roles by age, skill, or season"
 path = "governance_and_labor_organization"
 stage = 1
 role = "technique"
+model = ["know:division_of_labour"]
+note = "By skill: the same reckoning as the division of labour, which is a role by the hand at it."
 
 [[tech]]
 id = "governance_and_labor_organization.1.division_of_labor_in_food_gathering"
@@ -5978,6 +5998,8 @@ name = "Division of labor in food gathering, guarding, toolmaking, childcare"
 path = "governance_and_labor_organization"
 stage = 1
 role = "technique"
+model = ["know:division_of_labour"]
+note = "Found out by seeing better hands bring food in: whoever knows leans to the work, of foraging, fishing and hunting, where their hand stands best against their camp's. Food gathering only."
 
 [[tech]]
 id = "governance_and_labor_organization.1.informal_obligations_to_share_labor_during"
@@ -6195,6 +6217,8 @@ name = "Known seed amounts for planting"
 path = "measurement_and_standardization"
 stage = 1
 role = "technique"
+model = ["know:measured_sowing"]
+note = "Found out by bringing in fields one sowed thin: seed thrown by the eye goes in too thin a third of the time, and the field carries seven tenths, and too thick a third, a second handful wasted; by the measure it goes in right."
 
 [[tech]]
 id = "measurement_and_standardization.1.shared_estimates_for_herd_size_or"

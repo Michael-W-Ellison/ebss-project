@@ -1065,6 +1065,11 @@ pub struct ResourceNode {
     /// when it ripens thin.
     #[serde(default)]
     pub sown_on: Option<u32>,
+    /// Who sowed this field thin, at a guess, if it was sown thin: a field
+    /// sown with seed thrown by the eye rather than by the measure, too little
+    /// of it for the ground, carries less (#409).
+    #[serde(default)]
+    pub sown_thin_by: Option<uuid::Uuid>,
 }
 
 impl ResourceNode {
@@ -1133,6 +1138,7 @@ impl ResourceNode {
             watered: 0.0,
             bred: 0.0,
             sown_on: None,
+            sown_thin_by: None,
         }
     }
 
@@ -1435,7 +1441,24 @@ impl ResourceNode {
     /// Everything done for this stand: how well it is kept, how lately a
     /// fire went over it, and how well it is coppiced.
     pub fn what_is_done_for_it(&self) -> f32 {
-        self.what_keeping_it_does() * self.what_the_fire_did() * self.what_coppicing_does() * self.what_breeding_does()
+        self.what_keeping_it_does()
+            * self.what_the_fire_did()
+            * self.what_coppicing_does()
+            * self.what_breeding_does()
+            * self.what_the_sowing_did()
+    }
+
+    /// What a field sown thin carries of what one sown to the measure does:
+    /// seven tenths (#409). Gaps in the rows, where the weeds come in.
+    pub const A_THIN_SOWN_FIELD_CARRIES: f32 = 0.7;
+
+    /// What the sowing did for this stand: a thin sowing carries less.
+    pub fn what_the_sowing_did(&self) -> f32 {
+        if self.sown_thin_by.is_some() {
+            Self::A_THIN_SOWN_FIELD_CARRIES
+        } else {
+            1.0
+        }
     }
 
     /// How much more a stand of seed bred as far as it goes carries, and how

@@ -155,6 +155,7 @@ mod coppicing_tests;
 mod lining_tests;
 mod seed_and_field_tests;
 mod medicine_tests;
+mod social_paths_tests;
 mod ditching_tests;
 mod hoe_tests;
 mod tool_priority_tests;

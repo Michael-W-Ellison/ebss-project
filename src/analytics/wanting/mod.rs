@@ -38,6 +38,7 @@ pub mod ground;
 pub mod herd;
 pub mod journey;
 pub mod quarry;
+pub mod roles;
 pub mod shelter;
 pub mod store;
 pub mod wounds;

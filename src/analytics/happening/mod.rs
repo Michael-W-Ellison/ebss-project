@@ -27,6 +27,7 @@
 
 pub mod beasts;
 pub mod bodies;
+pub mod calls;
 pub mod buildings;
 pub mod herds;
 pub mod kin;

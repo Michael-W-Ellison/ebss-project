@@ -58,7 +58,7 @@ impl Simulation {
 
         // And a store that already holds a lean season's eating does not want
         // any more put in it
-        if !self.does_the_store_still_want_filling(here) {
+        if !self.does_the_store_still_want_filling_to(agent, here) {
             return false;
         }
 
@@ -230,6 +230,53 @@ impl Simulation {
     /// What is asked instead is whether there is already a lean season's
     /// eating in the ground for the people about, which is a thing somebody
     /// standing in their own camp can see.
+    pub(in crate::analytics) fn does_the_store_still_want_filling_to(
+        &self,
+        agent: &crate::agents::Agent,
+        here: crate::world::Position,
+    ) -> bool {
+        let mouths = self.how_many_mouths_about(here).max(1);
+        self.what_i_reckon_is_put_by(agent, here) < mouths * Self::what_a_store_is_filled_to_a_mouth()
+    }
+
+    /// What this one reckons is in the ground near here (#408). Somebody who
+    /// keeps a tally reads it off the tally, and it is what is there; anybody
+    /// else goes by what they last saw in the pits they know of, which is
+    /// what was there then, before the vermin and the rot and everybody
+    /// else's suppers, and nothing at all of a pit they never saw.
+    pub(in crate::analytics) fn what_i_reckon_is_put_by(
+        &self,
+        agent: &crate::agents::Agent,
+        here: crate::world::Position,
+    ) -> u32 {
+        use crate::core::memory::SpatialMemoryType;
+
+        if Self::would_keep_a_tally(agent) {
+            self.stores_reckoned_by_tally.set(self.stores_reckoned_by_tally.get() + 1);
+            return self.world.how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE);
+        }
+        agent
+            .memory
+            .recall_locations(SpatialMemoryType::Storage)
+            .into_iter()
+            .filter(|pit| {
+                here.distance_to(&crate::world::Position::new(pit.position.0, pit.position.1))
+                    <= Self::WORTH_WALKING_TO_THE_STORE
+            })
+            .map(|pit| pit.value.max(0.0) as u32)
+            .sum()
+    }
+
+    /// Whether this one keeps the tally, knowing how: anybody but the lazy,
+    /// who cannot be bothered to cut a notch for every basket (#408).
+    pub(in crate::analytics) fn would_keep_a_tally(agent: &crate::agents::Agent) -> bool {
+        agent.knows_the_way("tally") && !agent.traits.has(crate::core::traits::Trait::Lazy)
+    }
+
+    /// Whether there is a lean season's eating in the ground near here, by
+    /// what is there: what a tally says. The tests ask it of the ground; the
+    /// people ask `does_the_store_still_want_filling_to` of their reckoning.
+    #[cfg(test)]
     pub(in crate::analytics) fn does_the_store_still_want_filling(&self, here: crate::world::Position) -> bool {
         let mouths = self.how_many_mouths_about(here).max(1);
         let put_by = self
@@ -417,7 +464,7 @@ impl Simulation {
 
         let here = Position::new(agent_position.0, agent_position.1);
 
-        if !self.does_the_store_still_want_filling(here) {
+        if !self.does_the_store_still_want_filling_to(agent, here) {
             return None;
         }
 
@@ -639,7 +686,7 @@ impl Simulation {
 
         // Something to bury, and somewhere to bury it - and a store that is
         // not already full of a winter nobody will get to
-        if let Some((what, _)) = spare.clone().filter(|_| self.does_the_store_still_want_filling(here))
+        if let Some((what, _)) = spare.clone().filter(|_| self.does_the_store_still_want_filling_to(agent, here))
         {
             if self.world.pit_at(here).is_some_and(|pit| pit.has_room())
                 && self.is_it_worth_burying(agent, &what, here)

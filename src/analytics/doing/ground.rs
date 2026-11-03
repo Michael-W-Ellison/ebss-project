@@ -257,6 +257,12 @@ impl Simulation {
         );
         field.amount = 0;
         field.sown_on = Some(now);
+        // And how much went in: by the measure, or at a guess (#409)
+        if let Some(called) = sown_of {
+            if self.sown_at_a_guess(agent_index, called) {
+                field.sown_thin_by = Some(self.population.agents[agent_index].id);
+            }
+        }
         if sown_of == Some(crate::agents::Agent::SEED) {
             field.bred = self.population.agents[agent_index].seed_line;
         }
@@ -285,6 +291,50 @@ impl Simulation {
             .with_energy_cost(12.0)
             .with_message("Broke ground and sowed a field".to_string())
     }
+
+    /// How often seed thrown by the eye goes in too thin for the ground, and
+    /// how often too thick, a second handful wasted on it (#409): a third
+    /// each, and right the rest of the time.
+    pub(in crate::analytics) const A_GUESS_SOWS_THIN: f64 = 1.0 / 3.0;
+    pub(in crate::analytics) const A_GUESS_SOWS_THICK: f64 = 1.0 / 3.0;
+
+    /// Whether this one sows by the measure, knowing it: anybody but the
+    /// lazy, who throw it and have done (#409).
+    pub(in crate::analytics) fn would_sow_by_the_measure(agent: &crate::agents::Agent) -> bool {
+        agent.knows_the_way("measured_sowing") && !agent.traits.has(crate::core::traits::Trait::Lazy)
+    }
+
+    /// The seed is in the ground: how much of it, and whether the field it
+    /// went into is sown thin (#409). Somebody who sows by the measure puts in
+    /// what the ground takes. Anybody else throws it by the eye: a third of
+    /// the time too little, and the field carries less, and a third too much,
+    /// and a second handful of seed, if there is one, goes in for nothing.
+    pub(in crate::analytics) fn sown_at_a_guess(&mut self, agent_index: usize, called: &str) -> bool {
+        use rand::Rng;
+
+        if Self::would_sow_by_the_measure(&self.population.agents[agent_index]) {
+            self.world.fields_sown_measured += 1;
+            return false;
+        }
+        let guess: f64 = crate::core::dice::roll().gen();
+        if guess < Self::A_GUESS_SOWS_THIN {
+            self.world.fields_sown_thin += 1;
+            return true;
+        }
+        if guess < Self::A_GUESS_SOWS_THIN + Self::A_GUESS_SOWS_THICK {
+            let agent = &mut self.population.agents[agent_index];
+            if agent.how_many_i_have(called) > 0 {
+                agent.inventory.remove_item(called, 1);
+                self.world.fields_sown_thick += 1;
+            }
+        }
+        false
+    }
+
+    /// What the practice record calls a harvest off a field one sowed thin,
+    /// and how many before somebody thinks to sow by the measure (#409).
+    pub(in crate::analytics) const A_THIN_FIELD_GATHERED: &'static str = "thinfieldgathered";
+    pub(in crate::analytics) const THIN_FIELDS_BEFORE_A_MEASURE: u32 = 3;
 
     /// Green manure: turning a standing crop under instead of eating it.
     ///

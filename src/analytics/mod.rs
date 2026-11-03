@@ -214,6 +214,11 @@ pub struct Simulation {
     /// the world and does not write to it, and moving a camp moves other
     /// people's hearths; see `Simulation::the_camp_moves` (#314).
     pub(crate) camp_move_proposed: std::cell::RefCell<Option<wanting::camp::CampMove>>,
+    /// How many times a way of getting food was weighed by where the hand
+    /// stood against the camp's, for the measurement (#407).
+    pub(crate) ways_weighed_by_the_hand: std::cell::Cell<u64>,
+    /// And how many times a store was reckoned off a tally (#408).
+    pub(crate) stores_reckoned_by_tally: std::cell::Cell<u64>,
     /// The route search's bookkeeping, kept between searches; see
     /// `the_way_there` (#315).
     pub(crate) route_scratch: std::cell::RefCell<RouteScratch>,
@@ -436,6 +441,8 @@ impl Simulation {
             turns_lost_to_a_fault: 0,
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
+            ways_weighed_by_the_hand: Default::default(),
+            stores_reckoned_by_tally: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),
             minute_of_the_half_hour: 0,
@@ -2077,6 +2084,8 @@ impl Simulation {
             turns_lost_to_a_fault: 0,
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
+            ways_weighed_by_the_hand: Default::default(),
+            stores_reckoned_by_tally: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),
             minute_of_the_half_hour: 0,

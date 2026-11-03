@@ -389,6 +389,30 @@ pub struct World {
     pub mothers_lost_in_childbirth: u64,
     #[serde(default)]
     pub births_with_a_midwife: u64,
+    /// The social paths' first stages (#406 to #409): calls raised at a beast
+    /// and the people who heard them, blows that fell on somebody a call
+    /// would have warned, better hands seen bringing food in, and
+    /// fields sown thin, thick and to the measure.
+    #[serde(default)]
+    pub calls_raised: u64,
+    #[serde(default)]
+    pub heard_a_call: u64,
+    #[serde(default)]
+    pub blows_a_call_would_have_spared: u64,
+    #[serde(default)]
+    pub better_hands_seen: u64,
+    #[serde(default)]
+    pub fields_sown_thin: u64,
+    #[serde(default)]
+    pub fields_sown_thick: u64,
+    #[serde(default)]
+    pub fields_sown_measured: u64,
+    /// Where a beast warned somebody off lately, what it was, who, and
+    /// whether they called it out, for
+    /// whoever it strikes next to have heard of it or not (#406). Not kept:
+    /// it is a day long.
+    #[serde(skip)]
+    pub beasts_lately_seen: Vec<((i32, i32, i32), String, u32, uuid::Uuid, bool)>,
     /// Where a ripe field crop nobody brought in began to fall, its season
     /// over, since the people about were last told (#395).
     #[serde(default)]
@@ -2064,6 +2088,14 @@ impl World {
             children_lost_at_birth: 0,
             mothers_lost_in_childbirth: 0,
             births_with_a_midwife: 0,
+            calls_raised: 0,
+            heard_a_call: 0,
+            blows_a_call_would_have_spared: 0,
+            better_hands_seen: 0,
+            fields_sown_thin: 0,
+            fields_sown_thick: 0,
+            fields_sown_measured: 0,
+            beasts_lately_seen: Vec::new(),
             crops_lost_to_the_season: Vec::new(),
             lessons_taught: 0,
             food_the_scavengers_took: 0,

@@ -4288,7 +4288,7 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 10] = [
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 14] = [
         "selective_harvest",
         "coppice",
         "clean_water",
@@ -4299,6 +4299,11 @@ impl Agent {
         "hedge_fields",
         "seasons",
         "poultices_and_teas",
+        // The social paths' first stages (#406 to #409)
+        "calls",
+        "division_of_labour",
+        "tally",
+        "measured_sowing",
     ];
 
     /// What the practice record calls a gather from a wild stand within a

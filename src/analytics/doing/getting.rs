@@ -461,6 +461,7 @@ impl Simulation {
             // from, and whether it stood full, which is the stand somebody
             // choosing would save from (#396, #397)
             let off_a_field = self.world.resources[resource_index].on_a_field;
+            let sown_thin_by = self.world.resources[resource_index].sown_thin_by;
             let seed_off_it = {
                 let node = &self.world.resources[resource_index];
                 (node.on_a_field && node.ripe_stand > 0 && node.resource_type == ResourceType::Grain).then(|| {
@@ -832,6 +833,15 @@ impl Simulation {
                 if let (true, Some((bred, stood_full))) = (went_in_the_pack, seed_off_it) {
                     self.population.agents[agent_index].save_seed_off(bred, took, stood_full);
                 }
+                // A harvest off a field one sowed thin oneself, three times, is
+                // how sowing by the measure comes to mind (#409)
+                if went_in_the_pack && sown_thin_by == Some(self.population.agents[agent_index].id) {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.skills.made_one(Self::A_THIN_FIELD_GATHERED);
+                    if agent.skills.times_made(Self::A_THIN_FIELD_GATHERED) >= Self::THIN_FIELDS_BEFORE_A_MEASURE {
+                        agent.it_comes_to_me("know:measured_sowing", Self::THIN_FIELDS_BEFORE_A_MEASURE);
+                    }
+                }
                 if went_in_the_pack && off_a_field {
                     self.world.field_crop_brought_in += took as u64;
                 }
@@ -856,6 +866,12 @@ impl Simulation {
                 // the branch #236 measured taking 84% of every armful.
                 if went_in_the_pack && took < harvested {
                     self.world.resources[resource_index].put_it_back(harvested - took);
+                }
+                // An armful of food brought in is seen by whoever is near (#407)
+                if went_in_the_pack
+                    && Self::trade_for_gathering(resource_type_enum) == crate::agents::SkillType::Herbalism
+                {
+                    self.a_hand_seen_at_work(agent_index, crate::agents::SkillType::Herbalism);
                 }
                 let agent = &mut self.population.agents[agent_index];
                 if went_in_the_pack {
@@ -1130,6 +1146,9 @@ impl Simulation {
                     // And a young one of the herd left standing by it follows
                     // the hunter home (#354)
                     let taken = self.a_young_one_left_behind(agent_index, &species, fell_at);
+
+                    // A kill brought down is seen by whoever is near (#407)
+                    self.a_hand_seen_at_work(agent_index, crate::agents::skills::SkillType::Hunting);
 
                     // Increase hunting skill
                     let agent = &mut self.population.agents[agent_index];
@@ -1526,6 +1545,9 @@ impl Simulation {
         let food_data = self
             .food_database
             .create_food_data(&crate::world::inventory::ItemType::Fish, self.current_turn);
+
+        // A catch is seen by whoever is near (#407)
+        self.a_hand_seen_at_work(agent_index, crate::agents::SkillType::Fishing);
 
         let agent = &mut self.population.agents[agent_index];
         let mut catch =

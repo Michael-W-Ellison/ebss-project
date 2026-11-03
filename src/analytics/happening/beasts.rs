@@ -589,16 +589,21 @@ impl Simulation {
             agent.state.next_decision_at = agent.state.next_decision_at.min(current_turn);
             agent
                 .emotions
-                .record_attack(crate::agents::EmotionSource::Creature(what_it_was), current_turn);
+                .record_attack(crate::agents::EmotionSource::Creature(what_it_was.clone()), current_turn);
             agent.exploration_knowledge.saw_danger(
                 crate::world::Position::new(at.0, at.1),
                 &called,
                 1.0,
                 current_turn,
             );
+            // And, if they would, they call it out (#406)
+            self.a_beast_was_seen(agent_index, &what_it_was, &called, at);
         }
 
         for (animal_id, what_it_was, agent_index, damage, fed) in strikes {
+            // Struck by a kind somebody else was warned off near here today,
+            // and nobody called it (#406)
+            self.a_blow_from_a_beast_seen_before(agent_index, &what_it_was);
             // And a blow from one makes a stranger of the kind again
             if let Some(species) = self.world.animals.get_species(&what_it_was) {
                 self.population.agents[agent_index].familiar_with.remove(&species.name);
