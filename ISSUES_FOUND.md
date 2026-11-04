@@ -28078,6 +28078,14 @@ later entry. These were not. Each line names the entry that left it.
   because the blows that land are small: a wound rarely turns and a bone
   rarely breaks (#399 to #405). The sea no longer counts as clean water
   (#405).
+- The social paths' first stages are modelled: a beast is called out
+  (#406), the work is divided by the hand (#407), stores are reckoned by
+  tally (#408), and seed is sown by the measure (#409); stage nought of
+  communication and of exchange is linked to speech, sharing, gifts and
+  barter. Still unlinked: gestures, drums, horns, smoke and beacons; elders,
+  family heads and leaders; verbal agreements and marks of ownership; stage
+  nought's measures. Skills keep a year now, not nineteen hours (#410), and
+  camps that keep them hunt and fish more and go hungrier (#411, open).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30208,3 +30216,152 @@ ignored.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns), unchanged; 894,003 (seed 0,
 a year), down 7.3%.
+
+### 406. Calling out a beast
+
+As asked for the social paths with nothing linked: the first stage of
+communication, the first of the governance path, of counting and of
+measurement, each found out from what happens and taken up or not by
+temperament (#406 to #409). Stage nought of each was linked to what the
+model already did: speech is `do:ShareInformation` and `do:AskAbout`;
+household sharing, gifts and barter are `do:GoWithout`, `do:GiveTo` and
+`do:Trade`.
+
+**What changed.** Somebody who sees a beast and knows to calls it out
+(`a_beast_was_seen`): everybody else in earshot, twenty-five paces, not
+deaf, is told where it is (`saw_danger`), and anybody within a beast's
+ground of it is woken and decides again. The mute, the cold-hearted, the
+uncaring and the callous call nothing (`would_raise_the_call`). Being struck
+by a kind of beast somebody else saw within twenty-five paces and a day, and
+did not call, is a blow a call would have spared; two of those and somebody
+is apt to think of calling (`know:calls`). The catalogue's
+`standardized_calls_for_danger_assembly_hunt`.
+
+### 407. Dividing the work
+
+**What changed.** Somebody who knows to divide the work leans to the way of
+getting food where their hand stands best against their camp's: their hand
+over the camp's mean at each of gathering, fishing and hunting, and that
+over their own mean standing (`what_my_hand_is_worth_to_the_camp`). It
+lifts that way's relief by up to a quarter, and lifts nothing else. The
+stubborn, the rebel and the proud do as they would have done. Gathering is
+the better of the foraging and the farming hand, since bringing in a field
+is gathering too. A role weighs less as the need presses, and nothing on
+somebody starving. Seeing a plainly better hand bring food in, a third
+better, within twelve paces, at work one has been at oneself within half a
+day, five times, is how it is found out (`know:division_of_labour`). The
+catalogue's `division_of_labor_in_food_gathering` and
+`recognized_roles_by_age_skill_or`.
+
+It took three goes. The first counted anybody near as having seen a better
+hand, and it was found out in every world by day thirty-two on 479,176
+sightings; somebody now has to have been at the same work. The second, once
+skills kept (#410), starved camps. It took a quarter off the ways somebody
+stood worse at, and judged a harvest by the foraging hand alone, so a good
+farmer who was a better hunter marked their own harvest down by a quarter,
+however hungry. On the thirteen worlds that had hunger deaths in that
+measurement:
+
+| | no roles | the farmer's hand, fading with hunger | lifting only |
+|---|---|---|---|
+| hunger deaths | 3 | 5 | 3 |
+| person-days wasting | 314 | 496 | 272 |
+
+The second version took 13 and 704.
+
+### 408. Tallies
+
+**What changed.** What somebody reckons is in the stores within reach is
+what they last saw of them (`what_i_reckon_is_put_by`), not what is there.
+Somebody who keeps a tally knows (not the lazy). The three questions of
+whether a store wants filling ask it. Finding a store, of ten or more,
+holding less than half of what one remembered, three times, is how keeping a
+tally is found out (`know:tally`). The catalogue's tally sticks, notches,
+counting baskets and pebbles.
+
+### 409. Seed by the measure
+
+**What changed.** Seed sown by the eye goes in thin a third of the time and
+thick a third (`sown_at_a_guess`). A thin-sown field carries seven tenths of
+a crop, and a thick one takes a second seed out of the pack if there is one.
+Somebody who knows the measure sows it right (not the lazy). Bringing in a
+field of one's own sowing that came up thin, three times, is how it is found
+out (`know:measured_sowing`). The catalogue's
+`known_seed_amounts_for_planting`.
+
+### 410. A trade kept for nineteen hours
+
+Watching the division of labour, every hand in a camp was nearly the same.
+A trade unused for more than 1,152 minutes began to rust, and lost a level
+every 576 (`Skills::KEEPS_FOR`, `LOSES_A_LEVEL_EVERY`). Those are an old
+calendar's days, and on this one they are nineteen hours and nine and a
+half: anything not done daily was back at nothing within a week. A trade
+keeps a year unused now and loses a level every half-year after.
+
+### 411. Kept skills turn camps to hunting and fishing, and more go hungry (open)
+
+With skills that keep (#410), a practised hunter's throw lands more often
+(`how_often_a_throw_tells`) and a practised fisher's cast does
+(`odds_of_a_cast`), and camps turn to both. Without the division of labour,
+forty worlds over two years, against r415 (before #406):
+
+| | before | skills kept | |
+|---|---|---|---|
+| hunts | 1,032 | 1,827 | x1.77 |
+| fish caught | 51,648 | 85,748 | x1.66 |
+| stews | 36,200 | 24,655 | x0.68 |
+| meat left on kills | 1,395 | 3,886 | x2.79 |
+| meat the crows had | 502 | 1,636 | x3.26 |
+| person-days wasting | 611 | 859 | x1.41 |
+| hunger deaths | 2 | 10 | |
+
+Kills outrun what is cut and carried home, and the crows have the
+difference. Why that leaves more people hungry, when more food is being
+brought in, has not been looked at. #410 is not to be undone: a skill that
+was gone in a week was the bug.
+
+**Measured** #406 to #410, forty settlements over two years:
+
+| | r415, before #406 | #406 to #410 | t |
+|---|---|---|---|
+| births | 163 | 162 | -0.08 |
+| deaths | 3 | 11 | 2.24 |
+| of hunger | 2 | 9 | 2.21 |
+| alive at two years | 640 | 631 | -0.76 |
+| person-days wasting | 611 | 835 | |
+| field crop brought in | 67,015 | 60,307 | |
+| vermin | 232,719 | 246,954 | |
+| rotted | 42,143 | 44,448 | |
+| beasts struck, by day | 37 | 19 | |
+| beasts struck, by night | 46 | 17 | |
+
+With #410 and no division of labour, the same forty worlds: 162 births, 12
+deaths (10 of hunger), 630 alive, 859 person-days wasting. The extra deaths
+are #411's, not the social paths'.
+
+Calling was found out in five worlds (median day 500), by one person in
+each, and taught to nobody; sixteen calls were raised and heard 198 times,
+and 17 blows were ones a call would have spared. Dividing the work was found
+out in all forty (median day 56), on 43,452 better hands seen; it weighed
+2,066,834 choices. Tallies were found out in all forty (median day 304), on
+23,892 stores found short, and reckoned 2,541,259 stores. The measure for
+seed was found out in twelve (median day 466): 267 fields went in thin, 229
+thick and 23 by the measure. Thirteen of the forty worlds are r421's, whose
+code is the same.
+
+**Tests** (`social_paths_tests`, 12): the catalogue knows the social paths;
+a call tells everybody in earshot where the beast is; the cold-hearted call
+nothing; blows nobody called are how calling is found out; the work goes to
+the hand that stands best at it; a good farmer is not put off their harvest;
+better hands seen are how dividing the work is found out; a tally reckons
+the store by what is in it; a store found short is how the tally is found
+out; seed thrown by the eye goes in thin or thick; a thin-sown field carries
+seven tenths; bringing in thin fields is how the measure is found out.
+`behaviour_gaps_tests::a_farmer_keeps_seed_back_and_sows_it` sows by the
+measure, so a thick guess does not take the seed it counts.
+
+**Full suite**: `cargo test --lib`, 3,124 tests: 3,118 passed, 0 failed, 6
+ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns), unchanged; 933,238 (seed 0,
+a year), up 4.4% from 894,003 over #406 to #410.
