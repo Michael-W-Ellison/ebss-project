@@ -23,10 +23,17 @@ impl Simulation {
     pub(in crate::analytics) const THE_MOST_A_ROLE_TIPS_IT: f32 = 0.25;
 
     /// The ways of getting food that ask for a hand at something, and what.
-    pub(in crate::analytics) const THE_WAYS_A_HAND_DECIDES: [(Strategy, SkillType); 3] = [
-        (Strategy::GatherWildFood, SkillType::Herbalism),
-        (Strategy::FishLocalWaters, SkillType::Fishing),
-        (Strategy::HuntLocalAnimals, SkillType::Hunting),
+    ///
+    /// Gathering is the better of two hands: it is wild plants and it is
+    /// bringing in a field, and the field is farming. It was the gathering
+    /// hand alone, and a good farmer who was a better hunter than a gatherer
+    /// marked their own harvest down by a quarter; once skills stopped
+    /// rusting in a day (#410), field crop brought in fell by half and
+    /// thirteen died of hunger in forty worlds where two had (#407).
+    pub(in crate::analytics) const THE_WAYS_A_HAND_DECIDES: [(Strategy, &'static [SkillType]); 3] = [
+        (Strategy::GatherWildFood, &[SkillType::Herbalism, SkillType::Farming]),
+        (Strategy::FishLocalWaters, &[SkillType::Fishing]),
+        (Strategy::HuntLocalAnimals, &[SkillType::Hunting]),
     ];
 
     /// What the practice record calls a campmate seen bringing in food at a
@@ -60,11 +67,24 @@ impl Simulation {
     /// it in their camp, as a multiple of its relief: one for anybody who
     /// does not divide the work, for a way no hand decides, and for somebody
     /// with nobody to divide it with.
-    pub(in crate::analytics) fn what_my_hand_is_worth_to_the_camp(&self, agent: &Agent, way: Strategy) -> f32 {
+    ///
+    /// A role is for ordinary days. It weighs less the harder the need
+    /// presses (`pressing`, nought to one), and not at all on somebody
+    /// starving: they eat what is in reach, whose work it is (#407).
+    pub(in crate::analytics) fn what_my_hand_is_worth_to_the_camp(
+        &self,
+        agent: &Agent,
+        way: Strategy,
+        pressing: f32,
+    ) -> f32 {
         let Some(&(_, skill)) = Self::THE_WAYS_A_HAND_DECIDES.iter().find(|(w, _)| *w == way) else {
             return 1.0;
         };
         if !Self::would_take_a_role(agent) {
+            return 1.0;
+        }
+        let weighs = Self::WHAT_A_ROLE_WEIGHS * (1.0 - pressing.clamp(0.0, 1.0));
+        if weighs <= 0.0 {
             return 1.0;
         }
         let mates = self.who_lives_near(Self::where_this_one_lives(agent));
@@ -72,16 +92,19 @@ impl Simulation {
             return 1.0;
         }
         // Where I stand at each, against the camp's hands at it
-        let standing = |at: SkillType| {
-            let camps: f32 = mates.iter().map(|&index| self.population.agents[index].skills.hand_for(at)).sum::<f32>()
+        let hand = |who: &Agent, at: &[SkillType]| {
+            at.iter().map(|&one| who.skills.hand_for(one)).fold(0.0_f32, f32::max)
+        };
+        let standing = |at: &[SkillType]| {
+            let camps: f32 = mates.iter().map(|&index| hand(&self.population.agents[index], at)).sum::<f32>()
                 / mates.len() as f32;
-            agent.skills.hand_for(at) / camps.max(f32::EPSILON)
+            hand(agent, at) / camps.max(f32::EPSILON)
         };
         let mine: Vec<f32> = Self::THE_WAYS_A_HAND_DECIDES.iter().map(|(_, at)| standing(*at)).collect();
         let on_the_whole = mine.iter().sum::<f32>() / mine.len() as f32;
         let here = standing(skill) / on_the_whole.max(f32::EPSILON);
         self.ways_weighed_by_the_hand.set(self.ways_weighed_by_the_hand.get() + 1);
-        (1.0 + Self::WHAT_A_ROLE_WEIGHS * (here - 1.0))
+        (1.0 + weighs * (here - 1.0))
             .clamp(1.0 - Self::THE_MOST_A_ROLE_TIPS_IT, 1.0 + Self::THE_MOST_A_ROLE_TIPS_IT)
     }
 

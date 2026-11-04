@@ -148,7 +148,7 @@ fn the_work_goes_to_the_hand_that_stands_best_at_it() {
         agent.skills.set_skill_level(SkillType::Hunting, 0);
     }
     let worth = |simulation: &Simulation, way| {
-        simulation.what_my_hand_is_worth_to_the_camp(&simulation.population.agents[0], way)
+        simulation.what_my_hand_is_worth_to_the_camp(&simulation.population.agents[0], way, 0.0)
     };
     assert_eq!(worth(&simulation, Strategy::FishLocalWaters), 1.0, "nobody told them");
 
@@ -160,6 +160,16 @@ fn the_work_goes_to_the_hand_that_stands_best_at_it() {
     assert!(fishing <= 1.0 + Simulation::THE_MOST_A_ROLE_TIPS_IT);
     assert_eq!(worth(&simulation, Strategy::EatCarriedFood), 1.0, "no hand decides it");
 
+    // Weighing less as the need presses, and nothing to somebody starving
+    let agent = &simulation.population.agents[0];
+    let half = simulation.what_my_hand_is_worth_to_the_camp(agent, Strategy::GatherWildFood, 0.5);
+    assert!(foraging < half && half < 1.0, "{foraging} {half}");
+    assert_eq!(
+        simulation.what_my_hand_is_worth_to_the_camp(agent, Strategy::GatherWildFood, 1.0),
+        1.0,
+        "a starving one eats what is in reach"
+    );
+
     simulation.population.agents[0].traits.add_trait(Trait::Stubborn);
     assert_eq!(worth(&simulation, Strategy::FishLocalWaters), 1.0, "the stubborn do as they would");
 
@@ -167,10 +177,32 @@ fn the_work_goes_to_the_hand_that_stands_best_at_it() {
     alone.population.agents[0].found_out_how_to("know:division_of_labour");
     alone.population.agents[0].skills.set_skill_level(SkillType::Fishing, 8);
     assert_eq!(
-        alone.what_my_hand_is_worth_to_the_camp(&alone.population.agents[0], Strategy::FishLocalWaters),
+        alone.what_my_hand_is_worth_to_the_camp(&alone.population.agents[0], Strategy::FishLocalWaters, 0.0),
         1.0,
         "nobody to divide it with"
     );
+}
+
+/// Gathering is bringing in a field as well as stripping wild plants: the
+/// camp's best farmer, a poor forager and a better hunter, does not mark
+/// their harvest down for the foraging hand (#407, after #410).
+#[test]
+fn a_good_farmer_is_not_put_off_their_harvest() {
+    let mut simulation = a_camp(3);
+    for (index, agent) in simulation.population.agents.iter_mut().enumerate() {
+        let (farm, forage, hunt) = if index == 0 { (8, -4, 4) } else { (-2, 2, -2) };
+        agent.skills.set_skill_level(SkillType::Farming, farm);
+        agent.skills.set_skill_level(SkillType::Herbalism, forage);
+        agent.skills.set_skill_level(SkillType::Hunting, hunt);
+        agent.skills.set_skill_level(SkillType::Fishing, 0);
+    }
+    simulation.population.agents[0].found_out_how_to("know:division_of_labour");
+    let gathering = simulation.what_my_hand_is_worth_to_the_camp(
+        &simulation.population.agents[0],
+        Strategy::GatherWildFood,
+        0.0,
+    );
+    assert!(gathering >= 1.0, "the field is theirs to bring in: {gathering}");
 }
 
 /// Seeing a plainly better hand bring food in, five times, at work one has
