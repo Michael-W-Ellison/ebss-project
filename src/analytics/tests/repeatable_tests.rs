@@ -699,7 +699,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 3.9% to 956,187 for #410, and #407 as corrected: a trade keeps for a
     // year unused rather than nineteen hours, and a better hand is seen only
     // by somebody who has been at the same work.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 956_187;
+    // Down 2.4% to 933,238 for #407 corrected again: a role only lifts the
+    // way one stands best at, gathering is the better of the foraging and
+    // the farming hand, and a role weighs less as hunger presses.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 933_238;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
