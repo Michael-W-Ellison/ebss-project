@@ -696,7 +696,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // goes to the hand that stands best at it, a store is reckoned by tally
     // or by what was last seen of it, and seed is sown by the measure or at a
     // guess.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 920_310;
+    // Up 3.9% to 956,187 for #410, and #407 as corrected: a trade keeps for a
+    // year unused rather than nineteen hours, and a better hand is seen only
+    // by somebody who has been at the same work.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 956_187;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

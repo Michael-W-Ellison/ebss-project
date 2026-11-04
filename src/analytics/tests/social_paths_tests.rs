@@ -173,20 +173,28 @@ fn the_work_goes_to_the_hand_that_stands_best_at_it() {
     );
 }
 
-/// Seeing a plainly better hand bring food in, five times, and somebody is
-/// apt to leave that work to them; a hand no better teaches nothing.
+/// Seeing a plainly better hand bring food in, five times, at work one has
+/// been at oneself that half day, and somebody is apt to leave that work to
+/// them; a hand no better teaches nothing, and nor does a catch seen by
+/// somebody who has not been fishing.
 #[test]
 fn better_hands_seen_are_how_dividing_the_work_is_found_out() {
-    let mut simulation = a_camp(3);
+    let mut simulation = a_camp(4);
+    simulation.current_turn = Simulation::AT_THE_SAME_WORK_WITHIN * 4;
+    let now = simulation.current_turn;
     simulation.population.agents[0].skills.set_skill_level(SkillType::Fishing, 8);
     simulation.population.agents[1].skills.set_skill_level(SkillType::Fishing, -4);
+    simulation.population.agents[1].skills.get_skill_mut(SkillType::Fishing).last_used = now;
     simulation.population.agents[2].skills.set_skill_level(SkillType::Fishing, 8);
+    simulation.population.agents[2].skills.get_skill_mut(SkillType::Fishing).last_used = now;
+    simulation.population.agents[3].skills.set_skill_level(SkillType::Fishing, -4);
     for _ in 0..Simulation::BETTER_HANDS_SEEN_BEFORE_A_ROLE {
         assert!(!simulation.population.agents[1].knows_the_way("division_of_labour"));
         simulation.a_hand_seen_at_work(0, SkillType::Fishing);
     }
     assert!(simulation.population.agents[1].knows_the_way("division_of_labour"));
     assert!(!simulation.population.agents[2].knows_the_way("division_of_labour"), "as good a hand");
+    assert!(!simulation.population.agents[3].knows_the_way("division_of_labour"), "not at the work");
 }
 
 /// A pit last seen with a hundred in it and holding ten: somebody who keeps a

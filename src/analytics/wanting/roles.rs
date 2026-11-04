@@ -42,6 +42,10 @@ impl Simulation {
     /// How near somebody has to be to see what came in: a camp's width.
     pub(in crate::analytics) const NEAR_ENOUGH_TO_SEE_WHAT_CAME_IN: i32 = 12;
 
+    /// How lately somebody has to have been at the same work to set what
+    /// they brought in beside what somebody else did: half a day (#407).
+    pub(in crate::analytics) const AT_THE_SAME_WORK_WITHIN: u32 = crate::environment::seasons::TICKS_PER_DAY / 2;
+
     /// Whether this one takes the work the camp's hands leave them, knowing
     /// to: not the stubborn, the rebel or the proud, who do what they would
     /// have done whoever else is better at it.
@@ -82,12 +86,15 @@ impl Simulation {
     }
 
     /// Somebody has brought food in at a work: whoever grown is near enough
-    /// to see it, and has a plainly worse hand at it, has seen a better hand.
+    /// to see it, has been at the same work themselves within half a day, and
+    /// has a plainly worse hand at it, has seen a better hand: they know what
+    /// they brought in, and can set it beside this.
     /// Five times, and they are apt to think of leaving it to the better ones
     /// (`know:division_of_labour`, at the pace).
     pub(in crate::analytics) fn a_hand_seen_at_work(&mut self, worker: usize, at: SkillType) {
         let here = self.population.agents[worker].state.position;
         let theirs = self.population.agents[worker].skills.hand_for(at);
+        let now = self.current_turn;
         let mut seen = 0;
         for (index, agent) in self.population.agents.iter_mut().enumerate() {
             if index == worker
@@ -96,6 +103,10 @@ impl Simulation {
                 || (agent.state.position.0 - here.0).abs().max((agent.state.position.1 - here.1).abs())
                     > Self::NEAR_ENOUGH_TO_SEE_WHAT_CAME_IN
                 || agent.skills.hand_for(at) + Self::A_HAND_PLAINLY_BETTER_BY > theirs
+                || !agent
+                    .skills
+                    .get_skill_if_exists(at)
+                    .is_some_and(|mine| now.saturating_sub(mine.last_used) <= Self::AT_THE_SAME_WORK_WITHIN)
             {
                 continue;
             }
