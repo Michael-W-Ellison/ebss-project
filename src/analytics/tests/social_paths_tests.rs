@@ -136,8 +136,9 @@ fn blows_nobody_called_are_how_calling_is_found_out() {
 
 /// Three in a camp. The first is a fair fisher and a poor forager among
 /// worse fishers and better foragers: dividing the work, they lean to the
-/// fishing and away from the foraging. Not knowing to, or stubborn, or
-/// alone, it weighs nothing.
+/// fishing, and the foraging is worth what it ever was - leaning to one's
+/// own work is not being put off food in reach. Not knowing to, or
+/// stubborn, or alone, it weighs nothing.
 #[test]
 fn the_work_goes_to_the_hand_that_stands_best_at_it() {
     let mut simulation = a_camp(3);
@@ -156,16 +157,16 @@ fn the_work_goes_to_the_hand_that_stands_best_at_it() {
     let fishing = worth(&simulation, Strategy::FishLocalWaters);
     let foraging = worth(&simulation, Strategy::GatherWildFood);
     assert!(fishing > 1.0, "{fishing}");
-    assert!(foraging < 1.0, "{foraging}");
+    assert_eq!(foraging, 1.0, "never marked down");
     assert!(fishing <= 1.0 + Simulation::THE_MOST_A_ROLE_TIPS_IT);
     assert_eq!(worth(&simulation, Strategy::EatCarriedFood), 1.0, "no hand decides it");
 
     // Weighing less as the need presses, and nothing to somebody starving
     let agent = &simulation.population.agents[0];
-    let half = simulation.what_my_hand_is_worth_to_the_camp(agent, Strategy::GatherWildFood, 0.5);
-    assert!(foraging < half && half < 1.0, "{foraging} {half}");
+    let half = simulation.what_my_hand_is_worth_to_the_camp(agent, Strategy::FishLocalWaters, 0.5);
+    assert!(1.0 < half && half < fishing, "{fishing} {half}");
     assert_eq!(
-        simulation.what_my_hand_is_worth_to_the_camp(agent, Strategy::GatherWildFood, 1.0),
+        simulation.what_my_hand_is_worth_to_the_camp(agent, Strategy::FishLocalWaters, 1.0),
         1.0,
         "a starving one eats what is in reach"
     );
@@ -185,7 +186,8 @@ fn the_work_goes_to_the_hand_that_stands_best_at_it() {
 
 /// Gathering is bringing in a field as well as stripping wild plants: the
 /// camp's best farmer, a poor forager and a better hunter, does not mark
-/// their harvest down for the foraging hand (#407, after #410).
+/// their harvest down for the foraging hand but leans to it (#407, after
+/// #410).
 #[test]
 fn a_good_farmer_is_not_put_off_their_harvest() {
     let mut simulation = a_camp(3);
@@ -202,7 +204,7 @@ fn a_good_farmer_is_not_put_off_their_harvest() {
         Strategy::GatherWildFood,
         0.0,
     );
-    assert!(gathering >= 1.0, "the field is theirs to bring in: {gathering}");
+    assert!(gathering > 1.0, "the field is theirs to bring in: {gathering}");
 }
 
 /// Seeing a plainly better hand bring food in, five times, at work one has

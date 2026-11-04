@@ -18,7 +18,12 @@ use crate::core::traits::Trait;
 impl Simulation {
     /// How much one's standing at a way of getting food weighs on it, at
     /// most: a quarter more relief for the way one stands best at against
-    /// the camp, and a quarter less for the way one stands worst at.
+    /// the camp. Nothing less for the ways one stands worse at: a role is
+    /// leaning to one's own work, not being put off food in reach because
+    /// somebody else is better at getting it. It took a quarter off those
+    /// too, and once skills kept (#410) the camps that leaned away from their
+    /// harvests went hungry - 704 person-days wasting on thirteen worlds,
+    /// 496 with the farmer's hand counted, 272 lifting only (#407).
     pub(in crate::analytics) const WHAT_A_ROLE_WEIGHS: f32 = 0.5;
     pub(in crate::analytics) const THE_MOST_A_ROLE_TIPS_IT: f32 = 0.25;
 
@@ -105,7 +110,7 @@ impl Simulation {
         let here = standing(skill) / on_the_whole.max(f32::EPSILON);
         self.ways_weighed_by_the_hand.set(self.ways_weighed_by_the_hand.get() + 1);
         (1.0 + weighs * (here - 1.0))
-            .clamp(1.0 - Self::THE_MOST_A_ROLE_TIPS_IT, 1.0 + Self::THE_MOST_A_ROLE_TIPS_IT)
+            .clamp(1.0, 1.0 + Self::THE_MOST_A_ROLE_TIPS_IT)
     }
 
     /// Somebody has brought food in at a work: whoever grown is near enough
