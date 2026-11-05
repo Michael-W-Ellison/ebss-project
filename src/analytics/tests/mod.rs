@@ -144,6 +144,7 @@ pub mod strategy_tests;
 pub mod night_tests;
 pub mod by_hand_tests;
 mod spare_tools_tests;
+mod a_basket_kept_tests;
 pub mod minding_tests;
 pub mod young_parents_tests;
 pub mod carcass_tests;

@@ -2740,6 +2740,14 @@ impl Agent {
         Self::is_a_tool(name) && item.quantity > 1
     }
 
+    /// Whether this one could part with a thing of this name: anything but the
+    /// one tool or carrier in use. Curiosity does not try putting down,
+    /// cutting or scraping what it cannot spare, because the one carrier set
+    /// down to see what becomes of it is not picked up again (#412).
+    pub fn could_i_do_without(&self, called: &str) -> bool {
+        !Self::is_this_part_of_the_kit(called) || self.how_many_i_have(called) > 1
+    }
+
     /// What a person sets down when the pack will not take any more food.
     ///
     /// Nothing in this model ever put a load down. An agent picked up wood
@@ -5791,6 +5799,10 @@ impl Agent {
             return Some(edge);
         }
 
+        if let Some(carrier) = self.the_carrier_i_am_without() {
+            return Some(carrier);
+        }
+
         if self.state.years_old() >= Self::OLD_ENOUGH_TO_KEEP_A_KIT
             && self.how_many_i_have("lashing") == 0
             && self.knows_how_to_make("lashing")
@@ -5799,6 +5811,27 @@ impl Agent {
         }
 
         None
+    }
+
+    /// Something to carry in, for somebody who has made a basket and has
+    /// nothing to carry in now.
+    ///
+    /// Bare hands hold a dozen, and the kit alone - a bow, a net, a rod, an
+    /// axe, a knife and a stick - is more than that. Without a carrier there
+    /// is no room in the pack for a handful of anything, and curiosity, which
+    /// is where baskets came from, stops making a thing once it has made it
+    /// often enough to have seen it. So a basket lost was never made again:
+    /// one man in a smooth world set his down, walked on, and starved over
+    /// twenty-five days with two cords in his pack, the makings of another
+    /// (#412). Somebody who has never made one is still left to curiosity.
+    pub fn the_carrier_i_am_without(&self) -> Option<&'static str> {
+        if self.state.years_old() < Self::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+        if Self::WHAT_CARRIES.iter().any(|(carrier, _)| self.how_many_i_have(carrier) > 0) {
+            return None;
+        }
+        (self.skills.times_made("basket") > 0 && self.knows_how_to_make("basket")).then_some("basket")
     }
 
     /// The first half of `what_my_kit_is_short_of`: the edge, for somebody

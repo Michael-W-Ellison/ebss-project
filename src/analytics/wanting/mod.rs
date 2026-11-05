@@ -1218,6 +1218,15 @@ impl Simulation {
                 .or_else(|| self.a_ditch_to_dig(agent, agent_position))
                 .or_else(|| self.transplanting_action(agent, agent_position))
                 .or_else(|| self.a_young_one_to_catch(agent, agent_position))
+                // A trap of one's own at hand with fish in it is emptied
+                // before the day's walk to better ground, not left for the
+                // walk back. Below the walk, it never was: the walk went out,
+                // and on the better ground, with no better ground from there,
+                // the full trap was the next thing on this list and called
+                // him home - to be sent out again before he reached for it.
+                // Six legs of thirty-odd tiles a turn, and the burn doubled
+                // until he starved with food in his pack (#412).
+                .or_else(|| self.a_trap_of_mine_at_hand(agent, agent_position))
                 .or_else(|| self.moving_on(agent, agent_position))
                 .or_else(|| self.fishing_action(agent, agent_position)),
 

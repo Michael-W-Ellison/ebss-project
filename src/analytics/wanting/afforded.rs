@@ -226,10 +226,30 @@ impl Simulation {
                 continue;
             }
             for what in things {
+                // Not what this one cannot spare, by a verb that parts him
+                // from it or makes it into something else: the one basket set
+                // down to see what becomes of it was not picked up again, and
+                // the man starved with no room for a handful (#412).
+                if verb.targets == Targets::AThingHeld
+                    && Self::would_part_with_it(verb)
+                    && !agent.could_i_do_without(what)
+                {
+                    continue;
+                }
                 out.push((verb, format!("{}:{}", verb.called, what)));
             }
         }
         out
+    }
+
+    /// Whether doing this to a thing in the pack parts its owner from it or
+    /// makes it into something else. Equipping, wearing and eating do neither
+    /// in the sense that matters here: the thing is still had, or was meant
+    /// to be used up.
+    fn would_part_with_it(verb: &Verb) -> bool {
+        use crate::environment::verbs::Changes;
+        verb.changes.contains(&Changes::WhatAThingIs)
+            || matches!(verb.done_by, Some("putdown") | Some("spreadmuck") | Some("cover") | Some("store"))
     }
 
     /// The thing open here that this agent has tried least.
