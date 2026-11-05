@@ -269,7 +269,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // 6,767 for #391 to #393 as first made, and back to 6,783 with the
     // sealed basket only a way of lining a store: nothing in the first 120
     // turns now differs from before them.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_783;
+    // Down to 6,765 for #411: a tool is made once to see it, spare tools go
+    // on the grass to make room, nobody walks to a pit their pack cannot
+    // take from, and a whole fish counts as something to eat.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_765;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -702,7 +705,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 2.4% to 933,238 for #407 corrected again: a role only lifts the
     // way one stands best at, gathering is the better of the foraging and
     // the farming hand, and a role weighs less as hunger presses.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 933_238;
+    // Up 3.6% to 967,182 for #411: a tool is made once to see it, spare
+    // tools go on the grass to make room, nobody walks to a pit their pack
+    // cannot take from, and a whole fish counts as something to eat.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 967_182;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
