@@ -28085,7 +28085,8 @@ later entry. These were not. Each line names the entry that left it.
   barter. Still unlinked: gestures, drums, horns, smoke and beacons; elders,
   family heads and leaders; verbal agreements and marks of ownership; stage
   nought's measures. Skills keep a year now, not nineteen hours (#410), and
-  camps that keep them hunt and fish more and go hungrier (#411, open).
+  camps that kept them filled their packs with spare tools and could not
+  take food out of a store; spares now make room (#411).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30298,7 +30299,7 @@ calendar's days, and on this one they are nineteen hours and nine and a
 half: anything not done daily was back at nothing within a week. A trade
 keeps a year unused now and loses a level every half-year after.
 
-### 411. Kept skills turn camps to hunting and fishing, and more go hungry (open)
+### 411. A pack full of spare tools kept people out of the larder
 
 With skills that keep (#410), a practised hunter's throw lands more often
 (`how_often_a_throw_tells`) and a practised fisher's cast does
@@ -30316,9 +30317,9 @@ forty worlds over two years, against r415 (before #406):
 | hunger deaths | 2 | 10 | |
 
 Kills outrun what is cut and carried home, and the crows have the
-difference. Why that leaves more people hungry, when more food is being
-brought in, has not been looked at. #410 is not to be undone: a skill that
-was gone in a week was the bug.
+difference. That was the first reading of it, and it was not why people
+starved: see **What was found** below. #410 is not to be undone: a skill
+that was gone in a week was the bug.
 
 **Measured** #406 to #410, forty settlements over two years:
 
@@ -30365,3 +30366,86 @@ ignored.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns), unchanged; 933,238 (seed 0,
 a year), up 4.4% from 894,003 over #406 to #410.
+
+**What was found.** Each of the nine who starved in r422 was traced
+through the days they wasted, with every action counted by the branch of
+`generate_non_emotional_action` that chose it. Eight of the nine died the
+same way:
+
+- **Packs full of spare tools.** Curiosity makes a thing it has worked out
+  until it holds a few of it (`what_i_would_try_out`, `A_FEW_SPARE`, four),
+  and a tool was no exception: their packs were three bows, three nets,
+  three rods or three spears, with no room left. A tool was always kit
+  (`is_this_part_of_the_kit`), and kit is never set down, so nothing in the
+  pack would go on the grass to make room for a handful of roots.
+- **Walked from pit to pit.** The store branch sits above every drive. It
+  offered the nearest remembered pit; arrived, the pack could take nothing;
+  the next turn the other pit was nearer. They walked between two pits
+  about 250 times a day until the reserve ran out.
+- **Whole fish uneaten.** Two of them carried whole fish and had no knife.
+  A whole fish comes apart in the hands (`could_pull_apart_by_hand`), but
+  the hungry overrides asked only `has_edible_food`, so they were sent to
+  the store instead of eating.
+
+Why #410 brought this on: with skills that keep, a practised hand finds out
+the bow, the net and the rod sooner (the bow by a median day of 208 rather
+than 287), and a tool lasts longer in a better hand, so the spares pile up.
+On day 300, across three worlds, people carried 2.03 spare tools each with
+#410 and 0.58 without; on day 200, 1.25 and 0.06. Those two causes were not
+separated. Fish and meat portioning was known to about three in four by the
+end, with or without #410, so that was not it.
+
+**What changed.**
+
+- A tool is made once to see it. `what_i_would_try_out` stops at one of
+  anything that is kit, and still keeps a few of a part such as cord.
+- The kit is one of each tool. A second or third of the same tool is a
+  spare (`is_kit_to_spare`): `room_i_could_make`,
+  `what_i_would_set_down_keeping` and `how_much_of_this_makes_room` will set
+  spares down to make room, and never the last one, which is the one in use.
+- Nobody walks to a pit their pack cannot take from. `what_this_pit_offers`
+  asks `could_i_take_another_handful` before it offers the walk, as #252
+  did for rot.
+- A whole fish is something to eat. Both hungry overrides ask
+  `has_edible_food() || could_pull_apart_by_hand()`.
+
+**Measured** at HEAD (r423), the same forty worlds over two years:
+
+| | r415, before #406 | r419, #410 alone | r422, before this | r423 | t, r422 to r423 |
+|---|---|---|---|---|---|
+| births | 163 | 162 | 162 | 187 | 2.19 |
+| deaths | 3 | 12 | 11 | 8 | -0.77 |
+| of hunger | 2 | 10 | 9 | 2 | -2.48 |
+| alive at two years | 640 | 630 | 631 | 659 | 2.32 |
+| person-days wasting | 611 | 859 | 835 | 530 | |
+| field crop brought in | 67,015 | 83,529 | 60,307 | 105,121 | |
+| cooked | 79,185 | 64,634 | 66,194 | 74,735 | |
+| hunts | 1,032 | 1,827 | 1,854 | 1,732 | |
+| fish caught | 51,648 | 85,748 | 79,397 | 75,396 | |
+| meat left on kills | 1,395 | 3,886 | 3,960 | 4,176 | |
+| rotted | 42,143 | 43,108 | 44,448 | 41,263 | |
+
+Against r415, from before the social paths: births 163 to 187 (t 2.11),
+alive 640 to 659 (t 1.63), hunger deaths 2 and 2. Camps still hunt and fish
+more than before #410, and still leave more meat on kills; that is no longer
+what starves them.
+
+**Still open.** The two who starve in r423 carry one of each tool and eat
+most days, but not enough. 4c57de2c, in scattered world 2, starves about
+day 355 in r419, r422 and r423 alike. Their reserve goes from 0.99 on day
+270 to 0.27 on day 330. They eat from the store two to seven times a day,
+on dried legumes and nuts, and they are still climbing back (0.11 to 0.16)
+when the damage taken below the wasting line kills them. The other,
+29ea6723 in smooth world 12, is new in r423. Neither is the pack: that is a
+separate case of chronic undereating, and it has not been looked into.
+
+**Tests** (`spare_tools_tests`, 5): a tool is made to see it once; spare
+tools make room and the one in use stays; a pack of spare tools does not
+keep him out of the larder; a pack that cannot take a root is not walked to
+a pit; hungry, with whole fish and no knife, he eats. All five fail without
+the change. `a_roof_and_a_pack_tests` filled a pack that could not take a
+handful with many hand-axes. Spares now make room, so that pack holds one
+hand-axe that weighs all the room there is.
+
+**Dice counts**: 6,765 (seed 4242, 120 turns), down from 6,783; 967,182
+(seed 0, a year), up 3.6% from 933,238.
