@@ -552,7 +552,15 @@ impl Simulation {
         // promises what the executor will not do is the fault this project
         // keeps finding, and it is worse when the decision sits above every
         // drive there is.
-        if Self::is_the_body_eating_itself(agent) && !agent.has_edible_food() {
+        //
+        // Something to eat is also a whole fish or joint that comes apart in
+        // the hands: `Eat` tears it (#300), and nothing reaches `Eat` that is
+        // not offered it (#301). These two overrides asked only whether
+        // anything in the pack was edible as it stood, and sent somebody with
+        // three whole fish and no knife to the store instead, every turn,
+        // until the reserve ran out (#411).
+        let something_to_eat = agent.has_edible_food() || agent.could_pull_apart_by_hand();
+        if Self::is_the_body_eating_itself(agent) && !something_to_eat {
             if let Some(from_the_store) = self.something_out_of_the_store(agent, agent_position) {
                 return (from_the_store, false);
             }
@@ -580,7 +588,7 @@ impl Simulation {
             .get(DriveType::Hunger)
             .is_some_and(|hunger| hunger.is_active());
         if hungry && agent.state.physiology.room_for_another_mouthful() {
-            if agent.has_edible_food() {
+            if something_to_eat {
                 return (
                     Action::Eat {
                         food_type: "generic".to_string(),

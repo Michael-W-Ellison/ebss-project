@@ -2722,6 +2722,24 @@ impl Agent {
         (self.inventory.current_weight() - self.inventory.effective_max_weight()).max(0.0)
     }
 
+    /// Whether this is a tool: kit, but not a carrier.
+    pub fn is_a_tool(called: &str) -> bool {
+        crate::environment::making::EVERY_TOOL
+            .iter()
+            .any(|tool| tool.called == called)
+    }
+
+    /// Whether this stack is kit that may still go on the grass: the second
+    /// and later of a tool, which do no work while the first does (#411).
+    ///
+    /// The kit is one of each. A stack of three nets, three bows or three
+    /// spears read as kit to the last of them, so nothing in it could be set
+    /// down to make room, and a pack filled with them could take nothing out
+    /// of a store again. A carrier is not counted: the second basket is room.
+    fn is_kit_to_spare(name: &str, item: &InventoryItem) -> bool {
+        Self::is_a_tool(name) && item.quantity > 1
+    }
+
     /// What a person sets down when the pack will not take any more food.
     ///
     /// Nothing in this model ever put a load down. An agent picked up wood
@@ -2758,6 +2776,10 @@ impl Agent {
     /// Two places deciding whether a thing may leave the pack, and only one of
     /// them holding the rule. See ISSUES_FOUND #206, and #203 and #204 for the
     /// same defect in two other coats.
+    ///
+    /// The kit is one of each tool: the second net is not a means to a job
+    /// while the first is whole, and it may make room for supper
+    /// (`is_kit_to_spare`, #411). It is still not swapped away.
     pub fn is_this_part_of_the_kit(called: &str) -> bool {
         crate::environment::making::EVERY_TOOL
             .iter()
@@ -2793,6 +2815,9 @@ impl Agent {
     /// what is being carried is the means to something the carrier is going to
     /// want tonight. See ISSUES_FOUND #224.
     fn what_stays_in_the_pack(name: &str) -> u32 {
+        if Self::is_a_tool(name) {
+            return 1;
+        }
         match name {
             "wood" => Self::ENOUGH_WOOD_TO_HAND,
             // The cord for the next knife - see `what_my_kit_is_short_of`
@@ -2842,7 +2867,7 @@ impl Agent {
             .iter()
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
-            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+            .filter(|(name, item)| !Self::is_this_part_of_the_kit(name) || Self::is_kit_to_spare(name, item))
             .filter(|(name, _)| !keep.contains(&name.as_str()))
             .map(|(name, item)| {
                 item.quantity.saturating_sub(Self::what_stays_in_the_pack(name)) as f32
@@ -2897,7 +2922,7 @@ impl Agent {
             .iter()
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
-            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+            .filter(|(name, item)| !Self::is_this_part_of_the_kit(name) || Self::is_kit_to_spare(name, item))
             .filter(|(name, _)| !keep.contains(&name.as_str()))
             .max_by(|a, b| {
                 let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
@@ -2993,8 +3018,19 @@ impl Agent {
             return item.quantity;
         }
 
+        // And never the one tool of a kind that is the kit (#411): the
+        // spares go, the one in use stays.
+        let most = if Self::is_a_tool(what) {
+            item.quantity.saturating_sub(1)
+        } else {
+            item.quantity
+        };
+        if most == 0 {
+            return 0;
+        }
+
         let wanted = (room_wanted / each).ceil() as u32;
-        wanted.clamp(1, item.quantity)
+        wanted.clamp(1, most)
     }
 
     /// Food this agent has more of than it is going to eat.
@@ -5148,13 +5184,30 @@ impl Agent {
     /// a settlement made five hundred wheels a year and six hundred bows in
     /// two, for nobody to use (#335). A thing he wants for a use is wanted by
     /// another road - `what_i_would_rather_have` - and is not held back here.
+    ///
+    /// **And a tool is seen once it is in the hand.** The cap on how many he
+    /// keeps was the one for parts, four, which is right for cord and flakes
+    /// and wrong for a bow: somebody who had worked out a net made three,
+    /// twelve lashings' worth, and carried all of them. The pack that held
+    /// them could not take a handful out of a store, and once skills stopped
+    /// wearing off in a day (#410) eight of nine people who starved in forty
+    /// worlds did it with a pack full of spare bows, nets, rods and spears,
+    /// walking between two larders that would not let them in (#411). One of
+    /// a tool, then; a part he may still keep a few of.
     pub fn what_i_would_try_out(&self) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
+        let enough_of = |what: &str| {
+            if Self::is_this_part_of_the_kit(what) {
+                1
+            } else {
+                crate::environment::making::A_FEW_SPARE
+            }
+        };
 
         crate::environment::making::everything_to_find_out()
             .filter(|step| self.knows_how_to(step))
             .filter(|step| self.skills.times_made(step.makes) < Self::MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT)
-            .filter(|step| holding(step.makes) < crate::environment::making::A_FEW_SPARE)
+            .filter(|step| holding(step.makes) < enough_of(step.makes))
             .filter(|step| {
                 step.wants_in_hand
                     .is_none_or(|wanted| self.how_many_i_have(wanted) > 0)

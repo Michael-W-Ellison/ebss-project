@@ -1266,10 +1266,28 @@ impl Simulation {
             return Some(Action::PickUp { what });
         }
 
+        // And not a walk to a pit for somebody whose pack would not take a
+        // unit out of it when they got there, even making room. A walk does
+        // not empty a pack. Standing on one pit that would not let him in,
+        // the branch sent him to the next he remembered, and from there back:
+        // eight of the nine people who starved in forty worlds after skills
+        // were made to keep (#410) spent their last week walking between two
+        // larders a stone's throw apart, two hundred and fifty walks a day,
+        // with a pack full of spare tools (#411). #252 was the same walk with
+        // a pack full of rotten legumes.
+        if !agent.could_i_take_another_handful(Self::WHAT_MOST_OF_WHAT_IS_IN_A_PIT_WEIGHS) {
+            return None;
+        }
+
         Some(Action::Move {
             target: (where_it_is.x, where_it_is.y, agent_position.2),
         })
     }
+
+    /// What a unit of nearly anything in a pit weighs: roots, legumes,
+    /// greens, nuts, fish, grain and meat are a whole unit each, and only the
+    /// generic food a half (`what_one_of_these_weighs`, #215).
+    pub(in crate::analytics) const WHAT_MOST_OF_WHAT_IS_IN_A_PIT_WEIGHS: f32 = 1.0;
 
     /// The nearest pit this one remembers having food in it.
     ///
