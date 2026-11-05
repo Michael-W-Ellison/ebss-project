@@ -30543,6 +30543,8 @@ harvesting. This has not been traced.
     none is short of one, and comes by it by crafting it from two
     lashings.
 
-**Full suite**: running.
+**Full suite**: `cargo test --lib`, 3,132 tests: 3,126 passed, 0 failed, 6
+ignored, once the year's dice count was recorded.
 
-**Dice counts**: to be recorded from the full suite.
+**Dice counts**: 6,765 (seed 4242, 120 turns), unchanged; 908,858 (seed 0,
+a year), down 6.0% from 967,182.

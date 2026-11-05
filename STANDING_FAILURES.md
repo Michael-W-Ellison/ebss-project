@@ -28,10 +28,10 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #411, spare tools make room): `cargo test
---lib` in one piece, 3,129 tests: 3,123 passed, 0 failed, 6 ignored, in 35
-minutes.
-- The dice counts are 6,765 (seed 4242, 120 turns) and 967,182 (seed 0, a
+**Last full run** (ISSUES_FOUND #412, a trap at hand and a basket kept):
+`cargo test --lib` in one piece, 3,132 tests: 3,126 passed, 0 failed, 6
+ignored, in 26 minutes.
+- The dice counts are 6,765 (seed 4242, 120 turns) and 908,858 (seed 0, a
   year).
 - #363 turned nineteen tests red that leaned on what it fixed. Most made a man
   starving by setting his stamina to five, which read as starving only
