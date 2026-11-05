@@ -28086,7 +28086,9 @@ later entry. These were not. Each line names the entry that left it.
   family heads and leaders; verbal agreements and marks of ownership; stage
   nought's measures. Skills keep a year now, not nineteen hours (#410), and
   camps that kept them filled their packs with spare tools and could not
-  take food out of a store; spares now make room (#411).
+  take food out of a store; spares now make room (#411). The last two who
+  starved had walked between a full trap and the day's better ground, or
+  set their only basket down; nobody starves in forty worlds now (#412).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30431,13 +30433,7 @@ more than before #410, and still leave more meat on kills; that is no longer
 what starves them.
 
 **Still open.** The two who starve in r423 carry one of each tool and eat
-most days, but not enough. 4c57de2c, in scattered world 2, starves about
-day 355 in r419, r422 and r423 alike. Their reserve goes from 0.99 on day
-270 to 0.27 on day 330. They eat from the store two to seven times a day,
-on dried legumes and nuts, and they are still climbing back (0.11 to 0.16)
-when the damage taken below the wasting line kills them. The other,
-29ea6723 in smooth world 12, is new in r423. Neither is the pack: that is a
-separate case of chronic undereating, and it has not been looked into.
+most days, but not enough: see #412.
 
 **Tests** (`spare_tools_tests`, 5): a tool is made to see it once; spare
 tools make room and the one in use stays; a pack of spare tools does not
@@ -30453,3 +30449,100 @@ ignored. `clay_tests` made its full pack the same way as
 
 **Dice counts**: 6,765 (seed 4242, 120 turns), down from 6,783; 967,182
 (seed 0, a year), up 3.6% from 933,238.
+
+### 412. A fisher walking to and from his trap, and a basket set down
+
+After #411, two people still starved in the forty worlds of r423. Each
+carried one of each tool and ate most days, but not enough. Both were traced
+day by day with intake and burn, and every chosen walk was tagged with the
+file and line that built it. They died two different ways.
+
+**What was found.**
+
+- **4c57de2c, scattered world 2**, starves about day 355 in r419, r422 and
+  r423 alike. His intake held at about fifty units a day all along. From
+  day 295 his burn doubled, from 1,100 to 1,350 a day up to 1,700 to
+  2,300, and his reserve went from 0.99 to nothing. Inside single turns he
+  walked back and forth between his camp at (493,503) and better ground at
+  (473,531), about thirty tiles away, up to six legs a turn. At the camp
+  the Sustenance chain came to `moving_on` first, whose day's walk
+  (`camp.rs`, `better_ground_from`) took him to the better ground. Arrived
+  there, `moving_on` had nothing more to offer, and the next link,
+  `fishing_action`, sent him home to his own fish trap at (493,502), a
+  pace from the camp. At the camp the day's walk came first again, so the
+  trap was never emptied. His partner stayed at the camp, so it was not a
+  swap of places. Others at the camp with high burn lost reserve too.
+- **29ea6723, smooth world 12**, new in r423. His burn was normal, about
+  1,200 a day, but from day 325 his intake fell to five units a day. On day
+  323 a scrape of his basket failed, and then curiosity, which had not yet
+  tried putting a basket down (`what_i_have_tried_least_here`), set his
+  only basket on the grass. He walked on. Without it his pack held bow,
+  fishing net, fishing rod, hand-axe, sharpened stick and stone knife, and
+  that was already all that bare hands hold, so no food went in. Nothing
+  made a basket again: a lost edge is made again (`what_my_kit_is_short_of`),
+  a carrier was not. He had the two lashings a basket needs in his pack
+  when he died on day 348.
+
+**What changed.**
+
+- A trap of one's own at hand with fish in it is emptied before the day's
+  walk. `a_trap_of_mine_at_hand` sits in the Sustenance chain before
+  `moving_on` and offers `fishing_action`'s answer only when that answer
+  is `CheckFishTraps`: the trap is within reach and his own. Walking to a
+  trap further off is unchanged and still comes after the day's walk.
+- Curiosity does not put down, cut, scrape or store what its owner cannot
+  spare. `what_i_could_try_here` passes over a held thing when the verb
+  would part with it (it changes what the thing is, or it is put down,
+  spread, covered or stored) and `could_i_do_without` says no: the thing is
+  kit and the last of it. Looking at it is still offered.
+- A carrier lost is made again. `the_carrier_i_am_without` names a basket
+  for a grown person (twelve and over) who carries no handcart, travois,
+  leather bag or basket, has made a basket before, and knows how.
+  `what_my_kit_is_short_of` asks it after the edge and before lashing, so
+  spare turns go to making one, as they do for a lost edge.
+
+**Measured** at HEAD (r424), the same forty worlds over two years:
+
+| | r415, before #406 | r422, before #411 | r423, #411 | r424 | t, r423 to r424 |
+|---|---|---|---|---|---|
+| births | 163 | 162 | 187 | 192 | 0.70 |
+| deaths | 3 | 11 | 8 | 1 | -2.21 |
+| of hunger | 2 | 9 | 2 | 0 | -1.43 |
+| alive at two years | 640 | 631 | 659 | 671 | 1.45 |
+| person-days wasting | 611 | 835 | 530 | 118 | |
+| field crop brought in | 67,015 | 60,307 | 105,121 | 68,631 | |
+| cooked | 79,185 | 66,194 | 74,735 | 84,905 | |
+| hunts | 1,032 | 1,854 | 1,732 | 2,119 | |
+| fish caught | 51,648 | 79,397 | 75,396 | 89,127 | |
+| meat left on kills | 1,395 | 3,960 | 4,176 | 5,163 | |
+| rotted | 42,143 | 44,448 | 41,263 | 44,675 | |
+
+Nobody starves in r424, and both people traced here live through the two
+years. The one death is in childbirth. Against r415, from before the social
+paths: births 163 to 192 (t 2.40) and alive 640 to 671 (t 2.52). Against
+r422: hunger deaths 9 to 0 (t -3.36) and alive 631 to 671 (t 3.52).
+Person-days wasting fell to under a fifth of r415's.
+
+Field crop brought in fell back from r423's 105,121 to 68,631, about r415's
+level, while fish caught, hunts and cooking rose. Fishers now empty their
+traps before the day's walk, and that may take the place of some
+harvesting. This has not been traced.
+
+**Tests**:
+
+- `nomad_tests::a_full_trap_at_hand_is_emptied_before_the_days_walk`:
+  - With no trap, the day's walk is chosen.
+  - With his own full trap a pace off, he checks the trap.
+  - With somebody else's trap there, he walks.
+  - Without the change, he walked.
+- `a_basket_kept_tests` (2):
+  - `curiosity_does_not_put_down_the_only_basket`: the only basket is not
+    offered to put down or cut, though it is offered to look at. A second
+    basket is offered to put down. This fails without the change.
+  - `a_basket_lost_is_made_again`: somebody who has made a basket and has
+    none is short of one, and comes by it by crafting it from two
+    lashings.
+
+**Full suite**: running.
+
+**Dice counts**: to be recorded from the full suite.
