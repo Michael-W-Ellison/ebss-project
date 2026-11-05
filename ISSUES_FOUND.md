@@ -30447,5 +30447,9 @@ the change. `a_roof_and_a_pack_tests` filled a pack that could not take a
 handful with many hand-axes. Spares now make room, so that pack holds one
 hand-axe that weighs all the room there is.
 
+**Full suite**: `cargo test --lib`, 3,129 tests: 3,123 passed, 0 failed, 6
+ignored. `clay_tests` made its full pack the same way as
+`a_roof_and_a_pack_tests`, and ran forever until it was given one hand-axe.
+
 **Dice counts**: 6,765 (seed 4242, 120 turns), down from 6,783; 967,182
 (seed 0, a year), up 3.6% from 933,238.
