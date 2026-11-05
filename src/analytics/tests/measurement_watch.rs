@@ -36,7 +36,11 @@ fn zz_discovery_watch() {
     }
     let mut sim = Simulation::new(crate::world::World::new(cfg), population);
     sim.bring_everybody_to_the_middle();
-    crate::core::dice::seed(seed * 7919 + 3);
+    // REDRAW=n keeps the same world and founders and draws the rest of the
+    // run's dice afresh, so the spread a counter has between runs of the same
+    // code can be measured (#413). Unset, the dice are those they always were.
+    let redraw: u64 = std::env::var("REDRAW").ok().and_then(|r| r.parse().ok()).unwrap_or(0);
+    crate::core::dice::seed(seed * 7919 + 3 + redraw * 104_729);
     // At the development pace unless told otherwise (#389)
     if let Some(pace) = std::env::var("PACE").ok().and_then(|p| p.parse::<f64>().ok()) {
         crate::core::discovery::set(pace);
