@@ -2085,6 +2085,8 @@ name = "Woven bins"
 path = "storage"
 stage = 1
 role = "technique"
+model = ["know:line_the_store"]
+note = "Found out by comparing: somebody who opens bare stores and lined ones often enough sees the bare lose plainly more to vermin (Agent::what_the_stores_have_shown_me) (#394). They line a store worth it to them - what a season would save at what they have seen, times how much waste bothers them, against what a basket costs - with a vessel to spare or a basket woven of lashings to spare, as it fills or as a bare store of the camp's (#392, #394)."
 
 [[tech]]
 id = "storage.2.raised_racks"
@@ -2118,6 +2120,9 @@ name = "Sealed baskets"
 path = "storage"
 stage = 2
 role = "technique"
+model = ["know:seal_the_store"]
+needs = ["storage.1.woven_bins"]
+note = "A basket daubed shut with clay as it goes into a store, which vermin take from as little as from a fired pot. Only as it goes in: a sealed basket carries nothing. Comes to somebody who lines their stores and opens a lined one gnawed three times (Agent::LINED_STORES_GNAWED_BEFORE_SEALING) (#393)."
 
 [[tech]]
 id = "storage.2.above_ground_bins"
@@ -4751,6 +4756,8 @@ name = "Household sharing"
 path = "trade_and_exchange_system"
 stage = 0
 role = "technique"
+model = ["do:GoWithout"]
+note = "Going without so that somebody else eats."
 
 [[tech]]
 id = "trade_and_exchange_system.0.gift_exchange"
@@ -4758,6 +4765,8 @@ name = "Gift exchange"
 path = "trade_and_exchange_system"
 stage = 0
 role = "technique"
+model = ["do:GiveTo"]
+note = "Handing over half of what one has spare."
 
 [[tech]]
 id = "trade_and_exchange_system.0.reciprocity"
@@ -4772,6 +4781,8 @@ name = "Immediate barter within small group"
 path = "trade_and_exchange_system"
 stage = 0
 role = "technique"
+model = ["do:Trade"]
+note = "A swap there and then, with somebody near."
 
 [[tech]]
 id = "trade_and_exchange_system.1.exchange_of_food_hides_stone_baskets"
@@ -5308,6 +5319,8 @@ name = "Pebbles"
 path = "writing_counting_and_recordkeeping"
 stage = 1
 role = "technique"
+model = ["know:tally"]
+note = "A tally, as tally sticks."
 
 [[tech]]
 id = "writing_counting_and_recordkeeping.1.knotted_cords"
@@ -5322,6 +5335,8 @@ name = "Tally sticks"
 path = "writing_counting_and_recordkeeping"
 stage = 1
 role = "technique"
+model = ["know:tally"]
+note = "Found out by finding a pit holding well under what it was last seen to: whoever keeps a tally reckons the store by what is in it, where anybody else goes by what they last saw."
 
 [[tech]]
 id = "writing_counting_and_recordkeeping.1.notches_in_wood_or_bone"
@@ -5329,6 +5344,8 @@ name = "Notches in wood or bone"
 path = "writing_counting_and_recordkeeping"
 stage = 1
 role = "technique"
+model = ["know:tally"]
+note = "A tally, as tally sticks."
 
 [[tech]]
 id = "writing_counting_and_recordkeeping.1.counting_baskets_piles_or_tokens"
@@ -5336,6 +5353,8 @@ name = "Counting baskets, piles, or tokens"
 path = "writing_counting_and_recordkeeping"
 stage = 1
 role = "technique"
+model = ["know:tally"]
+note = "A tally, as tally sticks: what goes into the store, counted."
 
 [[tech]]
 id = "writing_counting_and_recordkeeping.2.fixed_units_for_grain_jars_hides"
@@ -5518,6 +5537,8 @@ name = "Speech"
 path = "communication"
 stage = 0
 role = "technique"
+model = ["do:ShareInformation", "do:AskAbout"]
+note = "Telling somebody where something is and asking them; heard at talking distance, six paces, and only ever of places."
 
 [[tech]]
 id = "communication.0.gestures"
@@ -5588,6 +5609,8 @@ name = "Standardized calls for danger, assembly, hunt, or weather"
 path = "communication"
 stage = 1
 role = "technique"
+model = ["know:calls"]
+note = "Found out by being struck by a beast somebody else had been warned off near there that day: whoever knows calls out what warned them off, and everybody in twenty-five paces knows where it is. Danger only; not assembly, hunt or weather."
 
 [[tech]]
 id = "communication.2.trusted_runners"
@@ -5966,6 +5989,8 @@ name = "Recognized roles by age, skill, or season"
 path = "governance_and_labor_organization"
 stage = 1
 role = "technique"
+model = ["know:division_of_labour"]
+note = "By skill: the same reckoning as the division of labour, which is a role by the hand at it."
 
 [[tech]]
 id = "governance_and_labor_organization.1.division_of_labor_in_food_gathering"
@@ -5973,6 +5998,8 @@ name = "Division of labor in food gathering, guarding, toolmaking, childcare"
 path = "governance_and_labor_organization"
 stage = 1
 role = "technique"
+model = ["know:division_of_labour"]
+note = "Found out by seeing better hands bring food in: whoever knows leans to the work, of foraging, fishing and hunting, where their hand stands best against their camp's. Food gathering only."
 
 [[tech]]
 id = "governance_and_labor_organization.1.informal_obligations_to_share_labor_during"
@@ -6190,6 +6217,8 @@ name = "Known seed amounts for planting"
 path = "measurement_and_standardization"
 stage = 1
 role = "technique"
+model = ["know:measured_sowing"]
+note = "Found out by bringing in fields one sowed thin: seed thrown by the eye goes in too thin a third of the time, and the field carries seven tenths, and too thick a third, a second handful wasted; by the measure it goes in right."
 
 [[tech]]
 id = "measurement_and_standardization.1.shared_estimates_for_herd_size_or"
@@ -9028,6 +9057,8 @@ name = "Selection of preferred springs over surface water"
 path = "water_system"
 stage = 1
 role = "technique"
+model = ["know:clean_water"]
+note = "Water with fouled ground about it passed by for clean, when clean is known within reach. Found out by being laid up from foul water twice (Agent::ILL_FROM_FOUL_WATER_BEFORE_CHOOSING) (#391)."
 
 [[tech]]
 id = "water_system.2.spring_boxing"
@@ -9357,6 +9388,8 @@ name = "Cleaning visible dirt from wounds"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["do:CleanWound"]
+note = "Found out by seeing wounds turn: a wound washed with water carried or at hand turns half as often."
 
 [[tech]]
 id = "medicine_and_public_health.1.cautery"
@@ -9364,6 +9397,8 @@ name = "Cautery"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["do:Cauterise"]
+note = "Found out by seeing to wounds bleeding hard beside a fire: a brand stops the bleeding at once and sears the wound half shut and clean, for a burn and a fright. The cowardly and anxious will not sear their own; the kind-hearted will not sear anybody's."
 
 [[tech]]
 id = "medicine_and_public_health.1.bone_setting"
@@ -9371,6 +9406,8 @@ name = "Bone setting"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["do:SetBone"]
+note = "A hard blow can break a limb, which halves the pace for six weeks and, left, knits crooked three times in five for a lasting limp. Found out by seeing bones knit crooked: set and splinted with wood and a binding, it knits crooked one time in ten."
 
 [[tech]]
 id = "medicine_and_public_health.1.stitching_simple_closure"
@@ -9378,6 +9415,8 @@ name = "Stitching/simple closure"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["do:StitchWound"]
+note = "Found out by binding wounds with a point in the pack: sewn with a point and a thread, a wound bleeds no more and closes twice as fast."
 
 [[tech]]
 id = "medicine_and_public_health.1.midwifery_beginnings"
@@ -9385,6 +9424,8 @@ name = "Midwifery beginnings"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["do:AttendBirth"]
+note = "One birth in eight goes hard, losing the child two times in five and the mother one in ten. Found out by being at births: somebody who knows goes to a mother whose child is near and stays, and halves both."
 
 [[tech]]
 id = "medicine_and_public_health.1.basic_poultices_and_teas"
@@ -9392,6 +9433,8 @@ name = "Basic poultices and teas"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["know:poultices_and_teas"]
+note = "Found out by dosing other people: a remedy steeped in hot water draws out half as much again, and a herb bound in under a dressing halves how often the wound turns."
 
 [[tech]]
 id = "medicine_and_public_health.2.knowledge_of_analgesic_purgative_anti_inflammatory"
@@ -10025,6 +10068,8 @@ name = "Deliberate seed saving"
 path = "agricultural"
 stage = 3
 role = "technique"
+model = ["know:save_seed"]
+note = "Seed for every field a camp sows kept back off the harvest itself as it comes in, not a handful out of what is left in the pack (Agent::save_seed_off, A_SEASONS_SEED). Found out by breaking ground with no seed kept back often enough (Agent::TIMES_SOWN_WITHOUT_SEED_BEFORE_SAVING) (#396)."
 
 [[tech]]
 id = "agricultural.3.selection_for_larger_seeds_fruits_non"
@@ -10032,6 +10077,9 @@ name = "Selection for larger seeds/fruits, non-shattering grain heads, reduced b
 path = "agricultural"
 stage = 3
 role = "technique"
+model = ["know:select_seed"]
+needs = ["agricultural.3.deliberate_seed_saving"]
+note = "Seed saved off the stands that stood full, by somebody who saves seed: the seed they keep is bred a step on each harvest, and a stand sown of seed bred as far as it goes carries half again what wild seed does (ResourceNode::bred, Agent::seed_line). The five traits are one figure. Grain only. Found out by saving seed off enough harvests (Agent::HARVESTS_SAVED_FROM_BEFORE_SELECTING) (#397)."
 
 [[tech]]
 id = "agricultural.3.basic_seasonality_knowledge"
@@ -10039,6 +10087,8 @@ name = "Basic seasonality knowledge"
 path = "agricultural"
 stage = 3
 role = "technique"
+model = ["know:seasons"]
+note = "A ripe crop of the camp's brought in before its season is out, hungry or not, by somebody who keeps the seasons in mind: within a month of the end, and enough standing to be worth the walk to them by how much waste bothers them (Simulation::a_harvest_to_bring_in). Found out by seeing ripe crops of the camp's fall in the field, nobody having brought them in (Agent::CROPS_LOST_BEFORE_THE_SEASONS). When to sow hardly matters in the model: a field sown out of season waits for its season (#395)."
 
 [[tech]]
 id = "agricultural.3.primitive_field_boundaries"
@@ -10046,6 +10096,8 @@ name = "Primitive field boundaries"
 path = "agricultural"
 stage = 3
 role = "technique"
+model = ["know:hedge_fields"]
+note = "An edge of brush banked round a clump of the camp's fields, eight armfuls, standing a year (ThornHedge::round_fields): beasts are turned at it as at a camp's ring of thorn, and pests come on a field inside a closed hedge at half the pace (Soil::WHAT_A_HEDGE_KEEPS_OFF). Found out by weeding fields inside the camp's thorn and fields outside it, and seeing the open ones plainly the worse for pests (Agent::what_the_fields_have_shown_me); laid where the open fields it would take in are worth the brush to somebody, by how much waste bothers them (#398)."
 
 [[tech]]
 id = "agricultural.4.permanent_or_semi_permanent_fields"

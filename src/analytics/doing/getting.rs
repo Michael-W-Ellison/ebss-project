@@ -192,15 +192,47 @@ impl Simulation {
         // end up at the sea because the sea was closer.
         let would_drink_the_sea =
             self.population.agents[agent_index].would_i_drink_the_sea();
+        // And whether it is foul about, to somebody who knows to choose
+        // their water (#391), when they know of clean water within reach:
+        // with nothing clean to go to, a drink is a drink.
+        let fouled = |resource: &crate::world::ResourceNode| {
+            self.world
+                .how_foul_about((resource.position.x, resource.position.y), Self::WHAT_SEEPS_INTO_WATER)
+                > 0.0
+        };
+        // And clean water is water they would drink: the sea is clean, and
+        // somebody who will not drink it has nothing clean to go to. Counting
+        // it left a camp passing by the foul spring at its feet for a sea it
+        // would not touch, and three of them died of thirst there (#405).
+        let salt = |resource: &crate::world::ResourceNode| {
+            !would_drink_the_sea
+                && self
+                    .world
+                    .grid
+                    .get_tile(&resource.position)
+                    .is_some_and(|tile| tile.terrain.is_the_water_salt())
+        };
+        let passes_by_foul_water = resource_type_enum == ResourceType::Water
+            && self.population.agents[agent_index].knows_the_way("clean_water")
+            && self
+                .nodes_this_one_knows_of(&self.population.agents[agent_index], agent_pos, Self::FORAGE_RADIUS)
+                .into_iter()
+                .any(|i| {
+                    let resource = &self.world.resources[i];
+                    resource.resource_type == ResourceType::Water
+                        && resource.anything_to_take()
+                        && agent_pos.distance_to(&resource.position) <= Self::FORAGE_RADIUS
+                        && !fouled(resource)
+                        && !salt(resource)
+                });
         let a_drink_this_one_would_take = |resource: &crate::world::ResourceNode| {
-            if resource.resource_type != ResourceType::Water || would_drink_the_sea {
+            if resource.resource_type != ResourceType::Water {
                 return true;
             }
-            !self
-                .world
-                .grid
-                .get_tile(&resource.position)
-                .is_some_and(|tile| tile.terrain.is_the_water_salt())
+            if passes_by_foul_water && fouled(resource) {
+                return false;
+            }
+            !salt(resource)
         };
 
         for i in self.nodes_this_one_knows_of(
@@ -425,6 +457,20 @@ impl Simulation {
             // Read before the harvest: an emptied stand is taken up
             // (`did_that_empty_it`) and its index goes to another node
             let sown_by = self.world.resources[resource_index].sown_by;
+            // A ripe field crop, which seed can be saved off: what it was bred
+            // from, and whether it stood full, which is the stand somebody
+            // choosing would save from (#396, #397)
+            let off_a_field = self.world.resources[resource_index].on_a_field;
+            let sown_thin_by = self.world.resources[resource_index].sown_thin_by;
+            let seed_off_it = {
+                let node = &self.world.resources[resource_index];
+                (node.on_a_field && node.ripe_stand > 0 && node.resource_type == ResourceType::Grain).then(|| {
+                    let full = node.how_heavy_a_crop_it_carries(
+                        self.world.grid.what_it_yields_here_for(&node.position, node.resource_type),
+                    );
+                    (node.bred, full > 0 && node.ripe_stand >= full)
+                })
+            };
             let harvested = {
                 let node = &mut self.world.resources[resource_index];
                 let taken = node.harvest(harvest_amount);
@@ -782,6 +828,23 @@ impl Simulation {
                     self.cut_for_somebody_else(agent_index, where_it_grew, took);
                 }
                 let went_in_the_pack = took > 0;
+                // Seed kept back off the harvest itself, by somebody who saves
+                // seed on purpose (#396)
+                if let (true, Some((bred, stood_full))) = (went_in_the_pack, seed_off_it) {
+                    self.population.agents[agent_index].save_seed_off(bred, took, stood_full);
+                }
+                // A harvest off a field one sowed thin oneself, three times, is
+                // how sowing by the measure comes to mind (#409)
+                if went_in_the_pack && sown_thin_by == Some(self.population.agents[agent_index].id) {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.skills.made_one(Self::A_THIN_FIELD_GATHERED);
+                    if agent.skills.times_made(Self::A_THIN_FIELD_GATHERED) >= Self::THIN_FIELDS_BEFORE_A_MEASURE {
+                        agent.it_comes_to_me("know:measured_sowing", Self::THIN_FIELDS_BEFORE_A_MEASURE);
+                    }
+                }
+                if went_in_the_pack && off_a_field {
+                    self.world.field_crop_brought_in += took as u64;
+                }
                 if it_is_food {
                     self.food_items_into_packs += took as u64;
                 }
@@ -803,6 +866,12 @@ impl Simulation {
                 // the branch #236 measured taking 84% of every armful.
                 if went_in_the_pack && took < harvested {
                     self.world.resources[resource_index].put_it_back(harvested - took);
+                }
+                // An armful of food brought in is seen by whoever is near (#407)
+                if went_in_the_pack
+                    && Self::trade_for_gathering(resource_type_enum) == crate::agents::SkillType::Herbalism
+                {
+                    self.a_hand_seen_at_work(agent_index, crate::agents::SkillType::Herbalism);
                 }
                 let agent = &mut self.population.agents[agent_index];
                 if went_in_the_pack {
@@ -1078,6 +1147,9 @@ impl Simulation {
                     // the hunter home (#354)
                     let taken = self.a_young_one_left_behind(agent_index, &species, fell_at);
 
+                    // A kill brought down is seen by whoever is near (#407)
+                    self.a_hand_seen_at_work(agent_index, crate::agents::skills::SkillType::Hunting);
+
                     // Increase hunting skill
                     let agent = &mut self.population.agents[agent_index];
                     agent
@@ -1325,7 +1397,7 @@ impl Simulation {
         // anything.
         let whose = self.population.agents[agent_index].id;
 
-        self.world.pits.push(Pit {
+        self.world.pits.push(Pit { gnawed: 0, last_opened: None,
             where_it_is: here,
             holds: Vec::new(),
             covered: false,
@@ -1473,6 +1545,9 @@ impl Simulation {
         let food_data = self
             .food_database
             .create_food_data(&crate::world::inventory::ItemType::Fish, self.current_turn);
+
+        // A catch is seen by whoever is near (#407)
+        self.a_hand_seen_at_work(agent_index, crate::agents::SkillType::Fishing);
 
         let agent = &mut self.population.agents[agent_index];
         let mut catch =

@@ -139,12 +139,17 @@ fn curiosity_does_not_fetch_what_there_is_no_room_to_carry() {
         .resources
         .push(ResourceNode::new(ResourceType::Clay, here, 50));
 
-    // A pack full of the kit, which nobody sets down
-    while simulation.population.agents[0].could_i_take_another_handful(1.0) {
-        simulation.population.agents[0]
-            .inventory
-            .add_item(InventoryItem::new_with_weight("handaxe".to_string(), 1, 1.0));
-    }
+    // A pack full of the kit, which nobody sets down: one hand-axe weighing
+    // all the room there is. A pack of several would not do, because the
+    // spares go on the grass to make room (#411).
+    let agent = &mut simulation.population.agents[0];
+    agent.inventory.get_all_items_mut().remove("handaxe");
+    let room = agent.inventory.weight_capacity_remaining();
+    let mut axe = InventoryItem::new_with_weight("handaxe".to_string(), 1, room);
+    axe.current_durability = Some(40.0);
+    axe.max_durability = Some(40.0);
+    agent.inventory.get_all_items_mut().insert("handaxe".to_string(), axe);
+    assert!(!agent.could_i_take_another_handful(1.0), "the fixture is a full pack");
 
     let position = simulation.population.agents[0].state.position;
     assert!(

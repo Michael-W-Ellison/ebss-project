@@ -1208,6 +1208,41 @@ pub struct AgentState {
     /// wound closes twice as fast and turns half as often.
     #[serde(default)]
     pub wound_dressed_until: u32,
+
+    /// The dirt washed out of the wound (#399): it turns half as often.
+    /// A fresh blow opens a fresh, dirty one.
+    #[serde(default)]
+    pub wound_cleaned: bool,
+
+    /// The wound stitched shut (#401): it closes twice as fast and bleeds no
+    /// more.
+    #[serde(default)]
+    pub wound_stitched: bool,
+
+    /// A herb bound in under the dressing (#404): the wound turns half as
+    /// often again while the dressing holds.
+    #[serde(default)]
+    pub wound_poulticed: bool,
+
+    /// A broken limb, mending from one to nought (#402). Somebody with one
+    /// gets about at half their pace until it has knit.
+    #[serde(default)]
+    pub a_broken_limb: f32,
+
+    /// Whether the break was pulled straight and splinted (#402).
+    #[serde(default)]
+    pub limb_set: bool,
+
+    /// What a bone that knit crooked takes off getting about, for good
+    /// (#402).
+    #[serde(default)]
+    pub limps: f32,
+
+    /// What happened to this body that the people round it would see, kept
+    /// until the turn's pass hands it on (#399, #402): a wound that turned, a
+    /// bone that broke, a bone that knit.
+    #[serde(default)]
+    pub to_be_seen: Vec<String>,
 }
 
 impl AgentState {
@@ -1254,6 +1289,13 @@ impl AgentState {
             an_open_wound: 0.0,
             bleeding: 0.0,
             wound_dressed_until: 0,
+            wound_cleaned: false,
+            wound_stitched: false,
+            wound_poulticed: false,
+            a_broken_limb: 0.0,
+            limb_set: false,
+            limps: 0.0,
+            to_be_seen: Vec::new(),
         }
     }
 
@@ -1415,12 +1457,54 @@ impl AgentState {
         // `take_damage` is the one place a blow lands - hunger and cold go
         // through `lose_health` and leave nothing to fester.
         let opened = (amount / Self::WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND).clamp(0.0, 1.0);
+        // A wound opened wider than the one there is a fresh one, with the
+        // dirt of whatever made it in it and nothing done to it yet
+        if opened > self.an_open_wound {
+            self.wound_cleaned = false;
+            self.wound_stitched = false;
+            self.wound_poulticed = false;
+        }
         self.an_open_wound = self.an_open_wound.max(opened);
+        // And a hard enough blow breaks something (#402)
+        self.a_blow_may_break_a_bone(amount);
         // And it bleeds, as hard as it is open (#351)
         self.bleeding = self.bleeding.max(opened * Self::WHAT_AN_OPEN_WOUND_BLEEDS);
 
         self.lose_health(amount, Self::A_BLOW);
     }
+
+    /// A blow hard enough may break a limb (#402): none below
+    /// `WHAT_A_BLOW_HAS_TO_BE_TO_BREAK_A_BONE`, and the odds climb with the
+    /// blow to `THE_MOST_A_BLOW_BREAKS`. One break at a time.
+    fn a_blow_may_break_a_bone(&mut self, amount: f32) {
+        use rand::Rng;
+
+        if self.a_broken_limb > 0.0 || amount <= Self::WHAT_A_BLOW_HAS_TO_BE_TO_BREAK_A_BONE {
+            return;
+        }
+        let odds = ((amount - Self::WHAT_A_BLOW_HAS_TO_BE_TO_BREAK_A_BONE) / Self::WHAT_MORE_BREAKS_ONE_FOR_CERTAIN)
+            .clamp(0.0, Self::THE_MOST_A_BLOW_BREAKS);
+        if crate::core::dice::roll().gen_bool(odds as f64) {
+            self.a_broken_limb = 1.0;
+            self.limb_set = false;
+            self.to_be_seen.push(Self::A_BONE_BROKE.to_string());
+        }
+    }
+
+    /// A blow has to be harder than this to break anything: the kick of a
+    /// deer or the charge of a boar, not a scratch (#402).
+    pub const WHAT_A_BLOW_HAS_TO_BE_TO_BREAK_A_BONE: f32 = 15.0;
+
+    /// How much harder than that a blow would have to be to break a limb for
+    /// certain, if anything did, and the most any one blow breaks.
+    pub const WHAT_MORE_BREAKS_ONE_FOR_CERTAIN: f32 = 50.0;
+    pub const THE_MOST_A_BLOW_BREAKS: f32 = 0.4;
+
+    /// What the turn's pass is told happened to a body (#399, #402).
+    pub const A_BONE_BROKE: &'static str = "a bone broke";
+    pub const A_BONE_KNIT_CROOKED: &'static str = "a bone knit crooked";
+    pub const A_BONE_KNIT_STRAIGHT: &'static str = "a bone knit straight";
+    pub const A_WOUND_TURNED: &'static str = "a wound turned";
 
     /// Lose health to a named thing.
     ///
@@ -1481,10 +1565,12 @@ impl AgentState {
     pub const A_POOR_DIET: &'static str = "a poor diet";
     pub const EXHAUSTION: &'static str = "exhaustion";
     pub const OLD_AGE: &'static str = "old age";
+    /// A birth that went hard (#403).
+    pub const CHILDBIRTH: &'static str = "childbirth";
 
     /// Every one of them, so that anything wanting to reason about the whole
     /// vocabulary does not have to keep its own copy and watch it rot.
-    pub const EVERYTHING_THAT_TAKES_HEALTH: [&'static str; 11] = [
+    pub const EVERYTHING_THAT_TAKES_HEALTH: [&'static str; 12] = [
         Self::HUNGER,
         Self::THIRST,
         Self::A_BLOW,
@@ -1496,6 +1582,7 @@ impl AgentState {
         Self::A_POOR_DIET,
         Self::EXHAUSTION,
         Self::OLD_AGE,
+        Self::CHILDBIRTH,
     ];
 
     /// How hard a blow has to be before it leaves anything worth calling a
@@ -1964,6 +2051,32 @@ pub struct Agent {
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
     found_out: std::collections::BTreeSet<String>,
+    /// What of that this one came to themselves, not shown or taught (#390).
+    #[serde(default)]
+    came_to_myself: std::collections::BTreeSet<String>,
+    /// What this one has come to since the camp last took notice of it
+    /// (#390): `Simulation::what_the_camp_makes_of_it`.
+    #[serde(default)]
+    pub lately_came_to: Vec<String>,
+    /// What this one has seen stores lose to vermin, by how they were shut
+    /// (#394): food-days of keeping watched, and what was gone at the end of
+    /// them. What lets somebody who opens both bare and lined stores see
+    /// which keeps better.
+    #[serde(default)]
+    pub store_losses: std::collections::BTreeMap<String, (f64, f64)>,
+    /// How far the seed this one keeps has been bred from the wild, from
+    /// nothing to one (#397): what a stand sown of it carries
+    /// (`ResourceNode::bred`). Taken on with seed saved off a better stand,
+    /// and raised by choosing the heaviest to save from.
+    #[serde(default)]
+    pub seed_line: f32,
+    /// What this one has seen of pests on fields they weeded, by whether a
+    /// hedge kept the beasts off them (#398): how many fields, and the share
+    /// of what wanted clearing that was pests. What lets somebody who weeds
+    /// fields inside the camp's thorn and fields outside it see which fare
+    /// better.
+    #[serde(default)]
+    pub field_pests: std::collections::BTreeMap<String, (f64, f64)>,
     /// Every swap this one has tried, by `what_that_swap_is_called`.
     ///
     /// Kept apart from `lessons` for the same reason as `times_laid_up`. A
@@ -2229,6 +2342,11 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
             found_out: Self::what_anybody_is_born_knowing(),
+            came_to_myself: std::collections::BTreeSet::new(),
+            lately_came_to: Vec::new(),
+            store_losses: std::collections::BTreeMap::new(),
+            seed_line: 0.0,
+            field_pests: std::collections::BTreeMap::new(),
             swaps_tried: std::collections::BTreeSet::new(),
             what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
@@ -2604,6 +2722,32 @@ impl Agent {
         (self.inventory.current_weight() - self.inventory.effective_max_weight()).max(0.0)
     }
 
+    /// Whether this is a tool: kit, but not a carrier.
+    pub fn is_a_tool(called: &str) -> bool {
+        crate::environment::making::EVERY_TOOL
+            .iter()
+            .any(|tool| tool.called == called)
+    }
+
+    /// Whether this stack is kit that may still go on the grass: the second
+    /// and later of a tool, which do no work while the first does (#411).
+    ///
+    /// The kit is one of each. A stack of three nets, three bows or three
+    /// spears read as kit to the last of them, so nothing in it could be set
+    /// down to make room, and a pack filled with them could take nothing out
+    /// of a store again. A carrier is not counted: the second basket is room.
+    fn is_kit_to_spare(name: &str, item: &InventoryItem) -> bool {
+        Self::is_a_tool(name) && item.quantity > 1
+    }
+
+    /// Whether this one could part with a thing of this name: anything but the
+    /// one tool or carrier in use. Curiosity does not try putting down,
+    /// cutting or scraping what it cannot spare, because the one carrier set
+    /// down to see what becomes of it is not picked up again (#412).
+    pub fn could_i_do_without(&self, called: &str) -> bool {
+        !Self::is_this_part_of_the_kit(called) || self.how_many_i_have(called) > 1
+    }
+
     /// What a person sets down when the pack will not take any more food.
     ///
     /// Nothing in this model ever put a load down. An agent picked up wood
@@ -2640,6 +2784,10 @@ impl Agent {
     /// Two places deciding whether a thing may leave the pack, and only one of
     /// them holding the rule. See ISSUES_FOUND #206, and #203 and #204 for the
     /// same defect in two other coats.
+    ///
+    /// The kit is one of each tool: the second net is not a means to a job
+    /// while the first is whole, and it may make room for supper
+    /// (`is_kit_to_spare`, #411). It is still not swapped away.
     pub fn is_this_part_of_the_kit(called: &str) -> bool {
         crate::environment::making::EVERY_TOOL
             .iter()
@@ -2675,12 +2823,15 @@ impl Agent {
     /// what is being carried is the means to something the carrier is going to
     /// want tonight. See ISSUES_FOUND #224.
     fn what_stays_in_the_pack(name: &str) -> u32 {
+        if Self::is_a_tool(name) {
+            return 1;
+        }
         match name {
             "wood" => Self::ENOUGH_WOOD_TO_HAND,
             // The cord for the next knife - see `what_my_kit_is_short_of`
             "lashing" => 2,
             // Next year's field - see `keep_seed_back`
-            Self::SEED => Self::A_HANDFUL_OF_SEED,
+            Self::SEED => Self::A_SEASONS_SEED,
             _ => 0,
         }
     }
@@ -2724,7 +2875,7 @@ impl Agent {
             .iter()
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
-            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+            .filter(|(name, item)| !Self::is_this_part_of_the_kit(name) || Self::is_kit_to_spare(name, item))
             .filter(|(name, _)| !keep.contains(&name.as_str()))
             .map(|(name, item)| {
                 item.quantity.saturating_sub(Self::what_stays_in_the_pack(name)) as f32
@@ -2779,7 +2930,7 @@ impl Agent {
             .iter()
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
-            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+            .filter(|(name, item)| !Self::is_this_part_of_the_kit(name) || Self::is_kit_to_spare(name, item))
             .filter(|(name, _)| !keep.contains(&name.as_str()))
             .max_by(|a, b| {
                 let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
@@ -2875,8 +3026,19 @@ impl Agent {
             return item.quantity;
         }
 
+        // And never the one tool of a kind that is the kit (#411): the
+        // spares go, the one in use stays.
+        let most = if Self::is_a_tool(what) {
+            item.quantity.saturating_sub(1)
+        } else {
+            item.quantity
+        };
+        if most == 0 {
+            return 0;
+        }
+
         let wanted = (room_wanted / each).ceil() as u32;
-        wanted.clamp(1, item.quantity)
+        wanted.clamp(1, most)
     }
 
     /// Food this agent has more of than it is going to eat.
@@ -3210,19 +3372,95 @@ impl Agent {
         // Only an open wound can turn, and only somebody not already ill can
         // come down with it - nothing in this model stacks.
         if self.state.ailing.is_none() {
-            let odds = Self::HOW_OFTEN_A_WOUND_TURNS
-                * self.state.an_open_wound as f64
-                * if dressed { 0.5 } else { 1.0 };
+            let odds = self.how_likely_my_wound_is_to_turn(now);
             if crate::core::dice::roll().gen_bool(odds.clamp(0.0, 1.0)) {
                 let how_bad = 0.4 + 0.5 * self.state.an_open_wound;
                 self.taken_ill_with(Self::OFF_A_WOUND_THAT_TURNED, how_bad, now);
+                self.state.to_be_seen.push(AgentState::A_WOUND_TURNED.to_string());
             }
         }
 
         let closing = AgentState::HOW_FAST_A_WOUND_CLOSES
             * if dressed { 2.0 } else { 1.0 }
+            * if self.state.wound_stitched { Self::WHAT_STITCHING_DOES } else { 1.0 }
             * if self.fatigue.is_sleeping { 2.0 } else { 1.0 };
         self.state.an_open_wound = (self.state.an_open_wound - closing).max(0.0);
+        if self.state.an_open_wound <= 0.0 {
+            self.state.wound_cleaned = false;
+            self.state.wound_stitched = false;
+            self.state.wound_poulticed = false;
+        }
+    }
+
+    /// How likely an open wound is to turn this half hour (#351, #399,
+    /// #404): as open as it is, half for a dressing, half for washing, and
+    /// half again for a herb bound in under the dressing.
+    pub fn how_likely_my_wound_is_to_turn(&self, now: u32) -> f64 {
+        let dressed = now < self.state.wound_dressed_until;
+        Self::HOW_OFTEN_A_WOUND_TURNS
+            * self.state.an_open_wound as f64
+            * if dressed { 0.5 } else { 1.0 }
+            * if self.state.wound_cleaned { Self::WHAT_CLEANING_LEAVES } else { 1.0 }
+            * if dressed && self.state.wound_poulticed { Self::WHAT_A_POULTICE_LEAVES } else { 1.0 }
+    }
+
+    /// What of its chance of turning a wound keeps once the dirt is washed
+    /// out of it (#399): half.
+    pub const WHAT_CLEANING_LEAVES: f64 = 0.5;
+
+    /// What of it a herb bound in under a dressing leaves (#404): half again.
+    pub const WHAT_A_POULTICE_LEAVES: f64 = 0.5;
+
+    /// How much faster a stitched wound closes (#401): twice, on top of a
+    /// dressing.
+    pub const WHAT_STITCHING_DOES: f32 = 2.0;
+
+    /// A broken limb knits, straight if it was set and as often as not
+    /// crooked if it was left (#402).
+    ///
+    /// Six weeks to knit, set or not. Knit crooked, it takes a fifth off
+    /// getting about for good; two crooked knittings take two fifths.
+    pub(crate) fn turn_the_bone(&mut self) {
+        use rand::Rng;
+
+        if self.state.a_broken_limb <= 0.0 {
+            return;
+        }
+        self.state.a_broken_limb = (self.state.a_broken_limb - Self::HOW_FAST_A_BONE_KNITS).max(0.0);
+        if self.state.a_broken_limb > 0.0 {
+            return;
+        }
+        let odds = if self.state.limb_set { Self::A_SET_BONE_KNITS_CROOKED } else { Self::A_BONE_LEFT_KNITS_CROOKED };
+        if crate::core::dice::roll().gen_bool(odds) {
+            self.state.limps = (self.state.limps + Self::WHAT_A_CROOKED_BONE_TAKES).min(Self::THE_MOST_A_LIMP_TAKES);
+            self.state.to_be_seen.push(AgentState::A_BONE_KNIT_CROOKED.to_string());
+        } else {
+            self.state.to_be_seen.push(AgentState::A_BONE_KNIT_STRAIGHT.to_string());
+        }
+        self.state.limb_set = false;
+    }
+
+    /// How much of a break knits in a turn: six weeks to knit (#402).
+    pub const HOW_FAST_A_BONE_KNITS: f32 =
+        1.0 / (42.0 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32);
+
+    /// How often a bone knits crooked, left and set (#402).
+    pub const A_BONE_LEFT_KNITS_CROOKED: f64 = 0.6;
+    pub const A_SET_BONE_KNITS_CROOKED: f64 = 0.1;
+
+    /// What a crooked knitting takes off getting about, and the most a body
+    /// of them takes (#402).
+    pub const WHAT_A_CROOKED_BONE_TAKES: f32 = 0.2;
+    pub const THE_MOST_A_LIMP_TAKES: f32 = 0.6;
+
+    /// What a broken limb leaves of somebody's pace while it knits (#402).
+    pub const WHAT_A_BROKEN_LIMB_LEAVES: f32 = 0.5;
+
+    /// What this one's bones leave of their pace (#402): half while a limb
+    /// is broken, and less a crooked knitting's limp for good.
+    pub fn what_my_bones_leave(&self) -> f32 {
+        let broken = if self.state.a_broken_limb > 0.0 { Self::WHAT_A_BROKEN_LIMB_LEAVES } else { 1.0 };
+        broken * (1.0 - self.state.limps)
     }
 
     /// How much of its bleeding a wound keeps from one half hour to the next,
@@ -3303,6 +3541,13 @@ impl Agent {
     /// Returns how much came off, or `None` if there was nothing to treat or
     /// the thing was not a remedy at all.
     pub fn take_a_remedy(&mut self, item_id: &str, now: u32) -> Option<f32> {
+        self.take_a_remedy_drawn(item_id, now, 1.0)
+    }
+
+    /// Take a remedy that was drawn out more or less well: steeped in hot
+    /// water, a tea gets `WHAT_A_TEA_DRAWS_OUT` of what chewing it does
+    /// (#404), and the cap on what any herbal can do still holds.
+    pub fn take_a_remedy_drawn(&mut self, item_id: &str, now: u32, drawn: f32) -> Option<f32> {
         use crate::environment::remedies;
 
         let remedy = remedies::what_this_is_good_for(item_id)?;
@@ -3339,7 +3584,7 @@ impl Agent {
         // third off, and a sixth dose curing.
         let already_off = (worst - ailing.severity).max(0.0);
         let room = (worst * remedies::THE_MOST_A_HERBAL_CAN_DO - already_off).max(0.0);
-        let eased = (worst * remedy.takes_off * by_hand * for_the_right_thing).min(room);
+        let eased = (worst * remedy.takes_off * by_hand * for_the_right_thing * drawn).min(room);
 
         if eased <= 0.0 {
             return Some(0.0);
@@ -3507,6 +3752,139 @@ impl Agent {
     /// from and keeps the refuse in one place away from the camp (#357).
     pub const ILL_FROM_FILTH_BEFORE_A_MIDDEN: u32 = 2;
 
+    /// How many times laid up by foul water before somebody chooses where
+    /// they drink: water with fouled ground about it passed by for clean
+    /// (#391), "selection of preferred springs over surface water".
+    pub const ILL_FROM_FOUL_WATER_BEFORE_CHOOSING: u32 = 2;
+
+    /// How many food-days of keeping somebody has to have watched a kind of
+    /// store over before they go by what it loses (#394): a store of fifty
+    /// opened after a week, give or take.
+    pub const FOOD_DAYS_TO_GO_ON: f64 = 300.0;
+
+    /// How much more a bare store has to be seen to lose than a lined one
+    /// before somebody takes it for the lining and not the luck (#394).
+    pub const PLAINLY_WORSE: f64 = 1.5;
+
+    /// What opening a store showed this one (#394): `food_days` of keeping in
+    /// a store shut `how`, and `lost` of it gone to vermin.
+    pub fn what_i_saw_of_a_store(&mut self, how: &str, food_days: f64, lost: f64) {
+        let seen = self.store_losses.entry(how.to_string()).or_insert((0.0, 0.0));
+        seen.0 += food_days;
+        seen.1 += lost;
+    }
+
+    /// What a store shut `how` loses to vermin a day, a share of what is in
+    /// it, as this one has seen it - if they have seen enough of it to go on.
+    pub fn what_i_have_seen_a_store_lose(&self, how: &str) -> Option<f64> {
+        self.store_losses
+            .get(how)
+            .filter(|(food_days, _)| *food_days >= Self::FOOD_DAYS_TO_GO_ON)
+            .map(|(food_days, lost)| lost / food_days)
+    }
+
+    /// What a store shut `how` loses a day, as this one reckons it: what they
+    /// have seen, or, for somebody shown or taught to line a store without
+    /// having watched it themselves, what they were told
+    /// (`Pit::what_vermin_get_at`).
+    pub fn what_i_reckon_a_store_loses(&self, how: &str) -> f64 {
+        self.what_i_have_seen_a_store_lose(how).unwrap_or(match how {
+            "lined" => crate::world::Pit::VERMIN_PAST_A_LINING as f64,
+            "sealed" => crate::world::Pit::VERMIN_PAST_A_POT as f64,
+            _ => crate::world::Pit::VERMIN_UNDER_EARTH as f64,
+        })
+    }
+
+    /// Whether what this one has seen of bare stores and lined ones tells
+    /// them the lining is the difference (#394): enough of both watched, and
+    /// the bare plainly the worse. Comparing two things in front of them, not
+    /// an idea, so it is not slowed by the pace ideas come at.
+    pub fn what_the_stores_have_shown_me(&mut self) -> bool {
+        if self.knows_the_way("line_the_store") {
+            return false;
+        }
+        let (Some(bare), Some(lined)) =
+            (self.what_i_have_seen_a_store_lose("bare"), self.what_i_have_seen_a_store_lose("lined"))
+        else {
+            return false;
+        };
+        bare > 0.0 && bare >= lined * Self::PLAINLY_WORSE && self.came_to_it_myself("know:line_the_store")
+    }
+
+    /// What the practice record calls a ripe crop of the camp's seen to fall
+    /// in the field, its season over and nobody having brought it in, and how
+    /// many before somebody keeps the seasons in mind and brings the harvest
+    /// in before it goes: "basic seasonality knowledge", stage 3 of the
+    /// agricultural path (#395). An idea, at the pace ideas come.
+    pub const A_CROP_LOST_TO_THE_SEASON: &'static str = "acroplosttotheseason";
+    pub const CROPS_LOST_BEFORE_THE_SEASONS: u32 = 2;
+
+    /// How many fields of each kind somebody has to have weeded before they
+    /// go by what they saw of the pests on them (#398).
+    pub const FIELDS_TO_GO_ON: f64 = 10.0;
+
+    /// What weeding a field showed this one (#398): whether a hedge kept the
+    /// beasts off it, and what share of what wanted clearing was pests.
+    pub fn what_i_saw_of_a_field(&mut self, hedged: bool, pests_share: f64) {
+        let key = if hedged { "hedged" } else { "open" };
+        let seen = self.field_pests.entry(key.to_string()).or_insert((0.0, 0.0));
+        seen.0 += 1.0;
+        seen.1 += pests_share.clamp(0.0, 1.0);
+    }
+
+    /// The share of the work on a field that pests come to, on fields
+    /// `hedged` or not, as this one has seen it - if they have seen enough.
+    pub fn what_i_have_seen_pests_come_to(&self, hedged: bool) -> Option<f64> {
+        let key = if hedged { "hedged" } else { "open" };
+        self.field_pests
+            .get(key)
+            .filter(|(fields, _)| *fields >= Self::FIELDS_TO_GO_ON)
+            .map(|(fields, share)| share / fields)
+    }
+
+    /// Whether what this one has seen of fields inside a hedge and fields
+    /// outside tells them the hedge is the difference (#398): enough of both
+    /// weeded, and the open fields plainly the worse for pests. A comparison
+    /// of two things in front of them, not an idea, so it comes at no pace.
+    pub fn what_the_fields_have_shown_me(&mut self) -> bool {
+        if self.knows_the_way("hedge_fields") {
+            return false;
+        }
+        let (Some(open), Some(hedged)) =
+            (self.what_i_have_seen_pests_come_to(false), self.what_i_have_seen_pests_come_to(true))
+        else {
+            return false;
+        };
+        open > 0.0 && open >= hedged * Self::PLAINLY_WORSE && self.came_to_it_myself("know:hedge_fields")
+    }
+
+    /// How much waste bothers this one, against anybody else (#394): twice
+    /// for the frugal, half again for a survivalist, the diligent, a
+    /// pragmatist and the greedy, a third for the lazy. What they will go to
+    /// the trouble of saving is what it would save times this.
+    pub fn how_much_waste_bothers_me(&self) -> f64 {
+        use crate::core::traits::Trait;
+        let mut bothers = 1.0;
+        if self.traits.has(Trait::Frugal) {
+            bothers *= 2.0;
+        }
+        for careful in [Trait::Survivalist, Trait::Diligent, Trait::Pragmatist, Trait::Greedy] {
+            if self.traits.has(careful) {
+                bothers *= 1.5;
+            }
+        }
+        if self.traits.has(Trait::Lazy) {
+            bothers *= 0.3;
+        }
+        bothers
+    }
+
+    /// And opening a store already lined to find vermin have been at it
+    /// anyway, and how many times before somebody daubs the lining shut with
+    /// clay (#393): "sealed baskets".
+    pub const A_LINED_STORE_GNAWED: &'static str = "a lined store gnawed";
+    pub const LINED_STORES_GNAWED_BEFORE_SEALING: u32 = 3;
+
     /// What being laid up by filth teaches (#357): enough of it, and a
     /// midden; with a midden and a people settled, a latrine.
     pub fn what_filth_teaches(&mut self) {
@@ -3514,6 +3892,12 @@ impl Agent {
             + self.times_laid_up.get(Self::OFF_FOUL_WATER).copied().unwrap_or(0);
         if laid_up >= Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN {
             self.it_comes_to_me("do:StartMidden", Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN);
+        }
+        // And laid up from the water itself, twice, and somebody thinks to
+        // look at what is round a spring before drinking from it (#391)
+        let off_the_water = self.times_laid_up.get(Self::OFF_FOUL_WATER).copied().unwrap_or(0);
+        if off_the_water >= Self::ILL_FROM_FOUL_WATER_BEFORE_CHOOSING {
+            self.it_comes_to_me("know:clean_water", Self::ILL_FROM_FOUL_WATER_BEFORE_CHOOSING);
         }
         if self.found_out.contains("do:StartMidden")
             && self.practices.is_established(crate::agents::practices::Practice::Farming)
@@ -3948,7 +4332,23 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 2] = ["selective_harvest", "coppice"];
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 14] = [
+        "selective_harvest",
+        "coppice",
+        "clean_water",
+        "line_the_store",
+        "seal_the_store",
+        "save_seed",
+        "select_seed",
+        "hedge_fields",
+        "seasons",
+        "poultices_and_teas",
+        // The social paths' first stages (#406 to #409)
+        "calls",
+        "division_of_labour",
+        "tally",
+        "measured_sowing",
+    ];
 
     /// What the practice record calls a gather from a wild stand within a
     /// forage of home, and how many before somebody notices that the stands
@@ -4294,6 +4694,77 @@ impl Agent {
     /// How much seed a farmer keeps back: a few fields' worth.
     pub const A_HANDFUL_OF_SEED: u32 = 3;
 
+    /// And how much somebody who saves seed on purpose keeps back: the
+    /// seed for every field a camp sows (#396), `Simulation::FIELDS_WANTED`.
+    pub const A_SEASONS_SEED: u32 = 6;
+
+    /// How much seed this one keeps back: a season's, if they save seed on
+    /// purpose (#396), or a handful.
+    pub fn how_much_seed_i_keep(&self) -> u32 {
+        if self.knows_the_way("save_seed") {
+            Self::A_SEASONS_SEED
+        } else {
+            Self::A_HANDFUL_OF_SEED
+        }
+    }
+
+    /// What the practice record calls breaking ground to sow with no seed
+    /// kept back, and how many times before somebody keeps the seed for the
+    /// next year's fields back from the harvest itself: "deliberate seed
+    /// saving", stage 3 of the agricultural path (#396). An idea, at the pace
+    /// ideas come.
+    pub const SOWN_WITHOUT_SEED: &'static str = "sownwithoutseed";
+    pub const TIMES_SOWN_WITHOUT_SEED_BEFORE_SAVING: u32 = 3;
+
+    /// What the practice record calls seed saved off a harvest, and how many
+    /// harvests saved from before somebody chooses the heaviest stand to save
+    /// from: "selection for larger seeds", stage 3 (#397). An idea, at the
+    /// pace ideas come.
+    pub const SEED_SAVED_OFF_A_HARVEST: &'static str = "seedsavedoffaharvest";
+    pub const HARVESTS_SAVED_FROM_BEFORE_SELECTING: u32 = 5;
+
+    /// How much choosing the heaviest stand to save from breeds the seed on,
+    /// a sowing: twenty sowings, each from seed chosen off the last, to breed
+    /// it as far as it goes - twenty years, grain ripening once a year (#397).
+    pub const WHAT_CHOOSING_THE_HEAVIEST_DOES: f32 = 0.05;
+
+    /// Seed saved off a ripe stand bred `bred`, `how_much` of the grain just
+    /// taken from it (#396, #397): set aside as seed up to a season's worth,
+    /// and the seed this one keeps taken to be the better of their own and
+    /// the stand's - bred on a step, if they chose this stand for being
+    /// heavy. Returns how much was set aside.
+    pub fn save_seed_off(&mut self, bred: f32, how_much: u32, chosen_for_it: bool) -> u32 {
+        if !self.knows_the_way("save_seed") {
+            return 0;
+        }
+        let held = self.how_many_i_have(Self::SEED);
+        let setting_aside = how_much.min(self.how_many_i_have("grain")).min(Self::A_SEASONS_SEED.saturating_sub(held));
+        let step = if chosen_for_it && self.knows_the_way("select_seed") {
+            Self::WHAT_CHOOSING_THE_HEAVIEST_DOES
+        } else {
+            0.0
+        };
+        // A step on from what the field was bred from, not from the seed in
+        // hand: choosing off the same field twice gets the same seed, and a
+        // line goes on only a sowing at a time
+        let line = (bred + step).min(1.0).max(self.seed_line);
+        if setting_aside == 0 && line <= self.seed_line {
+            return 0;
+        }
+        self.seed_line = self.seed_line.max(line);
+        if setting_aside > 0 {
+            let weight = self.inventory.get_item("grain").map(|item| item.weight_per_unit).unwrap_or(1.0);
+            self.inventory.remove_item("grain", setting_aside);
+            self.inventory
+                .add_item(InventoryItem::new_with_weight(Self::SEED.to_string(), setting_aside, weight));
+        }
+        self.skills.made_one(Self::SEED_SAVED_OFF_A_HARVEST);
+        if self.skills.times_made(Self::SEED_SAVED_OFF_A_HARVEST) >= Self::HARVESTS_SAVED_FROM_BEFORE_SELECTING {
+            self.it_comes_to_me("know:select_seed", Self::HARVESTS_SAVED_FROM_BEFORE_SELECTING);
+        }
+        setting_aside
+    }
+
     /// Set grain aside as seed, or give it back to the pot.
     ///
     /// Somebody who knows how to break ground keeps a handful of grain back
@@ -4312,11 +4783,12 @@ impl Agent {
             return true;
         }
 
-        if seed >= Self::A_HANDFUL_OF_SEED || !self.knows_how_to_do("TillSoil") {
+        let keeping = self.how_much_seed_i_keep();
+        if seed >= keeping || !self.knows_how_to_do("TillSoil") {
             return false;
         }
         let grain = self.how_many_i_have("grain");
-        let setting_aside = grain.min(Self::A_HANDFUL_OF_SEED - seed);
+        let setting_aside = grain.min(keeping - seed);
         if setting_aside == 0 {
             return false;
         }
@@ -4345,10 +4817,89 @@ impl Agent {
     /// at the pace ideas come (`core::discovery`, #389). Nothing is rolled
     /// for somebody who knows it already. True if it came now.
     pub fn it_comes_to_me(&mut self, what: &str, experience_needed: u32) -> bool {
-        if self.found_out.contains(what) || !crate::core::discovery::does_it_occur_now(experience_needed) {
+        if self.found_out.contains(what)
+            || !crate::core::discovery::does_it_occur_now_for(experience_needed, self.how_inventive_i_am())
+        {
             return false;
         }
-        self.found_out_how_to(what)
+        self.came_to_it_myself(what)
+    }
+
+    /// Something this one came to themselves, by experience or by noticing:
+    /// known now, and remembered as their own (#390). True if it was new.
+    pub fn came_to_it_myself(&mut self, what: &str) -> bool {
+        if !self.found_out_how_to(what) {
+            return false;
+        }
+        self.came_to_myself.insert(what.to_string());
+        self.lately_came_to.push(what.to_string());
+        true
+    }
+
+    /// Whether this one came to this themselves, rather than being shown or
+    /// taught it (#390).
+    pub fn did_i_come_to_it_myself(&self, what: &str) -> bool {
+        self.came_to_myself.contains(what)
+    }
+
+    /// How readily new ideas come to this one, against anybody else (#390):
+    /// twice for the curious, half again for the imaginative, half for the
+    /// stubborn, the traditional and the ignorant. Multiplies the chance of
+    /// an idea at any pace slower than the development pace.
+    pub fn how_inventive_i_am(&self) -> f64 {
+        use crate::core::traits::Trait;
+        let mut inventive = 1.0;
+        if self.traits.has(Trait::Curious) {
+            inventive *= 2.0;
+        }
+        if self.traits.has(Trait::Imaginative) {
+            inventive *= 1.5;
+        }
+        for set_in_their_ways in [Trait::Stubborn, Trait::Traditionalist, Trait::Ignorant] {
+            if self.traits.has(set_in_their_ways) {
+                inventive *= 0.5;
+            }
+        }
+        inventive
+    }
+
+    /// How readily this one takes up what somebody else knows, from being
+    /// taught it or seeing it done (#390): half again for the curious and for
+    /// a copycat, half for the stubborn and the traditional.
+    pub fn how_readily_i_learn(&self) -> f64 {
+        use crate::core::traits::Trait;
+        let mut readily = 1.0;
+        for eager in [Trait::Curious, Trait::Copycat] {
+            if self.traits.has(eager) {
+                readily *= 1.5;
+            }
+        }
+        for set_in_their_ways in [Trait::Stubborn, Trait::Traditionalist] {
+            if self.traits.has(set_in_their_ways) {
+                readily *= 0.5;
+            }
+        }
+        readily
+    }
+
+    /// How readily this one teaches what they know (#390): half again for an
+    /// extrovert and for the charismatic, less for an introvert, and half for
+    /// somebody mute, who can only show.
+    pub fn how_readily_i_teach(&self) -> f64 {
+        use crate::core::traits::Trait;
+        let mut readily = 1.0;
+        for outgoing in [Trait::Extrovert, Trait::Charismatic] {
+            if self.traits.has(outgoing) {
+                readily *= 1.5;
+            }
+        }
+        if self.traits.has(Trait::Introvert) {
+            readily *= 0.6;
+        }
+        if self.traits.has(Trait::Mute) {
+            readily *= 0.5;
+        }
+        readily
     }
 
     /// Everything this agent has found out that it was not born knowing.
@@ -4641,13 +5192,30 @@ impl Agent {
     /// a settlement made five hundred wheels a year and six hundred bows in
     /// two, for nobody to use (#335). A thing he wants for a use is wanted by
     /// another road - `what_i_would_rather_have` - and is not held back here.
+    ///
+    /// **And a tool is seen once it is in the hand.** The cap on how many he
+    /// keeps was the one for parts, four, which is right for cord and flakes
+    /// and wrong for a bow: somebody who had worked out a net made three,
+    /// twelve lashings' worth, and carried all of them. The pack that held
+    /// them could not take a handful out of a store, and once skills stopped
+    /// wearing off in a day (#410) eight of nine people who starved in forty
+    /// worlds did it with a pack full of spare bows, nets, rods and spears,
+    /// walking between two larders that would not let them in (#411). One of
+    /// a tool, then; a part he may still keep a few of.
     pub fn what_i_would_try_out(&self) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
+        let enough_of = |what: &str| {
+            if Self::is_this_part_of_the_kit(what) {
+                1
+            } else {
+                crate::environment::making::A_FEW_SPARE
+            }
+        };
 
         crate::environment::making::everything_to_find_out()
             .filter(|step| self.knows_how_to(step))
             .filter(|step| self.skills.times_made(step.makes) < Self::MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT)
-            .filter(|step| holding(step.makes) < crate::environment::making::A_FEW_SPARE)
+            .filter(|step| holding(step.makes) < enough_of(step.makes))
             .filter(|step| {
                 step.wants_in_hand
                     .is_none_or(|wanted| self.how_many_i_have(wanted) > 0)
@@ -5231,6 +5799,10 @@ impl Agent {
             return Some(edge);
         }
 
+        if let Some(carrier) = self.the_carrier_i_am_without() {
+            return Some(carrier);
+        }
+
         if self.state.years_old() >= Self::OLD_ENOUGH_TO_KEEP_A_KIT
             && self.how_many_i_have("lashing") == 0
             && self.knows_how_to_make("lashing")
@@ -5239,6 +5811,27 @@ impl Agent {
         }
 
         None
+    }
+
+    /// Something to carry in, for somebody who has made a basket and has
+    /// nothing to carry in now.
+    ///
+    /// Bare hands hold a dozen, and the kit alone - a bow, a net, a rod, an
+    /// axe, a knife and a stick - is more than that. Without a carrier there
+    /// is no room in the pack for a handful of anything, and curiosity, which
+    /// is where baskets came from, stops making a thing once it has made it
+    /// often enough to have seen it. So a basket lost was never made again:
+    /// one man in a smooth world set his down, walked on, and starved over
+    /// twenty-five days with two cords in his pack, the makings of another
+    /// (#412). Somebody who has never made one is still left to curiosity.
+    pub fn the_carrier_i_am_without(&self) -> Option<&'static str> {
+        if self.state.years_old() < Self::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+        if Self::WHAT_CARRIES.iter().any(|(carrier, _)| self.how_many_i_have(carrier) > 0) {
+            return None;
+        }
+        (self.skills.times_made("basket") > 0 && self.knows_how_to_make("basket")).then_some("basket")
     }
 
     /// The first half of `what_my_kit_is_short_of`: the edge, for somebody
@@ -6723,6 +7316,7 @@ impl Agent {
         // every turn and then is over
         self.turn_ailment(current_turn);
         self.turn_the_wound(current_turn);
+        self.turn_the_bone();
 
         // And the salt, if this one has been drinking out of the sea
         self.turn_salt();
@@ -7819,7 +8413,7 @@ impl Agent {
 
     /// Get movement speed at a specific turn (includes pregnancy modifier)
     pub fn movement_speed_at_turn(&self, current_turn: u32) -> f32 {
-        let body_speed = self.body.movement_speed_multiplier();
+        let body_speed = self.body.movement_speed_multiplier() * self.what_my_bones_leave();
         let transport_speed = self.transport.speed_modifier();
         let weight_penalty = if self.inventory.is_overweight() {
             0.5 // 50% speed when overweight
@@ -8352,6 +8946,8 @@ impl Agent {
             Action::BurnOff => "burnoff".to_string(),
             Action::DigDitch => "digditch".to_string(),
             Action::DigOutMidden => "digoutmidden".to_string(),
+            Action::LineStore => "linestore".to_string(),
+            Action::HedgeAField => "hedgeafield".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
@@ -8395,6 +8991,11 @@ impl Agent {
             Action::Treat { .. } => "treat".to_string(),
             Action::PressOnWound { .. } => "pressonwound".to_string(),
             Action::Bandage { .. } => "bandage".to_string(),
+            Action::CleanWound { .. } => "cleanwound".to_string(),
+            Action::Cauterise { .. } => "cauterise".to_string(),
+            Action::StitchWound { .. } => "stitchwound".to_string(),
+            Action::SetBone { .. } => "setbone".to_string(),
+            Action::AttendBirth { .. } => "attendbirth".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
             Action::AskAbout { what, .. } => format!("ask:{what}"),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
@@ -8478,7 +9079,14 @@ impl Agent {
             // and watched them all get better anyway must not learn that he
             // is a hunter, and folding it into `Foraging` would teach him
             // about picking herbs rather than about giving them.
-            Action::Treat { .. } | Action::PressOnWound { .. } | Action::Bandage { .. } => Undertaking::Healing,
+            Action::Treat { .. }
+            | Action::PressOnWound { .. }
+            | Action::Bandage { .. }
+            | Action::CleanWound { .. }
+            | Action::Cauterise { .. }
+            | Action::StitchWound { .. }
+            | Action::SetBone { .. }
+            | Action::AttendBirth { .. } => Undertaking::Healing,
             Action::Fish | Action::ForageShallows | Action::CheckFishTraps => Undertaking::Fishing,
             // Like a snare: setting one is not evidence about whether it pays
             Action::SetFishTrap => return,

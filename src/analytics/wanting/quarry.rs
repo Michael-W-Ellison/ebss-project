@@ -761,6 +761,18 @@ impl Simulation {
         })
     }
 
+    /// A trap of this one's at hand with fish in it, when fishing is what he
+    /// would be doing at all: the first thing `fishing_action` does, and only
+    /// that - no walk to a trap further off, and no cast (#412).
+    pub(in crate::analytics) fn a_trap_of_mine_at_hand(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        self.fishing_action(agent, agent_position)
+            .filter(|action| matches!(action, Action::CheckFishTraps))
+    }
+
     /// A trap of this one's with fish in it: empty it if it is within a cast,
     /// walk to it if it is within a line's walk.
     ///

@@ -38,6 +38,7 @@ pub mod ground;
 pub mod herd;
 pub mod journey;
 pub mod quarry;
+pub mod roles;
 pub mod shelter;
 pub mod store;
 pub mod wounds;
@@ -551,7 +552,15 @@ impl Simulation {
         // promises what the executor will not do is the fault this project
         // keeps finding, and it is worse when the decision sits above every
         // drive there is.
-        if Self::is_the_body_eating_itself(agent) && !agent.has_edible_food() {
+        //
+        // Something to eat is also a whole fish or joint that comes apart in
+        // the hands: `Eat` tears it (#300), and nothing reaches `Eat` that is
+        // not offered it (#301). These two overrides asked only whether
+        // anything in the pack was edible as it stood, and sent somebody with
+        // three whole fish and no knife to the store instead, every turn,
+        // until the reserve ran out (#411).
+        let something_to_eat = agent.has_edible_food() || agent.could_pull_apart_by_hand();
+        if Self::is_the_body_eating_itself(agent) && !something_to_eat {
             if let Some(from_the_store) = self.something_out_of_the_store(agent, agent_position) {
                 return (from_the_store, false);
             }
@@ -579,7 +588,7 @@ impl Simulation {
             .get(DriveType::Hunger)
             .is_some_and(|hunger| hunger.is_active());
         if hungry && agent.state.physiology.room_for_another_mouthful() {
-            if agent.has_edible_food() {
+            if something_to_eat {
                 return (
                     Action::Eat {
                         food_type: "generic".to_string(),
@@ -1200,13 +1209,24 @@ impl Simulation {
                 .cooking_action(agent, agent_position)
                 .or_else(|| self.muck_action(agent, agent_position))
                 .or_else(|| self.compost_to_dig(agent, agent_position))
+                .or_else(|| self.harvest_action(agent, agent_position))
                 .or_else(|| self.moving_to_farmland(agent, agent_position))
                 .or_else(|| self.farming_action(agent, agent_position))
+                .or_else(|| self.hedging_action(agent, agent_position))
                 .or_else(|| self.sowing_action(agent, agent_position))
                 .or_else(|| self.a_patch_to_burn(agent, agent_position))
                 .or_else(|| self.a_ditch_to_dig(agent, agent_position))
                 .or_else(|| self.transplanting_action(agent, agent_position))
                 .or_else(|| self.a_young_one_to_catch(agent, agent_position))
+                // A trap of one's own at hand with fish in it is emptied
+                // before the day's walk to better ground, not left for the
+                // walk back. Below the walk, it never was: the walk went out,
+                // and on the better ground, with no better ground from there,
+                // the full trap was the next thing on this list and called
+                // him home - to be sent out again before he reached for it.
+                // Six legs of thirty-odd tiles a turn, and the burn doubled
+                // until he starved with food in his pack (#412).
+                .or_else(|| self.a_trap_of_mine_at_hand(agent, agent_position))
                 .or_else(|| self.moving_on(agent, agent_position))
                 .or_else(|| self.fishing_action(agent, agent_position)),
 
@@ -1457,6 +1477,9 @@ impl Simulation {
                         amount: how_many,
                     })
                 })
+                // And the camp's bare stores lined, by somebody who has seen
+                // what they lose and minds it (#394)
+                .or_else(|| self.a_store_to_line(agent, agent_position))
                 // A line of snares is food put by that you do not have to
                 // carry or keep from spoiling: it stays alive in the wood
                 // until you want it, which is what makes trapping the

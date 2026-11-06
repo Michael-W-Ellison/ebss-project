@@ -771,10 +771,15 @@ impl Skills {
     ///
     /// A year of not doing the work at all. Somebody who farms in the spring
     /// and does other things all summer does not forget how to farm.
-    pub const KEEPS_FOR: u32 = 1_152;
+    ///
+    /// In minutes, which is what a turn counts. It was 1,152, a year when the
+    /// calendar was twelve ticks to the day (#24), and was not brought with
+    /// the calendar when a day became 1,440: a trade went after nineteen
+    /// hours, and lost a level at every six-day test after that (#410).
+    pub const KEEPS_FOR: u32 = crate::environment::seasons::MINUTES_PER_YEAR;
 
-    /// And how long a level lasts after that.
-    pub const LOSES_A_LEVEL_EVERY: u32 = 576;
+    /// And how long a level lasts after that: half a year.
+    pub const LOSES_A_LEVEL_EVERY: u32 = crate::environment::seasons::MINUTES_PER_YEAR / 2;
 
     /// How far a trade can fall away.
     ///

@@ -337,7 +337,7 @@ fn and_everybody_knows_about_it(simulation: &mut Simulation) {
 #[test]
 fn an_open_pit_keeps_nothing() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(20, 0)],
         covered: false,
@@ -372,7 +372,7 @@ fn an_open_pit_keeps_nothing() {
 #[test]
 fn what_is_buried_comes_back_out() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -402,7 +402,7 @@ fn what_is_buried_comes_back_out() {
 #[test]
 fn nobody_raids_the_store_with_a_full_pack() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -427,7 +427,7 @@ fn nobody_raids_the_store_with_a_full_pack() {
 #[test]
 fn a_store_across_the_camp_is_walked_to() {
     let mut simulation = a_digger_in_the_lean_season();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(31, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -830,7 +830,7 @@ fn a_full_load_with_the_store_across_the_camp_gets_walked_over() {
 
     let mut simulation = a_digger();
     turn_the_year_to(&mut simulation, Season::Fall);
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(30, 25),
         holds: Vec::new(),
         covered: false,
@@ -911,7 +911,7 @@ fn what_burying_leaves_behind_does_not_shut_the_store() {
 #[test]
 fn one_meal_in_the_pack_does_not_shut_the_store() {
     let mut simulation = a_digger_in_the_lean_season();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -939,7 +939,7 @@ fn one_meal_in_the_pack_does_not_shut_the_store() {
 #[test]
 fn a_pack_with_two_days_in_it_leaves_the_store_shut() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -973,7 +973,7 @@ fn a_pack_with_two_days_in_it_leaves_the_store_shut() {
 #[test]
 fn going_out_for_food_comes_before_digging_up_the_store() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -1017,7 +1017,7 @@ fn a_haunch_nobody_has_cut_up_is_not_what_the_store_offers() {
     let mut haunch = InventoryItem::new_with_weight("meat".to_string(), 20, 2.0);
     haunch.food_data = database.create_food_data(&ItemType::Meat, 0);
 
-    let pit = Pit {
+    let pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![haunch],
         covered: true,
@@ -1045,7 +1045,7 @@ fn a_haunch_nobody_has_cut_up_is_not_what_the_store_offers() {
 /// was the stack. See ISSUES_FOUND #232.
 #[test]
 fn the_store_offers_the_load_that_makes_the_walk_worth_taking() {
-    let pit = Pit {
+    let pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(2, 0), {
             let mut plenty = supper(400, 0);
@@ -1072,7 +1072,7 @@ fn what_has_gone_over_is_not_what_the_store_offers() {
         food.freshness = 0.0;
     }
 
-    let pit = Pit {
+    let pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![gone_off],
         covered: true,
@@ -1095,7 +1095,7 @@ fn nobody_is_sent_to_dig_up_what_they_cannot_eat() {
     haunch.food_data = database.create_food_data(&ItemType::Meat, 0);
 
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![haunch],
         covered: true,
@@ -1130,7 +1130,7 @@ fn a_pack_full_of_carcass_is_a_pack_with_no_meals_in_it() {
         "twenty units of food about him and not one of them supper"
     );
 
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -1176,7 +1176,7 @@ fn what_can_be_eaten_counts_as_a_meal() {
 #[test]
 fn an_empty_store_wants_filling() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: Vec::new(),
         covered: false,
@@ -1200,7 +1200,7 @@ fn an_empty_store_wants_filling() {
 fn a_store_with_a_winter_in_it_does_not_want_filling() {
     let mut simulation = a_digger();
     let mouths = 1;
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(mouths * Simulation::what_a_store_is_filled_to_a_mouth(), 0)],
         covered: true,
@@ -1223,7 +1223,7 @@ fn it_is_the_whole_larder_that_is_counted_not_one_hole() {
 
     // Two pits a few paces apart, each holding rather less than a season
     for (n, at) in [(25, 25), (28, 25)].iter().enumerate() {
-        simulation.world.pits.push(Pit {
+        simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
             where_it_is: Position::new(at.0, at.1),
             holds: vec![supper(enough - 1 + n as u32, 0)],
             covered: true,
@@ -1242,7 +1242,7 @@ fn it_is_the_whole_larder_that_is_counted_not_one_hole() {
 #[test]
 fn a_larder_across_the_valley_is_not_this_camps_larder() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(
             25 + Simulation::WORTH_WALKING_TO_THE_STORE as i32 + 5,
             25,
@@ -1265,7 +1265,7 @@ fn a_larder_across_the_valley_is_not_this_camps_larder() {
 fn more_mouths_want_more_put_by() {
     let mut simulation = a_digger();
     let here = Position::new(25, 25);
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: here,
         holds: vec![supper(Simulation::what_one_mouth_wants_put_by() * 3, 0)],
         covered: true,
@@ -1313,7 +1313,7 @@ fn nobody_buries_into_a_store_that_is_already_a_winter_deep() {
     let mut where_it_is = here.clone();
     while buried < a_winter {
         let this_one = (a_winter - buried).min(Pit::WHAT_A_PIT_TAKES);
-        simulation.world.pits.push(Pit {
+        simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
             where_it_is: where_it_is.clone(),
             holds: vec![supper(this_one, 0)],
             covered: true,
@@ -1438,7 +1438,7 @@ fn a_winter_store_is_a_winter_of_eating() {
 #[test]
 fn the_store_is_not_opened_while_the_hedges_are_bearing() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -1467,7 +1467,7 @@ fn the_store_is_not_opened_while_the_hedges_are_bearing() {
 #[test]
 fn a_starving_man_opens_the_store_whatever_the_month() {
     let mut simulation = a_digger();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
         covered: true,
@@ -1510,8 +1510,8 @@ fn a_pit_says_how_long_a_thing_will_keep_in_it() {
     let mut leaf = InventoryItem::new_with_weight("greens".to_string(), 10, 0.5);
     leaf.food_data = database.create_food_data(&ItemType::Greens, 0);
 
-    let bare = Pit { where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
-    let mut lined = Pit { where_it_is: Position::new(1, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
+    let bare = Pit { gnawed: 0, last_opened: None, where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
+    let mut lined = Pit { gnawed: 0, last_opened: None, where_it_is: Position::new(1, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
     lined.put_in(InventoryItem::new_with_weight("bowl".to_string(), 1, 1.0));
 
     let in_bare = bare.how_long_this_would_keep(&leaf, 0).expect("leaf has a clock");
@@ -1547,7 +1547,7 @@ fn nothing_goes_in_the_ground_that_will_not_still_be_food_when_it_is_wanted() {
     use crate::world::{ItemType, Pit, Position};
 
     let database = FoodDatabase::new();
-    let bare = Pit { where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
+    let bare = Pit { gnawed: 0, last_opened: None, where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
     let bare_stretch =
         crate::agents::provision::how_long_the_land_gives_nothing() as f32;
 
@@ -1807,7 +1807,7 @@ fn a_covered_hole_is_a_half_and_a_lined_one_is_a_quarter() {
     use crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
 
     let hole = |covered: bool, lining: Option<&str>| {
-        let mut pit = Pit {
+        let mut pit = Pit { gnawed: 0, last_opened: None,
             where_it_is: Position::new(0, 0),
             holds: Vec::new(),
             covered,
@@ -1831,7 +1831,7 @@ fn a_covered_hole_is_a_half_and_a_lined_one_is_a_quarter() {
     // But what a hole is *worth* is what it is worth covered, because
     // covering it is the next thing the person does. Asked of the hole as it
     // stands, a freshly dug pit is worth nothing and nobody would fill one.
-    let mut freshly_dug = Pit {
+    let mut freshly_dug = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(0, 0),
         holds: Vec::new(),
         covered: false,
@@ -1858,7 +1858,7 @@ fn a_covered_hole_is_a_half_and_a_lined_one_is_a_quarter() {
 #[test]
 fn a_better_vessel_makes_a_better_larder() {
     let lined_with = |what: &str| {
-        let mut pit = Pit {
+        let mut pit = Pit { gnawed: 0, last_opened: None,
             where_it_is: Position::new(0, 0),
             holds: Vec::new(),
             covered: true,
@@ -2035,7 +2035,7 @@ fn what_is_carried_in_a_pot_keeps_better_than_what_is_carried_loose() {
 #[test]
 fn nobody_walks_to_the_pit_underfoot() {
     let mut simulation = a_digger();
-    let empty_pit = |at: Position| Pit {
+    let empty_pit = |at: Position| Pit { gnawed: 0, last_opened: None,
         where_it_is: at,
         holds: Vec::new(),
         covered: false,

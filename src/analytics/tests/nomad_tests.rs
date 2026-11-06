@@ -443,7 +443,7 @@ fn a_gathering_people_moves_on_from_a_cache() {
     put_food(&mut simulation, Position::new(21, 20), 8);
     a_valley_they_know_of(&mut simulation, 400);
     simulation.world.pits.clear();
-    simulation.world.pits.push(crate::world::Pit {
+    simulation.world.pits.push(crate::world::Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(24, 22),
         holds: vec![crate::agents::InventoryItem::new_with_weight("food".to_string(), 5, 0.1)],
         covered: false,
@@ -457,4 +457,58 @@ fn a_gathering_people_moves_on_from_a_cache() {
         simulation.camp_move_proposed.borrow_mut().take().is_some(),
         "the ground is stripped, so the camp goes, cache or no cache"
     );
+}
+
+/// A full trap at his feet is emptied before the day's walk to better ground.
+///
+/// It was not: the walk to the valley came first, and in the valley, with no
+/// better ground from there, the full trap at the camp called him home, to be
+/// sent off again before he reached for it. A man in a scattered world walked
+/// thirty-odd tiles and back six times a turn for two months, burned twice
+/// what his camp did, and starved with food in his pack (#412).
+#[test]
+fn a_full_trap_at_hand_is_emptied_before_the_days_walk() {
+    use crate::core::DriveType;
+    use crate::world::FishTrap;
+
+    let mut simulation = a_camp_at(bare_country(), (20, 20), 12);
+    put_food(&mut simulation, Position::new(21, 20), 8);
+    a_valley_they_know_of(&mut simulation, 400);
+    simulation.population.agents[0].inventory.get_all_items_mut().clear();
+    if let Some(hunger) = simulation.population.agents[0].drives.get_mut(DriveType::Hunger) {
+        hunger.value = 1.0;
+    }
+    let position = simulation.population.agents[0].state.position;
+
+    let agent = &simulation.population.agents[0];
+    assert!(
+        matches!(
+            simulation.what_this_drive_offers(DriveType::Sustenance, agent, position),
+            Some(Action::Move { .. })
+        ),
+        "the fixture: stripped ground, a valley known, and no trap - he goes"
+    );
+
+    let id = simulation.population.agents[0].id;
+    simulation.world.fish_traps.push(FishTrap {
+        at: Position::new(20, 19),
+        set_by: id,
+        set_at: 0,
+        holds: 3,
+        robbed: None,
+    });
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.what_this_drive_offers(DriveType::Sustenance, agent, position),
+        Some(Action::CheckFishTraps),
+        "with fish in his trap a pace off, he empties it before he goes"
+    );
+
+    // And one somebody else set is not his to stop for
+    simulation.world.fish_traps[0].set_by = simulation.population.agents[1].id;
+    let agent = &simulation.population.agents[0];
+    assert!(matches!(
+        simulation.what_this_drive_offers(DriveType::Sustenance, agent, position),
+        Some(Action::Move { .. })
+    ));
 }

@@ -189,23 +189,23 @@ fn watch_a_practice(watcher: &mut Agent, broadcast: &BroadcastAction) {
     // it is how a garden is - to somebody who already sows. Without this a
     // farmer's children would have to find gardens out for themselves.
     if broadcast.details.contains("ScatterSeed") {
-        watcher.found_out_how_to("do:ScatterSeed");
+        takes_it_up(watcher, broadcast, "do:ScatterSeed");
         watcher.practices.learn_from_watching(Practice::Sowing);
     }
 
     // And seeing somebody set the dry growth alight on purpose, and keep it
     // to a patch, is how burning the country off is passed on (#381)
     if broadcast.details.contains("BurnOff") {
-        watcher.found_out_how_to("do:BurnOff");
+        takes_it_up(watcher, broadcast, "do:BurnOff");
     }
 
     // And seeing a ditch led from the water to a stand (#383)
     if broadcast.details.contains("DigDitch") {
-        watcher.found_out_how_to("do:DigDitch");
+        takes_it_up(watcher, broadcast, "do:DigDitch");
     }
 
     if broadcast.details.contains("TillSoil") && watcher.knows_how_to_do("ScatterSeed") {
-        watcher.found_out_how_to("do:TillSoil");
+        takes_it_up(watcher, broadcast, "do:TillSoil");
         watcher.practices.learn_from_watching(Practice::Farming);
     }
 
@@ -216,13 +216,34 @@ fn watch_a_practice(watcher: &mut Agent, broadcast: &BroadcastAction) {
     if broadcast.details.starts_with("Tame") {
         watcher.skills.made_one(Agent::A_KEEPER_SEEN_AT_WORK);
         if watcher.skills.times_made(Agent::A_KEEPER_SEEN_AT_WORK) >= Agent::KEEPERS_WATCHED_BEFORE_KEEPING {
-            watcher.found_out_how_to("do:Tame");
+            takes_it_up(watcher, broadcast, "do:Tame");
         }
     }
 
     // And seeing dung carried out of a fold is seeing what it is good for
     if broadcast.details.starts_with("MuckOut") {
-        watcher.found_out_how_to("do:MuckOut");
+        takes_it_up(watcher, broadcast, "do:MuckOut");
+    }
+}
+
+/// Seeing a thing done, and taking it up (#390): as readily as this one
+/// learns anything, so a stubborn or a traditional man may see it and leave
+/// it, and nobody else does. Taking it up warms them to the one they saw.
+fn takes_it_up(watcher: &mut Agent, broadcast: &BroadcastAction, what: &str) {
+    use rand::Rng;
+    if watcher.what_i_found_out().contains(what) {
+        return;
+    }
+    let readily = watcher.how_readily_i_learn();
+    if readily < 1.0 && !crate::core::dice::roll().gen_bool(readily) {
+        return;
+    }
+    if watcher.found_out_how_to(what) {
+        let now = broadcast.timestamp.min(u32::MAX as u64) as u32;
+        watcher
+            .relationships
+            .get_or_create_relationship(broadcast.performer_id, now)
+            .positive_interaction(1, now);
     }
 }
 

@@ -454,7 +454,7 @@ fn a_lined_pit_keeps_better_than_bare_earth() {
             holds.push(InventoryItem::new_with_weight("bowl".to_string(), 1, 1.0));
         }
 
-        simulation.world.pits.push(Pit {
+        simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
             where_it_is: Position::new(25, 25),
             holds,
             covered: true,
@@ -491,7 +491,7 @@ fn a_lined_pit_keeps_better_than_bare_earth() {
 fn the_lining_is_not_stores() {
     use crate::world::Pit;
 
-    let pit = Pit {
+    let pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: vec![InventoryItem::new_with_weight("bowl".to_string(), 1, 1.0)],
         covered: true,

@@ -140,10 +140,11 @@ impl Simulation {
 
                 // A practised hand notices sooner, because it knows what it
                 // is looking at.
-                let odds = crate::core::discovery::at_this_pace(
+                let odds = crate::core::discovery::at_this_pace_for(
                     Self::HOW_OFTEN_ANYBODY_WORKS_IT_OUT
                         * curiosity as f64
                         * agent.skills.hand_for(step.hands) as f64,
+                    agent.how_inventive_i_am(),
                 );
 
                 if rng.gen_bool(odds.clamp(0.0, 1.0)) {
@@ -169,7 +170,7 @@ impl Simulation {
         }
 
         for (index, what) in found {
-            if self.population.agents[index].found_out_how_to(what) {
+            if self.population.agents[index].came_to_it_myself(what) {
                 debug!(
                     "Agent {} worked out how to make {what}",
                     self.population.agents[index].id
@@ -283,10 +284,11 @@ impl Simulation {
                     continue;
                 }
 
-                let odds = crate::core::discovery::at_this_pace(
+                let odds = crate::core::discovery::at_this_pace_for(
                     Self::HOW_OFTEN_A_LIKENESS_IS_FOLLOWED_UP
                         * curiosity as f64
                         * agent.skills.hand_for(step.hands) as f64,
+                    agent.how_inventive_i_am(),
                 );
 
                 could_have_the_thought.push((index, step, odds));
@@ -308,7 +310,7 @@ impl Simulation {
         }
 
         for (index, what) in worked_out {
-            if self.population.agents[index].found_out_how_to(what) {
+            if self.population.agents[index].came_to_it_myself(what) {
                 debug!(
                     "Agent {} worked out that something else would make {what}",
                     self.population.agents[index].id

@@ -334,6 +334,89 @@ pub struct World {
     /// Loads of compost dug out of a midden for a garden (#386).
     #[serde(default)]
     pub compost_dug: u64,
+    /// Stores lined with a vessel by somebody who knew to, rather than with
+    /// one they happened to have spare (#392).
+    #[serde(default)]
+    pub stores_lined: u64,
+    /// Stores lined with a basket daubed shut with clay (#393).
+    #[serde(default)]
+    pub stores_sealed: u64,
+    /// What fell off ripe field crops nobody brought in before their season
+    /// was over (#395).
+    #[serde(default)]
+    pub field_crop_fallen: u64,
+    /// Units of field crop that went into somebody's pack (#395).
+    #[serde(default)]
+    pub field_crop_brought_in: u64,
+    /// Field crops that ripened at their full stand, and that ripened short
+    /// on the last day of their season (#395).
+    #[serde(default)]
+    pub crops_ripened_full: u64,
+    #[serde(default)]
+    pub crops_ripened_short: u64,
+    /// Edges closed round a clump of fields (#398).
+    #[serde(default)]
+    pub fields_hedged: u64,
+    /// What medicine's first stage did (#399-#404): wounds washed, seared,
+    /// sewn and poulticed, remedies drawn as a tea, wounds that turned,
+    /// bones broken, set and knit, and births that went hard, what they
+    /// cost, and how many had somebody at them who knew how to help.
+    #[serde(default)]
+    pub wounds_cleaned: u64,
+    #[serde(default)]
+    pub wounds_cauterised: u64,
+    #[serde(default)]
+    pub wounds_stitched: u64,
+    #[serde(default)]
+    pub poultices_laid: u64,
+    #[serde(default)]
+    pub teas_made: u64,
+    #[serde(default)]
+    pub wounds_turned: u64,
+    #[serde(default)]
+    pub bones_broken: u64,
+    #[serde(default)]
+    pub bones_set: u64,
+    #[serde(default)]
+    pub bones_knit_crooked: u64,
+    #[serde(default)]
+    pub bones_knit_straight: u64,
+    #[serde(default)]
+    pub hard_births: u64,
+    #[serde(default)]
+    pub children_lost_at_birth: u64,
+    #[serde(default)]
+    pub mothers_lost_in_childbirth: u64,
+    #[serde(default)]
+    pub births_with_a_midwife: u64,
+    /// The social paths' first stages (#406 to #409): calls raised at a beast
+    /// and the people who heard them, blows that fell on somebody a call
+    /// would have warned, better hands seen bringing food in, and
+    /// fields sown thin, thick and to the measure.
+    #[serde(default)]
+    pub calls_raised: u64,
+    #[serde(default)]
+    pub heard_a_call: u64,
+    #[serde(default)]
+    pub blows_a_call_would_have_spared: u64,
+    #[serde(default)]
+    pub better_hands_seen: u64,
+    #[serde(default)]
+    pub fields_sown_thin: u64,
+    #[serde(default)]
+    pub fields_sown_thick: u64,
+    #[serde(default)]
+    pub fields_sown_measured: u64,
+    /// Where a beast warned somebody off lately, what it was, who, and
+    /// whether they called it out, for
+    /// whoever it strikes next to have heard of it or not (#406). Not kept:
+    /// it is a day long.
+    #[serde(skip)]
+    pub beasts_lately_seen: Vec<((i32, i32, i32), String, u32, uuid::Uuid, bool)>,
+    /// Where a ripe field crop nobody brought in began to fall, its season
+    /// over, since the people about were last told (#395).
+    #[serde(default)]
+    pub crops_lost_to_the_season: Vec<Position>,
     /// Things a child was taught that a grown person of their camp knew
     /// (#388).
     #[serde(default)]
@@ -473,6 +556,10 @@ pub struct ThornHedge {
     pub laid: u32,
     /// When the ring was closed, after which it keeps beasts out.
     pub closed_on: Option<u32>,
+    /// Whether this is an edge round a clump of fields rather than a ring
+    /// round a camp (#398): smaller, and standing a year.
+    #[serde(default)]
+    pub round_fields: bool,
 }
 
 impl ThornHedge {
@@ -496,14 +583,36 @@ impl ThornHedge {
     /// bigger. A hare goes under it.
     pub const THE_SMALLEST_IT_TURNS_KG: f32 = 6.0;
 
+    /// How far out an edge round fields goes from the field it is laid
+    /// about: a clump of five by five (#398).
+    pub const HOW_FAR_A_FIELD_EDGE_GOES: i32 = 2;
+
+    /// How much brush closes an edge round fields: a third of a camp's ring.
+    pub const WHAT_A_FIELD_EDGE_TAKES: u32 = 8;
+
+    /// How long an edge round fields stands: a year, banked as well as
+    /// brushed, and seen to as the fields are.
+    pub const HOW_LONG_A_FIELD_EDGE_STANDS: u32 = crate::environment::seasons::TICKS_PER_YEAR;
+
+    /// How far out this one goes.
+    pub fn how_far_it_goes(&self) -> i32 {
+        if self.round_fields { Self::HOW_FAR_A_FIELD_EDGE_GOES } else { Self::HOW_FAR_IT_GOES_ROUND }
+    }
+
+    /// How much brush closes this one.
+    pub fn what_it_takes(&self) -> u32 {
+        if self.round_fields { Self::WHAT_A_FIELD_EDGE_TAKES } else { Self::WHAT_IT_TAKES }
+    }
+
     /// Whether a place is inside the ring.
     pub fn takes_in(&self, at: (i32, i32)) -> bool {
-        (at.0 - self.around.x).abs().max((at.1 - self.around.y).abs()) <= Self::HOW_FAR_IT_GOES_ROUND
+        (at.0 - self.around.x).abs().max((at.1 - self.around.y).abs()) <= self.how_far_it_goes()
     }
 
     /// Whether it keeps anything out: closed, and still standing.
     pub fn is_closed(&self, now: u32) -> bool {
-        self.closed_on.is_some_and(|then| now.saturating_sub(then) < Self::HOW_LONG_IT_STANDS)
+        let stands = if self.round_fields { Self::HOW_LONG_A_FIELD_EDGE_STANDS } else { Self::HOW_LONG_IT_STANDS };
+        self.closed_on.is_some_and(|then| now.saturating_sub(then) < stands)
     }
 }
 
@@ -647,14 +756,38 @@ pub struct Pit {
     /// which is what a world starts with.
     #[serde(default)]
     pub belongs: crate::world::belonging::Belongs,
+    /// What vermin have carried off since anybody last opened it, whole
+    /// units (#392): what somebody sees when they do.
+    #[serde(default)]
+    pub gnawed: u32,
+    /// The tick it was last opened, if it has been since it was dug (#394):
+    /// what somebody opening it reckons how long its food lay there by.
+    #[serde(default)]
+    pub last_opened: Option<u32>,
 }
 
 impl Pit {
+    /// How it is shut, as somebody opening it would name it (#394): bare
+    /// earth, lined with a vessel, or sealed (a fired pot or a sealed
+    /// basket), which is what vermin go by (`what_vermin_get_at`). An open
+    /// hole is not a store anybody reckons by.
+    pub fn how_it_is_shut(&self) -> &'static str {
+        if !self.covered {
+            "open"
+        } else if self.holds.iter().any(|item| item.item_id == "stoneware" || item.item_id == "sealedbasket") {
+            "sealed"
+        } else if self.is_lined() {
+            "lined"
+        } else {
+            "bare"
+        }
+    }
+
     /// What vermin take of a store in a day, by how it is shut (#357).
     pub fn what_vermin_get_at(&self) -> f32 {
         if !self.covered {
             Self::VERMIN_IN_AN_OPEN_HOLE
-        } else if self.holds.iter().any(|item| item.item_id == "stoneware") {
+        } else if self.holds.iter().any(|item| item.item_id == "stoneware" || item.item_id == "sealedbasket") {
             Self::VERMIN_PAST_A_POT
         } else if self.is_lined() {
             Self::VERMIN_PAST_A_LINING
@@ -676,7 +809,8 @@ impl Pit {
     pub const VERMIN_UNDER_EARTH: f32 = 0.001;
     /// With a basket or a bowl in the way, half that.
     pub const VERMIN_PAST_A_LINING: f32 = 0.0005;
-    /// In a fired pot, next to nothing.
+    /// In a fired pot, or a basket daubed shut with clay (#393), next to
+    /// nothing.
     pub const VERMIN_PAST_A_POT: f32 = 0.00007;
     /// How near a midden brings more of them.
     pub const A_MIDDEN_DRAWS_VERMIN_FROM: u32 = 12;
@@ -1427,6 +1561,7 @@ impl World {
                 *owed = due - gone as f32;
                 item.quantity -= gone;
                 taken += gone as u64;
+                pit.gnawed += gone;
             }
             pit.holds.retain(|item| item.quantity > 0);
         }
@@ -1932,6 +2067,36 @@ impl World {
             ditches_dug: 0,
             ditches_dug_from: Vec::new(),
             compost_dug: 0,
+            stores_lined: 0,
+            stores_sealed: 0,
+            field_crop_fallen: 0,
+            field_crop_brought_in: 0,
+            crops_ripened_full: 0,
+            crops_ripened_short: 0,
+            fields_hedged: 0,
+            wounds_cleaned: 0,
+            wounds_cauterised: 0,
+            wounds_stitched: 0,
+            poultices_laid: 0,
+            teas_made: 0,
+            wounds_turned: 0,
+            bones_broken: 0,
+            bones_set: 0,
+            bones_knit_crooked: 0,
+            bones_knit_straight: 0,
+            hard_births: 0,
+            children_lost_at_birth: 0,
+            mothers_lost_in_childbirth: 0,
+            births_with_a_midwife: 0,
+            calls_raised: 0,
+            heard_a_call: 0,
+            blows_a_call_would_have_spared: 0,
+            better_hands_seen: 0,
+            fields_sown_thin: 0,
+            fields_sown_thick: 0,
+            fields_sown_measured: 0,
+            beasts_lately_seen: Vec::new(),
+            crops_lost_to_the_season: Vec::new(),
             lessons_taught: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
@@ -3046,7 +3211,7 @@ impl World {
     /// The thorn ring round the hearth at `hearth`, closed or not.
     pub fn thorn_hedge_round(&self, hearth: (i32, i32)) -> Option<usize> {
         self.thorn_hedges.iter().position(|hedge| {
-            (hedge.around.x - hearth.0).abs().max((hedge.around.y - hearth.1).abs()) <= 2
+            !hedge.round_fields && (hedge.around.x - hearth.0).abs().max((hedge.around.y - hearth.1).abs()) <= 2
         })
     }
 
@@ -4296,6 +4461,11 @@ impl World {
 
         let mut oldest_sleep = today;
 
+        // The rings of thorn and the edges round fields standing closed today,
+        // inside which beasts do not come at a crop (#398)
+        let hedges_closed: Vec<ThornHedge> =
+            self.thorn_hedges.iter().filter(|hedge| hedge.is_closed(self.turn)).cloned().collect();
+
         for resource in &mut self.resources {
             let terrain_type = self.grid.get_tile(&resource.position)
                 .map(|t| t.terrain.terrain_type)
@@ -4343,7 +4513,9 @@ impl World {
                 let ground_water =
                     crate::world::soil::Soil::humidity(terrain_type, day.precipitation);
                 let growing = (day.season_modifier * ground_water).clamp(0.0, 1.0);
-                tile.soil.nobody_weeded_this(growing, 1.0);
+                let at = (resource.position.x, resource.position.y);
+                let hedged = hedges_closed.iter().any(|hedge| hedge.takes_in(at));
+                tile.soil.nobody_weeded_this(growing, 1.0, hedged);
 
                 // And what is taking it before the farmer does. A field is the
                 // best ground there is and everything else knows it: what a
@@ -4356,8 +4528,18 @@ impl World {
             };
 
             let ripe_before = resource.on_a_field && resource.ripe_stand > 0;
+            let standing_before = resource.amount;
             let a_growing_day =
                 Self::a_day_for_a_node(resource, terrain_type, what_the_ground_yields, kept, &day);
+            if ripe_before && !resource.resource_type.is_it_bearing(day.today) {
+                self.field_crop_fallen += u64::from(standing_before.saturating_sub(resource.amount));
+                // The first day of it, which the people about see (#395)
+                let yesterday = (day.today + crate::environment::seasons::DAYS_PER_YEAR - 1)
+                    % crate::environment::seasons::DAYS_PER_YEAR;
+                if standing_before > 0 && resource.resource_type.is_it_bearing(yesterday) {
+                    self.crops_lost_to_the_season.push(resource.position);
+                }
+            }
 
             // And a field crop ripens when it comes to its full stand, or when
             // its season is on its last day and it has to be whatever it has
@@ -4371,6 +4553,11 @@ impl World {
                 let come_to_it = (a_full_stand > 0 && resource.amount >= a_full_stand)
                     || (the_last_day && resource.amount > 0);
                 if come_to_it {
+                    if a_full_stand > 0 && resource.amount >= a_full_stand {
+                        self.crops_ripened_full += 1;
+                    } else {
+                        self.crops_ripened_short += 1;
+                    }
                     resource.it_has_ripened();
                     if resource.resource_type.feeds_the_ground() {
                         self.grid.a_bean_crop_came_in(&resource.position, self.turn);

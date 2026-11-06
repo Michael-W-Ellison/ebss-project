@@ -28064,12 +28064,43 @@ later entry. These were not. Each line names the entry that left it.
   midden (#386). Nobody made a hoe inside two years in probes (#385); tools
   are now made in the order of the time they save net of their making
   (#387), which has not been looked at for the hoe.
+- Agriculture's third stage is modelled throughout: the seasons come of
+  seeing ripe crops fall, and the harvest is brought in before the window
+  closes (#395); seed is saved on purpose (#396) and chosen off the
+  heaviest stand, a sowing at a time (#397); fields are hedged against
+  beasts (#398). Hedging comes of comparing weeded fields inside a hedge
+  and outside one, and was not seen in two years: weeding is rare, and a
+  field is inside a hedge only for the ninety days a camp's ring stands.
+- Medicine's first stage is modelled throughout: wounds are washed
+  (#399), seared (#400) and sewn (#401), broken limbs set (#402), births
+  helped (#403), and teas and poultices made (#404). Births go hard and
+  helping at them is found out; the rest were not seen in two years,
+  because the blows that land are small: a wound rarely turns and a bone
+  rarely breaks (#399 to #405). The sea no longer counts as clean water
+  (#405).
+- The social paths' first stages are modelled: a beast is called out
+  (#406), the work is divided by the hand (#407), stores are reckoned by
+  tally (#408), and seed is sown by the measure (#409); stage nought of
+  communication and of exchange is linked to speech, sharing, gifts and
+  barter. Still unlinked: gestures, drums, horns, smoke and beacons; elders,
+  family heads and leaders; verbal agreements and marks of ownership; stage
+  nought's measures. Skills keep a year now, not nineteen hours (#410), and
+  camps that kept them filled their packs with spare tools and could not
+  take food out of a store; spares now make room (#411). The last two who
+  starved had walked between a full trap and the day's better ground, or
+  set their only basket down; nobody starves in forty worlds now (#412).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
   what it comes to is reckoned from the development pace. Teaching (#388)
   has not been seen in a measurement, nobody born in a run being six by the
-  end of it. A fire never gets away into a camp, and game is not drawn to
+  end of it. Traits bear on who comes to ideas, who teaches and who takes
+  them up (#390).
+- Lining stores comes of comparing bare ones with lined ones, and the
+  camp's stores are lined by those whom waste bothers (#394): vermin take a
+  seventh less. Sealing (#393) is still seldom done, clay being seldom
+  carried. Births in the scattered worlds fell within noise with it (#394). Clean water cut illness from
+  foul water by a quarter (#391). A fire never gets away into a camp, and game is not drawn to
   burnt ground (#381). Poles are not a thing apart from wood (#382).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
@@ -29705,3 +29736,886 @@ of noticing are divided by the slowness; teaching is not slowed.
 
 **Dice counts**: 6,783 (seed 4242, 120 turns) and 1,008,543 (seed 0, a
 year).
+
+### 390. Technology moves through personalities
+
+The user said: "That is a good pace for now. Go back to technology
+implementation. There are many developments which will enable the agents to
+complete tasks more effectively. Thing is, the technology is a backdrop
+against the personality interactions based on traits." Some sixty traits
+were in the model, and not one bore on finding something out, teaching it or
+taking it up.
+
+**What changed.**
+- **Inventiveness** (`Agent::how_inventive_i_am`): twice for the curious,
+  half again for the imaginative, half for the stubborn, the traditional and
+  the ignorant. It multiplies the chance of an idea, by experience or by
+  noticing, at any pace slower than the development pace
+  (`discovery::does_it_occur_now_for`, `at_this_pace_for`); at the
+  development pace an idea still comes at its count, whoever has it.
+- **Teaching** (`the_young_are_taught`): a child's daily chance of a lesson
+  is scaled by how readily they learn (`how_readily_i_learn`: the curious
+  and a copycat more, the stubborn and the traditional less) and how readily
+  the most willing of their teachers teaches (`how_readily_i_teach`: an
+  extrovert and the charismatic more, an introvert less, the mute only by
+  showing). The lesson comes from the most willing of those who know it, and
+  makes each warmer to the other; a proud teacher is pleased to pass on a
+  thing they came to themselves.
+- **Taking it up from watching** (`takes_it_up`): a grown person who sees a
+  thing done takes it up as readily as they learn anything, so the stubborn
+  and the traditional may see it and leave it, and it warms them to the one
+  they watched.
+- **Finding first** (`came_to_it_myself`, `what_the_camp_makes_of_it`): what
+  somebody came to themselves is remembered as theirs. A proud finder is
+  pleased with it; the envious of their camp resent them for it.
+
+**Measured**, forty settlements, two years, against #387 to #389:
+
+| | before | #390 | t |
+|---|---|---|---|
+| births | 179 | 181 | +0.24 |
+| deaths | 1 | 7 | +1.64 |
+| alive at two years | 658 | 654 | -0.39 |
+| person-days wasting | 467 | 271 | |
+
+Within noise. All seven deaths were blows, three of them in one world on
+two days (smooth seed 13). At the development pace the traits show only in
+who takes up what they see and in the warmth between people; who comes to
+ideas first shows at a people's pace, which cannot be run long enough to see.
+
+**Tests** (`trait_technology_tests`): ideas come more readily to the curious;
+who learns and who teaches readily; an eager child with a willing teacher
+learns more; a lesson warms teacher and taught; the proud are pleased and
+the envious resent it.
+
+### 391. Choosing where to drink
+
+Of the stage 0 to 2 listings that would make work go better on what the
+model already has: water drawn beside fouled ground carries the fouling and
+lays people up (#357), some 2,600 times in forty worlds over two years, and
+nobody ever chose where they drank.
+
+**What changed.** "Selection of preferred springs over surface water"
+(`know:clean_water`): somebody who knows to passes by water with fouled
+ground about it for clean water they know of within reach, and with nothing
+clean to go to drinks what there is (`the_node_this_gather_takes`). Found out
+by being laid up from foul water twice, at the pace ideas come
+(`Agent::ILL_FROM_FOUL_WATER_BEFORE_CHOOSING`).
+
+**Measured** with #392 and #393, against #390: found out in all forty worlds,
+median day 43. Illness from foul water fell from 2,613 to 1,873 (t -6.15,
+lower in 31 worlds of 40).
+
+**Tests** (`clean_water_tests`): somebody who knows passes by foul water for
+clean; with nothing clean, a drink is a drink; laid up twice is how it is
+found out.
+
+### 392. Lining a store
+
+Vermin take most of what is lost from stores - some 284,000 units in forty
+worlds over two years, against 46,000 rotted. A probe found nearly half of
+what a people put by in pits covered with bare earth and unlined, which lose
+a thousandth a day, twice that beside a midden: only a vessel to spare ever
+went in as a lining, and few had one.
+
+**What changed.** "Woven bins" (`know:line_the_store`,
+`line_the_store_here`): somebody who knows to, with no vessel to spare,
+weaves a basket for a store worth it - sixty units or more in it, or about
+to be (`A_STORE_WORTH_A_BASKET`) - of lashings they can spare, two kept back
+for tools. A store keeps what vermin carry off until somebody opens it
+(`Pit::gnawed`); opening a gnawed store three times is how it is found out
+(`Agent::GNAWED_STORES_BEFORE_LINING`). Both ways into a store, caching and
+the storehouse, line it.
+
+**How it got there.** The first cut had them put in the only basket they
+had - what a foraging trip brings more than an armful home in - and with
+#393 as first made, births across forty worlds fell from 181 to 98.
+
+**Measured** with #391 and #393, against #390: found out in all forty
+worlds, median day 64; 941 stores lined. Vermin took 281,773 against 284,088
+(t -0.21): no measurable change. Only new stores going in are lined, and the
+food already lying in bare earth stays there.
+
+**Tests** (`lining_tests`): nobody gives up the only basket they forage with;
+a basket is woven for a store worth it, of lashings to spare; opening a
+gnawed store is how it is found out.
+
+### 393. Sealed baskets for stores
+
+**What changed.** "Sealed baskets" (`know:seal_the_store`): a basket daubed
+shut with clay as it goes into a store, by somebody who knows to and carries
+clay, which vermin take from as little as from a fired pot. Only as it goes
+in. It comes to somebody who lines their stores and opens a lined one
+gnawed three times (`Agent::LINED_STORES_GNAWED_BEFORE_SEALING`).
+
+**How it got there.** First it was a making like any other, found out by
+day ten by the general noticing, and since it kept food better than a basket
+it was the vessel people made of the baskets they foraged with - and a
+sealed basket carries nothing. Births in the scattered worlds fell from 55 to
+6. A probe of four of them, with sealing only as a store is lined, came back
+at seventeen births against seventeen.
+
+**Measured** with #391 and #392, against #390:
+
+| | #390 | #391 to #393 | t |
+|---|---|---|---|
+| births | 181 | 174 | -0.82 |
+| deaths | 7 | 2 | -1.40 |
+| alive at two years | 654 | 652 | -0.20 |
+| ill from foul water | 2,613 | 1,873 | -6.15 |
+| vermin | 284,088 | 281,773 | -0.21 |
+| person-days wasting | 271 | 663 | +2.07 |
+
+Sealing came to all forty worlds, median day 121, and was done six times:
+clay is seldom carried. Days wasting are up at the edge of noise, mostly in
+three scattered worlds (seeds 7, 9 and 3); weaving baskets for stores spends
+lashings, and that has not been looked at.
+
+**Tests** (`lining_tests`): a basket with clay to hand is sealed and vermin
+hardly take from it; lined stores gnawed is how sealing is found out.
+
+**Full suite**: 3,069 passed, 0 failed, 6 ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns) and 954,243 (seed 0, a year).
+
+### 394. Comparing a bare store with a lined one
+
+#392 made lining a store come to somebody who opened a gnawed store three
+times, and lined only what was going in. Two things were wrong with that. Any
+store is gnawed, so being gnawed teaches nothing; what tells is that a bare
+store loses plainly more than a lined one, and anybody who opens both often
+enough can see it. And a store already full and lying in bare earth was left
+there, so lining did nothing measurable to what vermin took.
+
+**What changed.**
+
+- Opening a store reckons what it lost (`what_opening_the_store_shows`):
+  so much food, for so many days since it was last opened (`Pit::last_opened`),
+  and so much gone (`Pit::gnawed`). Each person keeps a tally by how the store
+  is shut - bare, lined, sealed (`Agent::store_losses`,
+  `what_i_saw_of_a_store`).
+- With three hundred food-days of each seen, a bare store losing half again
+  as much as a lined one is how lining is found out
+  (`what_the_stores_have_shown_me`, `PLAINLY_WORSE`). It is a comparison of
+  two things seen, not an idea, and comes at no pace.
+- Whether it is acted on is temperament (`how_much_waste_bothers_me`): the
+  frugal twice as much, the survivalist, diligent, pragmatic and greedy half
+  as much again, the lazy a third. A store is worth lining when what it would
+  save over a season, weighted by that, is more than a basket's making
+  (`is_lining_this_worth_it`, `WHAT_LINING_A_STORE_COSTS`). What it would
+  save is what they have seen stores lose, or a guess before they have.
+- Somebody who knows walks to the camp's bare stores worth lining, largest
+  first, and lines them (`a_store_to_line`, `Action::LineStore`), under
+  preparedness. With no vessel or lashings to spare they make lashings of
+  wood in hand, or fetch wood for them.
+
+**Probe**, three worlds before the makings were fetched: lining came by the
+comparison on days 41 to 98 and 17 to 44 stores were lined in each. With the
+makings fetched, 49 to 60.
+
+**Measured** against #391 to #393:
+
+| | #391 to #393 | #394 | t |
+|---|---|---|---|
+| births | 174 | 161 | -1.39 |
+| deaths | 2 | 4 | +1.00 |
+| alive at two years | 652 | 637 | -1.64 |
+| vermin | 281,773 | 241,055 | -3.46 |
+| stores lined | 941 | 2,298 | +8.46 |
+| stores sealed | 6 | 119 | +6.95 |
+| rotted | 43,756 | 42,117 | -0.75 |
+| person-days wasting | 663 | 709 | +0.19 |
+
+Found out in all forty worlds, median day 46. Vermin took a seventh less,
+lower in 29 worlds of 40. Sealing, which comes to those who line, went from
+six to 119. Births are down within noise, most of it in the scattered worlds
+(49 to 38, t -1.46); that is where people are fewest and a lashing spent on a
+store counts for most, and it wants watching.
+
+**Tests** (`lining_tests`): opening a store reckons what it lost; comparing
+bare stores with lined ones is how lining is found out; the frugal line what
+the lazy leave; a bare store of the camp's is lined; with nothing to line it,
+the makings are got.
+
+**Full suite**: `cargo test --lib`, 3,078 tests: 3,072 passed, 0 failed, 6
+ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns) and 964,810 (seed 0, a year).
+
+### 395. Keeping the seasons in mind
+
+Field crops ripened and were mostly left where they stood: a probe of a
+smooth world found 789 units fallen off the fields after four full
+ripenings, and a scattered one 122. A crop out of its season falls a quarter
+a day, so whatever nobody took in by the window's last day was lost.
+
+**What changed.**
+
+- A field crop's window can say how many days it has left
+  (`Bearing::days_left`). The world counts ripe field crop that falls once
+  its season is out (`field_crop_fallen`), crops that ripen at a full stand
+  and short on the last day (`crops_ripened_full`, `crops_ripened_short`),
+  and field crop that goes into a pack (`field_crop_brought_in`).
+- The first day a ripe crop is seen to fall, its place is noted
+  (`crops_lost_to_the_season`). Every grown person living within a field's
+  walk of it sees it (`what_the_fields_lost`), and somebody who has seen two
+  is apt to keep the seasons in mind (`know:seasons`, at the pace).
+- Somebody who keeps the seasons, fed and rested, brings in a ripe field
+  of the camp's in the last thirty days of its window, nearest first, if what
+  it would give, by how much waste bothers them, is worth the walk
+  (`a_harvest_to_bring_in`, `harvest_action`, under sustenance before
+  farming).
+
+**Probe**, one scattered world to day 980: the seasons came on day 616, two
+days after the grain window closed. Up to then 469 units were brought in and
+1,418 fell. Over the next window (days 885 to 974) 9,186 were brought in and
+2,102 fell.
+
+### 396. Seed saved on purpose
+
+Seed was a handful kept back from the pot by whoever broke ground; nobody
+set it aside off a harvest, and a field broken with no seed was sown of
+whatever grain was to hand.
+
+**What changed.** Breaking ground with no seed in hand, three times, makes
+somebody apt to save it on purpose (`know:save_seed`). Somebody who knows
+keeps a season's seed, six, rather than three (`how_much_seed_i_keep`), and
+sets it aside off a ripe grain field as they take it in (`save_seed_off`).
+A field sown of saved seed carries what that seed was bred to (`bred`,
+`sown_on`).
+
+### 397. Seed chosen off the heaviest stand
+
+**What changed.** Somebody who has saved seed off five harvests is apt to
+save it from the heaviest stand (`know:select_seed`). Seed saved off a
+field that stood full, by somebody who knows, is bred a step,
+`WHAT_CHOOSING_THE_HEAVIEST_DOES` (0.05), on from what the field was sown
+of. A field of seed bred all the way carries half again
+(`what_breeding_does`, `A_BRED_CROP_CARRIES`). Grain only, and the larger
+seed, fruit and the rest taken as one figure.
+
+The first version stepped the line on from the seed already in hand, so a
+dozen gathers off one field bred it the whole way within a season; four
+worlds of forty had it fully bred inside two years. It steps on from the
+field now, a sowing at a time: twenty years, grain ripening once a year.
+
+### 398. Fields hedged against beasts
+
+**What changed.** A field inside a closed hedge has half the pests come on
+it (`WHAT_A_HEDGE_KEEPS_OFF`). Weeding a field, somebody notes what share
+of what they cleared was pests and whether it was hedged
+(`what_i_saw_of_a_field`). With ten of each weeded and the open fields
+plainly worse, half again, the hedge is found out (`know:hedge_fields`), a
+comparison and not an idea. Somebody who knows and is bothered enough by
+waste lays an edge round two fields or more (`a_field_to_hedge`,
+`Action::HedgeAField`): a smaller ring than a camp's, two cells out, that
+takes eight brush and stands a year (`ThornHedge::round_fields`).
+
+It was not found out in any world. Weeding is rare: in two probes the most
+fields anybody weeded inside two years was eight open and none hedged, and
+a field is hedged only inside a camp's ring for the ninety days it stands.
+The comparison is there to be made; at this pace it is a long way off.
+
+**Measured** #395 to #398 against #394, forty settlements over two years:
+
+| | #394 | #395 to #398 | t |
+|---|---|---|---|
+| births | 161 | 163 | +0.47 |
+| deaths | 4 | 3 | -0.57 |
+| alive at two years | 637 | 640 | +0.65 |
+| vermin | 241,055 | 238,404 | |
+| rotted | 42,117 | 41,361 | |
+| person-days wasting | 709 | 696 | |
+
+Seed saving came in 36 worlds of 40 (median day 374), the seasons in 28
+(median day 616), choosing seed in 12 (median day 571), hedging fields in
+none. Over the two years 442,468 units of field crop fell and 75,384 were
+brought in: the seasons come, at the median, just after the second grain
+window closes, so a two-year run sees the loss that teaches it and not
+much of the harvest that follows. Seed was bred a step, 0.05, in nine
+worlds, and no further: a second step wants a second sowing of chosen seed.
+The twelve worlds where choosing came were run again after the fix to
+breeding (#397); the other twenty-eight do not reach it and are the same.
+
+**Tests** (`seed_and_field_tests`): a seed saver keeps a season's seed;
+breaking ground without seed is how saving is found out; seed saved off a
+ripe field carries its breeding on; choosing the heaviest breeds the seed
+on, a sowing at a time; saving seed off harvests is how choosing is found
+out; a stand of bred seed carries half again; a hedge keeps half the pests
+off; weeding hedged and open fields is how hedging is found out; the frugal
+hedge a field the lazy leave open; an edge is laid round the fields and
+closed; a season says how many days it has left; a ripe crop seen to fall
+is how the seasons come to mind; somebody who keeps the seasons brings the
+harvest in.
+
+The seasons test first gave its second person an id from `Uuid::new_v4`,
+which the one-stream guard forbids; it takes a fixed one.
+
+**Full suite**: `cargo test --lib`, 3,091 tests: 3,085 passed, 0 failed, 6
+ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns) and 964,810 (seed 0, a year),
+unchanged.
+
+### 399. Wounds washed
+
+A wound was either dressed or not (#351), and the dirt in it was not
+anything anybody could do something about.
+
+**What changed.** A fresh wound has the dirt of whatever made it in it
+(`AgentState::wound_cleaned` false on every blow that opens one wider).
+Somebody who knows how washes it, at water within a pace or out of a
+waterskin, half a unit (`Action::CleanWound`, `cleaning_a_wound`), and a
+washed wound turns half as often (`WHAT_CLEANING_LEAVES`). A wound that
+turns is seen by the grown within twelve paces (`what_the_camp_saw_of_bodies`,
+a new pass after the fields'); somebody who has seen two is apt to wash the
+next (`do:CleanWound`, at the pace). The catalogue's
+`cleaning_visible_dirt_from_wounds` is that.
+
+### 400. Searing a wound
+
+**What changed.** A wound bleeding hard, twice what is worth pressing on,
+can be seared shut with a brand from a lit fire within reach
+(`Action::Cauterise`, `cauterising`): the bleeding stops at once, the wound
+is seared half shut and clean, and it costs four health and a fright. A
+wound bleeding that hard by a fire, three times, is how it is found out
+(`do:Cauterise`). The coward and the anxious will not sear their own; the
+kind-hearted will not sear somebody else's, and bind it instead. The
+catalogue's `cautery`.
+
+### 401. Sewing a wound
+
+**What changed.** A wound open wider than two fifths can be sewn with a
+point and a length of cordage (`Action::StitchWound`, `stitching_a_wound`):
+it bleeds no more and closes twice as fast (`WHAT_STITCHING_DOES`).
+Binding wounds with a point to hand, three times, is how it is found out
+(`do:StitchWound`). The catalogue's `stitching_simple_closure`.
+
+### 402. Broken limbs and setting them
+
+As asked: a hard blow can break a limb; it slows the person for weeks and,
+left as it is, may leave a lasting limp; setting it lets it knit straight.
+
+**What changed.** A blow harder than fifteen may break a limb, the odds
+rising with the blow to two in five at thirty-five and over
+(`a_blow_may_break_a_bone`). A broken limb halves the pace
+(`what_my_bones_leave`, in `movement_speed_at_turn` and the walking speed)
+and knits in six weeks (`turn_the_bone`). Left, it knits crooked three
+times in five; set, one in ten. A crooked one leaves a limp, a fifth off
+the pace for good, to three fifths at most. Somebody else who knows how
+sets it with a splint of wood and a binding of cordage
+(`Action::SetBone`, `setting_a_bone`), at a fright to the patient. A bone
+seen to knit crooked, twice, is how setting is found out (`do:SetBone`).
+The catalogue's `bone_setting`.
+
+### 403. Births that go hard, and helping at them
+
+As asked: a hard birth can lose the child or the mother; people who attend
+births learn to help, and a helper cuts the risk.
+
+**What changed.** One birth in eight goes hard
+(`Population::how_the_birth_went`). A hard birth loses the child two times
+in five and the mother one in ten; a mother who lives through it loses a
+fifth of her health. Somebody at hand, other than the mother, who knows how
+to help halves both. Everybody grown within two paces of a birth has seen
+one, and three is how helping is found out (`do:AttendBirth`). Somebody who
+knows goes to a mother within a day of her time, within as far as they
+would go for her, and stays by her (`what_a_birth_asks`,
+`Action::AttendBirth`). How far that is is temperament
+(`how_far_i_would_go_for`): twelve paces for kin, a partner, the
+kind-hearted and the altruist; a hand's reach for anybody else; not at all
+for the cold-hearted, the uncaring and the cruel. The same reach decides who
+goes to somebody else's wound. Childbirth is a cause of death
+(`AgentState::CHILDBIRTH`). The catalogue's `midwifery_beginnings`.
+
+The roll was first put in the simulation's birth pass, and the first
+measurement counted no hard birth in about a hundred and twenty. The turn's
+population pass (`Population::process_pregnancies`) delivers every child
+that is due before the simulation's own pass runs, which never sees one.
+The roll is the population's now, both passes call it, and the simulation
+folds the population's count into the world's after the population's turn
+(`count_the_hard_births`).
+
+### 404. Poultices and teas
+
+**What changed.** Somebody who knows poultices and teas makes a tea of a
+remedy, with half a unit of carried water and a lit fire within reach, and
+a tea draws half as much again out of the herb
+(`take_a_remedy_drawn`, `WHAT_A_TEA_DRAWS_OUT`); the cap on what any herbal
+can do still holds. Binding a wound, they lay a remedy herb under the
+dressing, the skin's herb first, and a poulticed wound under a dressing
+turns half as often again (`WHAT_A_POULTICE_LEAVES`). Dosing other people,
+five times, is how it is found out (`know:poultices_and_teas`). The
+catalogue's `basic_poultices_and_teas`.
+
+### 405. The sea is not clean water
+
+Measuring medicine's first stage, two smooth worlds lost five people to
+thirst that had lost none before it. In one, three of a camp died at one
+spot over five days, each choosing to drink every turn and refused every
+turn: `Gather: No water sources nearby`.
+
+Somebody who knows to choose their water (#391) passes by a spring with
+fouled ground about it when they know of clean water within reach. The sea
+counted as clean. These three had a fouled spring a pace away and the sea
+six paces off, and knew of no other water; the gather passed by the spring
+for the sea and then refused the sea as salt. The decision layer does not
+look at fouling, saw water within reach, and chose the same gather again.
+Clean water is now water they would drink. Medicine did not cause it: it
+changed the dice, and the dice found it.
+
+**Test** (`clean_water_tests`): the sea is not clean water to somebody who
+will not drink it.
+
+**Measured** #399 to #405 against #398, forty settlements over two years:
+
+| | #398 | #399 to #405 | t |
+|---|---|---|---|
+| births | 163 | 163 | 0.00 |
+| deaths | 3 | 3 | 0.00 |
+| alive at two years | 640 | 640 | 0.00 |
+| vermin | 238,404 | 232,719 | |
+| rotted | 41,361 | 42,143 | |
+| person-days wasting | 696 | 611 | |
+
+Fourteen births of about a hundred and sixty-five went hard, one in twelve
+against the one in eight it is set at; two children were lost and no
+mother. Helping at a birth was found out in fourteen worlds (median day
+491), and somebody who knew was at one hard birth. Two wounds turned in
+forty worlds, one bone broke, and it knit straight unset. Nobody washed,
+seared or sewed a wound, set a bone, laid a poultice or made a tea, and
+none of those was found out.
+
+That is the wounds there are, not the treatment. In a probe of one world,
+the blows that landed in two years were twenty-two, from three to ten and
+most of them six: a beast's bite, which opens a wound a quarter wide that
+closes in three days and turns about one time in forty. Searing wants
+bleeding twice what any of those gives, sewing a wound twice as wide, and
+a break a blow over fifteen, which only the big hunters deal. Washing
+comes of seeing two wounds turn, so a camp sees what teaches it once in a
+generation or so at this pace. The figures for how often a wound turns,
+how wide a blow opens one, and what breaks a bone are #351's and this
+stage's, and none was tuned to make medicine show.
+
+The measurement before #405 lost five more people, to thirst, in two
+worlds (#405).
+
+**Tests** (`medicine_tests`, 19): the catalogue knows medicine is found
+out; a washed wound turns half as often; washing comes of seeing wounds
+turn; a brand stops the bleeding and sears the wound; the brand comes of
+wounds bleeding by a fire; the cowardly will not sear their own nor the
+kind another; a sewn wound closes twice as fast; sewing comes of binding
+wounds with a point to hand; a broken limb halves the pace and a crooked
+one limps; a break knits in six weeks; a bone is set with a splint and a
+binding; setting comes of seeing bones knit crooked; how far somebody goes
+for another is temperament; a birth can go hard and help at it is found
+out; the birth roll is made where children are delivered; a midwife goes
+to a mother whose child is near; a tea draws out half as much again; a
+poultice under a dressing halves the turning; teas and poultices come of
+dosing other people.
+
+**Full suite**: `cargo test --lib`, 3,112 tests: 3,106 passed, 0 failed, 6
+ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns), unchanged; 894,003 (seed 0,
+a year), down 7.3%.
+
+### 406. Calling out a beast
+
+As asked for the social paths with nothing linked: the first stage of
+communication, the first of the governance path, of counting and of
+measurement, each found out from what happens and taken up or not by
+temperament (#406 to #409). Stage nought of each was linked to what the
+model already did: speech is `do:ShareInformation` and `do:AskAbout`;
+household sharing, gifts and barter are `do:GoWithout`, `do:GiveTo` and
+`do:Trade`.
+
+**What changed.** Somebody who sees a beast and knows to calls it out
+(`a_beast_was_seen`): everybody else in earshot, twenty-five paces, not
+deaf, is told where it is (`saw_danger`), and anybody within a beast's
+ground of it is woken and decides again. The mute, the cold-hearted, the
+uncaring and the callous call nothing (`would_raise_the_call`). Being struck
+by a kind of beast somebody else saw within twenty-five paces and a day, and
+did not call, is a blow a call would have spared; two of those and somebody
+is apt to think of calling (`know:calls`). The catalogue's
+`standardized_calls_for_danger_assembly_hunt`.
+
+### 407. Dividing the work
+
+**What changed.** Somebody who knows to divide the work leans to the way of
+getting food where their hand stands best against their camp's: their hand
+over the camp's mean at each of gathering, fishing and hunting, and that
+over their own mean standing (`what_my_hand_is_worth_to_the_camp`). It
+lifts that way's relief by up to a quarter, and lifts nothing else. The
+stubborn, the rebel and the proud do as they would have done. Gathering is
+the better of the foraging and the farming hand, since bringing in a field
+is gathering too. A role weighs less as the need presses, and nothing on
+somebody starving. Seeing a plainly better hand bring food in, a third
+better, within twelve paces, at work one has been at oneself within half a
+day, five times, is how it is found out (`know:division_of_labour`). The
+catalogue's `division_of_labor_in_food_gathering` and
+`recognized_roles_by_age_skill_or`.
+
+It took three goes. The first counted anybody near as having seen a better
+hand, and it was found out in every world by day thirty-two on 479,176
+sightings; somebody now has to have been at the same work. The second, once
+skills kept (#410), starved camps. It took a quarter off the ways somebody
+stood worse at, and judged a harvest by the foraging hand alone, so a good
+farmer who was a better hunter marked their own harvest down by a quarter,
+however hungry. On the thirteen worlds that had hunger deaths in that
+measurement:
+
+| | no roles | the farmer's hand, fading with hunger | lifting only |
+|---|---|---|---|
+| hunger deaths | 3 | 5 | 3 |
+| person-days wasting | 314 | 496 | 272 |
+
+The second version took 13 and 704.
+
+### 408. Tallies
+
+**What changed.** What somebody reckons is in the stores within reach is
+what they last saw of them (`what_i_reckon_is_put_by`), not what is there.
+Somebody who keeps a tally knows (not the lazy). The three questions of
+whether a store wants filling ask it. Finding a store, of ten or more,
+holding less than half of what one remembered, three times, is how keeping a
+tally is found out (`know:tally`). The catalogue's tally sticks, notches,
+counting baskets and pebbles.
+
+### 409. Seed by the measure
+
+**What changed.** Seed sown by the eye goes in thin a third of the time and
+thick a third (`sown_at_a_guess`). A thin-sown field carries seven tenths of
+a crop, and a thick one takes a second seed out of the pack if there is one.
+Somebody who knows the measure sows it right (not the lazy). Bringing in a
+field of one's own sowing that came up thin, three times, is how it is found
+out (`know:measured_sowing`). The catalogue's
+`known_seed_amounts_for_planting`.
+
+### 410. A trade kept for nineteen hours
+
+Watching the division of labour, every hand in a camp was nearly the same.
+A trade unused for more than 1,152 minutes began to rust, and lost a level
+every 576 (`Skills::KEEPS_FOR`, `LOSES_A_LEVEL_EVERY`). Those are an old
+calendar's days, and on this one they are nineteen hours and nine and a
+half: anything not done daily was back at nothing within a week. A trade
+keeps a year unused now and loses a level every half-year after.
+
+### 411. A pack full of spare tools kept people out of the larder
+
+With skills that keep (#410), a practised hunter's throw lands more often
+(`how_often_a_throw_tells`) and a practised fisher's cast does
+(`odds_of_a_cast`), and camps turn to both. Without the division of labour,
+forty worlds over two years, against r415 (before #406):
+
+| | before | skills kept | |
+|---|---|---|---|
+| hunts | 1,032 | 1,827 | x1.77 |
+| fish caught | 51,648 | 85,748 | x1.66 |
+| stews | 36,200 | 24,655 | x0.68 |
+| meat left on kills | 1,395 | 3,886 | x2.79 |
+| meat the crows had | 502 | 1,636 | x3.26 |
+| person-days wasting | 611 | 859 | x1.41 |
+| hunger deaths | 2 | 10 | |
+
+Kills outrun what is cut and carried home, and the crows have the
+difference. That was the first reading of it, and it was not why people
+starved: see **What was found** below. #410 is not to be undone: a skill
+that was gone in a week was the bug.
+
+**Measured** #406 to #410, forty settlements over two years:
+
+| | r415, before #406 | #406 to #410 | t |
+|---|---|---|---|
+| births | 163 | 162 | -0.08 |
+| deaths | 3 | 11 | 2.24 |
+| of hunger | 2 | 9 | 2.21 |
+| alive at two years | 640 | 631 | -0.76 |
+| person-days wasting | 611 | 835 | |
+| field crop brought in | 67,015 | 60,307 | |
+| vermin | 232,719 | 246,954 | |
+| rotted | 42,143 | 44,448 | |
+| beasts struck, by day | 37 | 19 | |
+| beasts struck, by night | 46 | 17 | |
+
+With #410 and no division of labour, the same forty worlds: 162 births, 12
+deaths (10 of hunger), 630 alive, 859 person-days wasting. The extra deaths
+are #411's, not the social paths'.
+
+Calling was found out in five worlds (median day 500), by one person in
+each, and taught to nobody; sixteen calls were raised and heard 198 times,
+and 17 blows were ones a call would have spared. Dividing the work was found
+out in all forty (median day 56), on 43,452 better hands seen; it weighed
+2,066,834 choices. Tallies were found out in all forty (median day 304), on
+23,892 stores found short, and reckoned 2,541,259 stores. The measure for
+seed was found out in twelve (median day 466): 267 fields went in thin, 229
+thick and 23 by the measure. Thirteen of the forty worlds are r421's, whose
+code is the same.
+
+**Tests** (`social_paths_tests`, 12): the catalogue knows the social paths;
+a call tells everybody in earshot where the beast is; the cold-hearted call
+nothing; blows nobody called are how calling is found out; the work goes to
+the hand that stands best at it; a good farmer is not put off their harvest;
+better hands seen are how dividing the work is found out; a tally reckons
+the store by what is in it; a store found short is how the tally is found
+out; seed thrown by the eye goes in thin or thick; a thin-sown field carries
+seven tenths; bringing in thin fields is how the measure is found out.
+`behaviour_gaps_tests::a_farmer_keeps_seed_back_and_sows_it` sows by the
+measure, so a thick guess does not take the seed it counts.
+
+**Full suite**: `cargo test --lib`, 3,124 tests: 3,118 passed, 0 failed, 6
+ignored.
+
+**Dice counts**: 6,783 (seed 4242, 120 turns), unchanged; 933,238 (seed 0,
+a year), up 4.4% from 894,003 over #406 to #410.
+
+**What was found.** Each of the nine who starved in r422 was traced
+through the days they wasted, with every action counted by the branch of
+`generate_non_emotional_action` that chose it. Eight of the nine died the
+same way:
+
+- **Packs full of spare tools.** Curiosity makes a thing it has worked out
+  until it holds a few of it (`what_i_would_try_out`, `A_FEW_SPARE`, four),
+  and a tool was no exception: their packs were three bows, three nets,
+  three rods or three spears, with no room left. A tool was always kit
+  (`is_this_part_of_the_kit`), and kit is never set down, so nothing in the
+  pack would go on the grass to make room for a handful of roots.
+- **Walked from pit to pit.** The store branch sits above every drive. It
+  offered the nearest remembered pit; arrived, the pack could take nothing;
+  the next turn the other pit was nearer. They walked between two pits
+  about 250 times a day until the reserve ran out.
+- **Whole fish uneaten.** Two of them carried whole fish and had no knife.
+  A whole fish comes apart in the hands (`could_pull_apart_by_hand`), but
+  the hungry overrides asked only `has_edible_food`, so they were sent to
+  the store instead of eating.
+
+Why #410 brought this on: with skills that keep, a practised hand finds out
+the bow, the net and the rod sooner (the bow by a median day of 208 rather
+than 287), and a tool lasts longer in a better hand, so the spares pile up.
+On day 300, across three worlds, people carried 2.03 spare tools each with
+#410 and 0.58 without; on day 200, 1.25 and 0.06. Those two causes were not
+separated. Fish and meat portioning was known to about three in four by the
+end, with or without #410, so that was not it.
+
+**What changed.**
+
+- A tool is made once to see it. `what_i_would_try_out` stops at one of
+  anything that is kit, and still keeps a few of a part such as cord.
+- The kit is one of each tool. A second or third of the same tool is a
+  spare (`is_kit_to_spare`): `room_i_could_make`,
+  `what_i_would_set_down_keeping` and `how_much_of_this_makes_room` will set
+  spares down to make room, and never the last one, which is the one in use.
+- Nobody walks to a pit their pack cannot take from. `what_this_pit_offers`
+  asks `could_i_take_another_handful` before it offers the walk, as #252
+  did for rot.
+- A whole fish is something to eat. Both hungry overrides ask
+  `has_edible_food() || could_pull_apart_by_hand()`.
+
+**Measured** at HEAD (r423), the same forty worlds over two years:
+
+| | r415, before #406 | r419, #410 alone | r422, before this | r423 | t, r422 to r423 |
+|---|---|---|---|---|---|
+| births | 163 | 162 | 162 | 187 | 2.19 |
+| deaths | 3 | 12 | 11 | 8 | -0.77 |
+| of hunger | 2 | 10 | 9 | 2 | -2.48 |
+| alive at two years | 640 | 630 | 631 | 659 | 2.32 |
+| person-days wasting | 611 | 859 | 835 | 530 | |
+| field crop brought in | 67,015 | 83,529 | 60,307 | 105,121 | |
+| cooked | 79,185 | 64,634 | 66,194 | 74,735 | |
+| hunts | 1,032 | 1,827 | 1,854 | 1,732 | |
+| fish caught | 51,648 | 85,748 | 79,397 | 75,396 | |
+| meat left on kills | 1,395 | 3,886 | 3,960 | 4,176 | |
+| rotted | 42,143 | 43,108 | 44,448 | 41,263 | |
+
+Against r415, from before the social paths: births 163 to 187 (t 2.11),
+alive 640 to 659 (t 1.63), hunger deaths 2 and 2. Camps still hunt and fish
+more than before #410, and still leave more meat on kills; that is no longer
+what starves them.
+
+**Still open.** The two who starve in r423 carry one of each tool and eat
+most days, but not enough: see #412.
+
+**Tests** (`spare_tools_tests`, 5): a tool is made to see it once; spare
+tools make room and the one in use stays; a pack of spare tools does not
+keep him out of the larder; a pack that cannot take a root is not walked to
+a pit; hungry, with whole fish and no knife, he eats. All five fail without
+the change. `a_roof_and_a_pack_tests` filled a pack that could not take a
+handful with many hand-axes. Spares now make room, so that pack holds one
+hand-axe that weighs all the room there is.
+
+**Full suite**: `cargo test --lib`, 3,129 tests: 3,123 passed, 0 failed, 6
+ignored. `clay_tests` made its full pack the same way as
+`a_roof_and_a_pack_tests`, and ran forever until it was given one hand-axe.
+
+**Dice counts**: 6,765 (seed 4242, 120 turns), down from 6,783; 967,182
+(seed 0, a year), up 3.6% from 933,238.
+
+### 412. A fisher walking to and from his trap, and a basket set down
+
+After #411, two people still starved in the forty worlds of r423. Each
+carried one of each tool and ate most days, but not enough. Both were traced
+day by day with intake and burn, and every chosen walk was tagged with the
+file and line that built it. They died two different ways.
+
+**What was found.**
+
+- **4c57de2c, scattered world 2**, starves about day 355 in r419, r422 and
+  r423 alike. His intake held at about fifty units a day all along. From
+  day 295 his burn doubled, from 1,100 to 1,350 a day up to 1,700 to
+  2,300, and his reserve went from 0.99 to nothing. Inside single turns he
+  walked back and forth between his camp at (493,503) and better ground at
+  (473,531), about thirty tiles away, up to six legs a turn. At the camp
+  the Sustenance chain came to `moving_on` first, whose day's walk
+  (`camp.rs`, `better_ground_from`) took him to the better ground. Arrived
+  there, `moving_on` had nothing more to offer, and the next link,
+  `fishing_action`, sent him home to his own fish trap at (493,502), a
+  pace from the camp. At the camp the day's walk came first again, so the
+  trap was never emptied. His partner stayed at the camp, so it was not a
+  swap of places. Others at the camp with high burn lost reserve too.
+- **29ea6723, smooth world 12**, new in r423. His burn was normal, about
+  1,200 a day, but from day 325 his intake fell to five units a day. On day
+  323 a scrape of his basket failed, and then curiosity, which had not yet
+  tried putting a basket down (`what_i_have_tried_least_here`), set his
+  only basket on the grass. He walked on. Without it his pack held bow,
+  fishing net, fishing rod, hand-axe, sharpened stick and stone knife, and
+  that was already all that bare hands hold, so no food went in. Nothing
+  made a basket again: a lost edge is made again (`what_my_kit_is_short_of`),
+  a carrier was not. He had the two lashings a basket needs in his pack
+  when he died on day 348.
+
+**What changed.**
+
+- A trap of one's own at hand with fish in it is emptied before the day's
+  walk. `a_trap_of_mine_at_hand` sits in the Sustenance chain before
+  `moving_on` and offers `fishing_action`'s answer only when that answer
+  is `CheckFishTraps`: the trap is within reach and his own. Walking to a
+  trap further off is unchanged and still comes after the day's walk.
+- Curiosity does not put down, cut, scrape or store what its owner cannot
+  spare. `what_i_could_try_here` passes over a held thing when the verb
+  would part with it (it changes what the thing is, or it is put down,
+  spread, covered or stored) and `could_i_do_without` says no: the thing is
+  kit and the last of it. Looking at it is still offered.
+- A carrier lost is made again. `the_carrier_i_am_without` names a basket
+  for a grown person (twelve and over) who carries no handcart, travois,
+  leather bag or basket, has made a basket before, and knows how.
+  `what_my_kit_is_short_of` asks it after the edge and before lashing, so
+  spare turns go to making one, as they do for a lost edge.
+
+**Measured** at HEAD (r424), the same forty worlds over two years:
+
+| | r415, before #406 | r422, before #411 | r423, #411 | r424 | t, r423 to r424 |
+|---|---|---|---|---|---|
+| births | 163 | 162 | 187 | 192 | 0.70 |
+| deaths | 3 | 11 | 8 | 1 | -2.21 |
+| of hunger | 2 | 9 | 2 | 0 | -1.43 |
+| alive at two years | 640 | 631 | 659 | 671 | 1.45 |
+| person-days wasting | 611 | 835 | 530 | 118 | |
+| field crop brought in | 67,015 | 60,307 | 105,121 | 68,631 | |
+| cooked | 79,185 | 66,194 | 74,735 | 84,905 | |
+| hunts | 1,032 | 1,854 | 1,732 | 2,119 | |
+| fish caught | 51,648 | 79,397 | 75,396 | 89,127 | |
+| meat left on kills | 1,395 | 3,960 | 4,176 | 5,163 | |
+| rotted | 42,143 | 44,448 | 41,263 | 44,675 | |
+
+Nobody starves in r424, and both people traced here live through the two
+years. The one death is in childbirth. Against r415, from before the social
+paths: births 163 to 192 (t 2.40) and alive 640 to 671 (t 2.52). Against
+r422: hunger deaths 9 to 0 (t -3.36) and alive 631 to 671 (t 3.52).
+Person-days wasting fell to under a fifth of r415's.
+
+Field crop brought in went from r423's 105,121 to 68,631, about r415's
+level, while fish caught, hunts and cooking rose. That is the noise in the
+counter, not the change: see #413.
+
+**Tests**:
+
+- `nomad_tests::a_full_trap_at_hand_is_emptied_before_the_days_walk`:
+  - With no trap, the day's walk is chosen.
+  - With his own full trap a pace off, he checks the trap.
+  - With somebody else's trap there, he walks.
+  - Without the change, he walked.
+- `a_basket_kept_tests` (2):
+  - `curiosity_does_not_put_down_the_only_basket`: the only basket is not
+    offered to put down or cut, though it is offered to look at. A second
+    basket is offered to put down. This fails without the change.
+  - `a_basket_lost_is_made_again`: somebody who has made a basket and has
+    none is short of one, and comes by it by crafting it from two
+    lashings.
+
+**Full suite**: `cargo test --lib`, 3,132 tests: 3,126 passed, 0 failed, 6
+ignored, once the year's dice count was recorded.
+
+**Dice counts**: 6,765 (seed 4242, 120 turns), unchanged; 908,858 (seed 0,
+a year), down 6.0% from 967,182.
+
+### 413. Field crop brought in did not fall back: it is that noisy
+
+#412 left field crop brought in at 68,631, down from r423's 105,121 and
+back to about r415's 67,015. Fish caught, hunts and cooking all rose at the
+same time, so it looked as if emptying traps before the day's walk might
+have taken the place of harvesting.
+
+**What was found.** Nothing took the harvest's place. The counter moves this
+much between two runs of the same code.
+
+- **No pair of runs differs.** In paired tests over the same forty worlds,
+  no two runs from r415 to r424 differ significantly in crop brought in.
+  The largest |t| is 1.67 (r422 to r423), and r423 to r424 is t -1.20.
+  r423 was the high one: r415, r422 and r424 brought in 60,307 to 68,631.
+- **A few worlds make the total.** In r423, two worlds brought in 32,575 of
+  the 105,121 between them: smooth 13 brought in 17,753 and scattered 13
+  14,822. In r424 the same two brought in 1,476 and 283. Other worlds went
+  the other way: smooth 3 went from 244 to 9,296, and scattered 6 from 52
+  to 3,326.
+- **Not the traps.** Across the forty worlds, the change in trap checks
+  from r423 to r424 does not go with the change in crop brought in
+  (r = -0.01). Crop brought in goes with how much a world sowed (r = 0.70
+  thin fields, 0.80 thick), and r424 sowed a little more than r423 (444
+  thin and thick fields against 393). The day sowing is found out goes with it only
+  weakly (r = -0.17 over 160 world-runs). Worlds that found it on day 93
+  and day 94 brought in nothing.
+- **Same code, fresh dice.** The measurement watch now takes `REDRAW=n`,
+  which keeps the world and founders a seed makes and draws the rest of the
+  run's dice afresh. Unset, nothing changes. Each code was run a second
+  time with `REDRAW=1`:
+
+| | r423 code | r423 code, redrawn | r424 code | r424 code, redrawn |
+|---|---|---|---|---|
+| field crop brought in | 105,121 | 74,045 | 68,631 | 80,504 |
+| field crop fallen | 472,192 | 519,131 | 456,907 | 442,906 |
+| fish caught | 75,396 | 76,560 | 89,127 | 94,348 |
+| cooked | 74,735 | 76,713 | 84,905 | 83,069 |
+| person-days wasting | 530 | 582 | 118 | 234 |
+| hunger deaths | 2 | 2 | 0 | 0 |
+| alive at two years | 659 | 660 | 671 | 670 |
+
+The same code brought in 105,121 once and 74,045 the next time. In smooth
+13, r424's code brought in 1,476 and then 15,485; r423's code 17,753 and
+then 3,406. Between runs of the same code, a forty-world total of crop
+brought in has a standard deviation of about 17,800, so the difference
+between two runs has one of about 25,000. r423 to r424 was 36,490, about
+one and a half of those. Twelve to fourteen worlds in each run bring in
+no crop at all. Between r424 and its redraw, twelve worlds switched
+between bringing in none and bringing in some.
+
+Over both draws of each code, by world: crop brought in 89,583 to 74,568
+(t -0.99), not a change. Fish caught 75,978 to 91,738 (t 4.50), cooked
+75,724 to 83,987 (t 2.45), person-days wasting 556 to 176 (t -2.73), and
+alive 660 to 670 (t 1.94) are #412's, and hold with fresh dice. So does
+nobody starving: two hunger deaths in each draw of r423's code, none in
+either of r424's.
+
+**What changed.** Only the measurement watch. `REDRAW` is there to tell a
+change from the noise. Crop brought in should not be read from one forty-
+world run: a difference under about 50,000 needs a redraw, or more worlds,
+before it says anything.
+
+**Still open.** Most ripe field crop is never brought in. In every run,
+crop fallen to the season is six to seven times crop brought in: 456,907
+against 68,631 in r424. Many worlds break and sow a few hundred fields
+without kept seed and bring none of it in. That is the same in every run,
+so it is not what moved here, but it is the waste the farming is meant to
+avoid, and it has not been looked into.
+
+**Tests**: none. The watch is an ignored test, and with `REDRAW` unset it
+draws the dice it always did. The dice counts are unchanged.

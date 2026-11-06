@@ -42,7 +42,7 @@ fn one_bush_and_a_full_pit(bush_at: (i32, i32)) -> crate::analytics::Simulation 
         .food_database
         .create_food_data(&crate::world::ItemType::Food, 0);
 
-    let mut pit = Pit {
+    let mut pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(here.0 + PACES_TO_THE_PIT, here.1),
         holds: Vec::new(),
         covered: true,
@@ -192,7 +192,7 @@ fn an_empty_hole_underfoot_does_not_hide_the_full_one_behind_it() {
     let here = simulation.population.agents[0].state.position;
 
     // An empty hole right where he is standing, and he remembers it.
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(here.0, here.1),
         holds: Vec::new(),
         covered: true,

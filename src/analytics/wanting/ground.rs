@@ -849,6 +849,159 @@ impl Simulation {
             .map(|(called, crop, _)| (called, crop))
     }
 
+    /// How near the end of its season a ripe crop is before somebody who
+    /// keeps the seasons in mind goes out to bring it in, hungry or not
+    /// (#395): a month.
+    pub(in crate::analytics) const HARVEST_BEFORE_THE_SEASON_IS_OUT: u32 = 30;
+
+    /// How much has to be standing to be taken before a harvest is worth
+    /// the walk, at an ordinary bother about waste (#395): an armful or two.
+    /// The frugal go for less; the lazy wait for more.
+    pub(in crate::analytics) const A_HARVEST_WORTH_THE_WALK: f64 = 6.0;
+
+    /// The ripe crop of the camp's this one would bring in now, for somebody
+    /// who keeps the seasons in mind (#395): ripe, within a walk of home,
+    /// its season out within a month, and enough of it to be worth the walk
+    /// to them. The nearest.
+    pub(in crate::analytics) fn a_harvest_to_bring_in(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(crate::world::Position, &'static str)> {
+        use crate::world::Position;
+
+        if !agent.knows_the_way("seasons") || !agent.immediate_needs_met() {
+            return None;
+        }
+        let home = Self::where_this_one_lives(agent);
+        let today = self.world.climate.calendar.day_of_year;
+        let here = Position::new(agent_position.0, agent_position.1);
+        let bother = agent.how_much_waste_bothers_me();
+        self.world
+            .nodes_near(Position::new(home.0, home.1), Self::FIELD_WALK_RADIUS)
+            .filter(|crop| crop.on_a_field && crop.ripe_stand > 0)
+            .filter(|crop| {
+                crop.resource_type
+                    .bearing_window()
+                    .days_left(today)
+                    .is_some_and(|left| left <= Self::HARVEST_BEFORE_THE_SEASON_IS_OUT)
+            })
+            .filter(|crop| crop.what_can_be_taken() as f64 * bother >= Self::A_HARVEST_WORTH_THE_WALK)
+            .filter_map(|crop| {
+                Self::edible_item_for(crop.resource_type)?;
+                Some((crop.position, Self::gathered_as(crop.resource_type)?))
+            })
+            .min_by_key(|(at, _)| here.distance_to(at))
+    }
+
+    /// The next of bringing a harvest in (#395): to the crop, or take it.
+    pub(in crate::analytics) fn harvest_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (at, called) = self.a_harvest_to_bring_in(agent, agent_position)?;
+        if (at.x, at.y) == (agent_position.0, agent_position.1) {
+            return Some(Action::Gather { resource_type: called.to_string() });
+        }
+        Some(Action::Move { target: (at.x, at.y, agent_position.2) })
+    }
+
+    /// How many fields an edge would take in before somebody would think it
+    /// worth the brush, at an ordinary bother about waste (#398): two. The
+    /// frugal edge one; the lazy, seven.
+    pub(in crate::analytics) const FIELDS_WORTH_AN_EDGE: f64 = 2.0;
+
+    /// Whether a closed hedge, or an edge begun round fields, takes this
+    /// place in already (#398).
+    pub(in crate::analytics) fn is_this_field_hedged(&self, at: (i32, i32)) -> bool {
+        let now = self.world.turn;
+        self.world
+            .thorn_hedges
+            .iter()
+            .any(|hedge| (hedge.is_closed(now) || (hedge.round_fields && hedge.closed_on.is_none())) && hedge.takes_in(at))
+    }
+
+    /// The field of the camp's an edge would go round next, and how many
+    /// open fields it would take in (#398): an edge begun and not closed, or
+    /// else the open field nearest home, if the open fields about it are
+    /// worth the brush to this one.
+    pub(in crate::analytics) fn a_field_to_hedge(&self, agent: &crate::agents::Agent) -> Option<crate::world::Position> {
+        use crate::world::{Position, ThornHedge};
+
+        let home = Self::where_this_one_lives(agent);
+        let near_home = |at: (i32, i32)| Self::within(at, home, Self::FIELD_WALK_RADIUS as i32);
+
+        if let Some(begun) = self
+            .world
+            .thorn_hedges
+            .iter()
+            .find(|hedge| hedge.round_fields && hedge.closed_on.is_none() && near_home((hedge.around.x, hedge.around.y)))
+        {
+            return Some(begun.around);
+        }
+
+        let open_field = |at: (i32, i32)| {
+            self.world.grid.get_tile(&Position::new(at.0, at.1)).is_some_and(|tile| tile.terrain.is_cultivated())
+                && !self.is_this_field_hedged(at)
+        };
+        let reach = Self::FIELD_WALK_RADIUS as i32;
+        let mut nearest: Option<((i32, i32), i32)> = None;
+        for dx in -reach..=reach {
+            for dy in -reach..=reach {
+                let at = (home.0 + dx, home.1 + dy);
+                if !open_field(at) {
+                    continue;
+                }
+                let apart = dx.abs().max(dy.abs());
+                if nearest.map_or(true, |(_, so_far)| apart < so_far) {
+                    nearest = Some((at, apart));
+                }
+            }
+        }
+        let (at, _) = nearest?;
+
+        let edge = ThornHedge::HOW_FAR_A_FIELD_EDGE_GOES;
+        let mut it_takes_in = 0;
+        for dx in -edge..=edge {
+            for dy in -edge..=edge {
+                if open_field((at.0 + dx, at.1 + dy)) {
+                    it_takes_in += 1;
+                }
+            }
+        }
+        (it_takes_in as f64 * agent.how_much_waste_bothers_me() >= Self::FIELDS_WORTH_AN_EDGE)
+            .then_some(Position::new(at.0, at.1))
+    }
+
+    /// The next of hedging the camp's fields, for somebody who knows to
+    /// (#398): to the field an edge goes round with brush in hand and lay
+    /// it, or fetch brush for it.
+    pub(in crate::analytics) fn hedging_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        if !agent.knows_the_way("hedge_fields")
+            || !agent.immediate_needs_met()
+            || agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT
+        {
+            return None;
+        }
+        let field = self.a_field_to_hedge(agent)?;
+        if agent.how_many_i_have("wood") == 0 {
+            return self
+                .nearest_resource_within(agent, agent_position, Self::FORAGE_RADIUS, |resource| {
+                    resource.resource_type == crate::world::ResourceType::Wood
+                })
+                .map(|_| Action::Gather { resource_type: "wood".to_string() });
+        }
+        if (agent_position.0, agent_position.1) == (field.x, field.y) {
+            return Some(Action::HedgeAField);
+        }
+        Some(Action::Move { target: (field.x, field.y, agent_position.2) })
+    }
+
     /// The nearest field within reach that has gone over to weeds and pests
     pub(in crate::analytics) fn field_wanting_work(
         &self,

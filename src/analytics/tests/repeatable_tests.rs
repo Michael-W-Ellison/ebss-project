@@ -266,7 +266,13 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 6,783 for #388: the young are taught what their camp knows, a
     // chance a day each. (#389's pace rolls nothing at the development pace:
     // with teaching off, both counts were as before.)
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_783;
+    // 6,767 for #391 to #393 as first made, and back to 6,783 with the
+    // sealed basket only a way of lining a store: nothing in the first 120
+    // turns now differs from before them.
+    // Down to 6,765 for #411: a tool is made once to see it, spare tools go
+    // on the grass to make room, nobody walks to a pit their pack cannot
+    // take from, and a whole fish counts as something to eat.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_765;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -676,7 +682,36 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // knows.
     // Up 1.4% to 1,008,543 for #387's correction: a tool is wanted for a trade
     // only if it would save more than its making costs, and gathering is one.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_008_543;
+    // Down 6.7% to 940,615 for #390: the stubborn and the traditional may see
+    // a thing done and leave it, and taking it up, or being taught it, warms
+    // people to each other.
+    // Down 10.5% to 841,953 for #391 to #393 as first made, when people
+    // turned their foraging baskets into sealed baskets; 954,243, up 1.4% on
+    // #390, with sealing only as a store is lined and the forager's basket
+    // kept.
+    // Up 1.1% to 964,810 for #394: what stores lose is reckoned as they are
+    // opened, a bare store plainly worse than a lined one is how lining is
+    // found out, and those bothered by waste line the camp's stores.
+    // Down 7.3% to 894,003 for #399 to #404: wounds are washed, seared and
+    // sewn, bones set, births helped, and teas made; the kin and the kind go
+    // further to somebody else's wound than a hand's reach.
+    // Up 2.9% to 920,310 for #406 to #409: a beast is called out, the work
+    // goes to the hand that stands best at it, a store is reckoned by tally
+    // or by what was last seen of it, and seed is sown by the measure or at a
+    // guess.
+    // Up 3.9% to 956,187 for #410, and #407 as corrected: a trade keeps for a
+    // year unused rather than nineteen hours, and a better hand is seen only
+    // by somebody who has been at the same work.
+    // Down 2.4% to 933,238 for #407 corrected again: a role only lifts the
+    // way one stands best at, gathering is the better of the foraging and
+    // the farming hand, and a role weighs less as hunger presses.
+    // Up 3.6% to 967,182 for #411: a tool is made once to see it, spare
+    // tools go on the grass to make room, nobody walks to a pit their pack
+    // cannot take from, and a whole fish counts as something to eat.
+    // Down 6.0% to 908,858 for #412: a trap of one's own at hand is emptied
+    // before the day's walk, curiosity does not put down what cannot be
+    // spared, and a basket lost is made again.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 908_858;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

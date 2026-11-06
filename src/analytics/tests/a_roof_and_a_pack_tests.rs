@@ -259,7 +259,7 @@ fn a_pit_with_room_in_it_is_not_enough_hole_for_a_winter() {
     let here = Position::new(25, 25);
 
     // One empty hole, twenty paces off so it is within reach and not underfoot.
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(30, 25),
         holds: Vec::new(),
         covered: true,
@@ -297,7 +297,7 @@ fn nobody_digs_on_top_of_a_hole_that_is_still_going_spare() {
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
     crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.world.pits.clear();
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: Vec::new(),
         covered: true,
@@ -339,7 +339,7 @@ fn somebody_standing_on_a_full_pit() -> crate::analytics::Simulation {
     buried.food_data = simulation
         .food_database
         .create_food_data(&ItemType::Food, 0);
-    let mut pit = Pit {
+    let mut pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(25, 25),
         holds: Vec::new(),
         covered: true,
@@ -353,20 +353,18 @@ fn somebody_standing_on_a_full_pit() -> crate::analytics::Simulation {
 
 /// Fill a pack with something nobody would set down for food.
 fn a_pack_with_no_room_and_nothing_to_shed(simulation: &mut crate::analytics::Simulation) {
-    // A tool is never set down for supper - see `what_i_would_set_down` - so
-    // this is a pack that genuinely cannot take another handful.
-    while simulation.population.agents[0]
-        .inventory
-        .weight_capacity_remaining()
-        >= 0.5
-    {
-        if !simulation.population.agents[0]
-            .inventory
-            .add_item(InventoryItem::new_with_weight("handaxe".to_string(), 1, 0.5))
-        {
-            break;
-        }
-    }
+    // The one tool in use is never set down for supper - see
+    // `what_i_would_set_down` - so a single hand-axe weighing all the room
+    // there is makes a pack that genuinely cannot take another handful. A
+    // pack of several would not: the spares go on the grass (#411).
+    let agent = &mut simulation.population.agents[0];
+    agent.inventory.get_all_items_mut().remove("handaxe");
+    let room = agent.inventory.weight_capacity_remaining();
+    let mut axe = InventoryItem::new_with_weight("handaxe".to_string(), 1, room);
+    axe.current_durability = Some(40.0);
+    axe.max_durability = Some(40.0);
+    agent.inventory.get_all_items_mut().insert("handaxe".to_string(), axe);
+    assert!(agent.inventory.weight_capacity_remaining() < 0.5);
 }
 
 /// What comes out of the store arrives in the pack, or it stays in the ground.

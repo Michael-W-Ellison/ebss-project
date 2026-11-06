@@ -83,6 +83,8 @@ impl Simulation {
         // Process population lifecycle (aging, starvation, deaths, reproduction)
         // This also increments the turn counter and updates all agents
         self.population.take_a_turn();
+        // Births that went hard in it, into the world's count (#403)
+        self.count_the_hard_births();
 
         // Sync simulation turn with population turn
         self.current_turn = self.population.current_turn;
@@ -254,8 +256,16 @@ impl Simulation {
         self.the_small_stay_with_their_people();
         self.feed_the_small_children();
         self.process_nursing();
-        // And the young are taught what their camp knows (#388)
+        // And the young are taught what their camp knows (#388), and the camp
+        // takes notice of whoever came to something first (#390)
         self.the_young_are_taught();
+        self.what_the_camp_makes_of_it();
+        // And the camp sees what its fields lost to the turn of the season
+        // (#395)
+        self.what_the_fields_lost();
+        // And what happened to anybody's body is seen by the people round
+        // them (#399, #402)
+        self.what_the_camp_saw_of_bodies();
 
         // Turn world (building construction progress, etc.) - having told it
         // where the living are, so that ground nobody is near can sleep. See

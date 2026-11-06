@@ -5,6 +5,15 @@
 use super::super::Simulation;
 use crate::environment::Action;
 
+/// What somebody knows how to do for a wound and has the makings of, now.
+struct WhatTheseHandsCanDo {
+    bind: bool,
+    wash: bool,
+    sear: bool,
+    sew: bool,
+    set: bool,
+}
+
 impl Simulation {
     /// What a bleeding wound - one's own, or somebody's near - asks for
     /// first.
@@ -29,23 +38,13 @@ impl Simulation {
         if agent.state.life_stage == crate::agents::LifeStage::Infant {
             return action;
         }
-        let now = self.current_turn;
-        let can_bind = agent.knows_how_to_do("Bandage") && {
-            let holding = |what: &str| agent.how_many_i_have(what);
-            crate::environment::tags::what_would_be_used(Self::WHAT_A_DRESSING_TAKES, &holding).is_ok()
-        };
-        let wants_binding =
-            |other: &crate::agents::Agent| other.state.an_open_wound > 0.0 && now >= other.state.wound_dressed_until;
+        let can = self.what_these_hands_can_do_for_a_wound(agent_index);
 
         // One's own, first
-        let mine = &agent.state;
-        let instead = if mine.bleeding >= crate::agents::Agent::BLEEDING_WORTH_PRESSING {
-            Some((if can_bind { Action::Bandage { who: None } } else { Action::PressOnWound { who: None } }, "wound: pressed on my own"))
-        } else if can_bind && wants_binding(agent) {
-            Some((Action::Bandage { who: None }, "wound: bound up my own"))
-        } else {
-            self.somebody_elses_wound(agent_index, can_bind)
-        };
+        let instead = self
+            .what_my_own_wound_asks(agent_index, &can)
+            .or_else(|| self.somebody_elses_wound(agent_index, &can))
+            .or_else(|| self.what_a_birth_asks(agent_index));
 
         match instead {
             Some((instead, why)) => {
@@ -56,46 +55,173 @@ impl Simulation {
         }
     }
 
-    /// Somebody else's wound that this one should see to, and how.
-    fn somebody_elses_wound(&self, agent_index: usize, can_bind: bool) -> Option<(Action, &'static str)> {
+    /// What this one knows how to do for a wound and has the makings of, now
+    /// (#351, #399-#402).
+    fn what_these_hands_can_do_for_a_wound(&self, agent_index: usize) -> WhatTheseHandsCanDo {
         let agent = &self.population.agents[agent_index];
         let here = agent.state.position;
-        let now = self.current_turn;
-        let apart = |there: (i32, i32, i32)| (here.0 - there.0).abs().max((here.1 - there.1).abs());
-        let is_mine = |other: &crate::agents::Agent| {
-            other.parent_ids.contains(&agent.id)
-                || agent.parent_ids.contains(&other.id)
-                || other.parent_ids.iter().any(|p| agent.parent_ids.contains(p))
-                || agent.my_partner() == Some(other.id)
-        };
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let a_strip = crate::environment::tags::what_would_be_used(Self::WHAT_A_DRESSING_TAKES, &holding).is_ok();
+        WhatTheseHandsCanDo {
+            bind: agent.knows_how_to_do("Bandage") && a_strip,
+            wash: agent.knows_how_to_do("CleanWound")
+                && (agent.how_much_water_i_carry() >= Self::WHAT_WASHING_A_WOUND_TAKES || self.water_to_wash_with_at(here)),
+            sear: agent.knows_how_to_do("Cauterise") && self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some(),
+            sew: agent.knows_how_to_do("StitchWound") && a_strip && Self::has_something_to_pierce_with(agent),
+            set: agent.knows_how_to_do("SetBone") && a_strip && agent.how_many_i_have("wood") >= Self::WHAT_A_SPLINT_TAKES,
+        }
+    }
 
-        let mut best: Option<(i32, &crate::agents::Agent)> = None;
+    /// What one's own wound asks for (#351, #399-#401).
+    ///
+    /// Bleeding hard, somebody by a fire who knows the brand sears it, unless
+    /// they are too frightened of it; otherwise it is bound, or pressed on.
+    /// Once it has stopped, it is washed, sewn and bound, by whoever knows how.
+    fn what_my_own_wound_asks(&self, agent_index: usize, can: &WhatTheseHandsCanDo) -> Option<(Action, &'static str)> {
+        use crate::core::traits::Trait;
+
+        let agent = &self.population.agents[agent_index];
+        let mine = &agent.state;
+        if mine.bleeding >= crate::agents::Agent::BLEEDING_WORTH_PRESSING {
+            let dreads_the_brand = agent.traits.has(Trait::Coward) || agent.traits.has(Trait::Anxious);
+            if can.sear && mine.bleeding >= Self::BLEEDING_HEAVY_ENOUGH_TO_SEAR && !dreads_the_brand {
+                return Some((Action::Cauterise { who: None }, "wound: seared my own"));
+            }
+            if can.bind {
+                return Some((Action::Bandage { who: None }, "wound: pressed on my own"));
+            }
+            return Some((Action::PressOnWound { who: None }, "wound: pressed on my own"));
+        }
+        self.what_an_open_wound_wants(agent, can, None, "my own")
+    }
+
+    /// What a wound that has stopped bleeding wants next, of somebody who can
+    /// do it (#399, #401, #351): washing, sewing, binding.
+    fn what_an_open_wound_wants(
+        &self,
+        patient: &crate::agents::Agent,
+        can: &WhatTheseHandsCanDo,
+        who: Option<uuid::Uuid>,
+        whose: &'static str,
+    ) -> Option<(Action, &'static str)> {
+        let state = &patient.state;
+        if state.an_open_wound <= 0.0 {
+            return None;
+        }
+        let mine = whose == "my own";
+        if can.wash && !state.wound_cleaned {
+            return Some((Action::CleanWound { who }, if mine { "wound: washed my own" } else { "wound: washed somebody's" }));
+        }
+        if can.sew && !state.wound_stitched && state.an_open_wound >= Self::A_WOUND_WORTH_STITCHING {
+            return Some((Action::StitchWound { who }, if mine { "wound: sewed my own" } else { "wound: sewed somebody's" }));
+        }
+        if can.bind && self.current_turn >= state.wound_dressed_until {
+            return Some((Action::Bandage { who }, if mine { "wound: bound up my own" } else { "wound: bound up somebody's" }));
+        }
+        None
+    }
+
+    /// How far this one would go to see to somebody else (#351, #399-#403):
+    /// across the camp for their own, or for anybody if they are kind; a hand's
+    /// reach for anybody else; and not at all, for anybody not their own, if
+    /// they are cold or cruel.
+    pub(in crate::analytics) fn how_far_i_would_go_for(
+        agent: &crate::agents::Agent,
+        other: &crate::agents::Agent,
+    ) -> i32 {
+        use crate::core::traits::Trait;
+
+        let is_mine = other.parent_ids.contains(&agent.id)
+            || agent.parent_ids.contains(&other.id)
+            || other.parent_ids.iter().any(|p| agent.parent_ids.contains(p))
+            || agent.my_partner() == Some(other.id);
+        if is_mine || agent.traits.has(Trait::KindHearted) || agent.traits.has(Trait::Altruist) {
+            return Self::HOW_FAR_YOU_WILL_GO_TO_A_WOUND;
+        }
+        if agent.traits.has(Trait::ColdHearted) || agent.traits.has(Trait::Uncaring) || agent.traits.has(Trait::Cruel) {
+            return -1;
+        }
+        Self::WITHIN_A_HANDS_REACH
+    }
+
+    /// Somebody else's wound or break that this one should see to, and how.
+    fn somebody_elses_wound(&self, agent_index: usize, can: &WhatTheseHandsCanDo) -> Option<(Action, &'static str)> {
+        use crate::core::traits::Trait;
+
+        let agent = &self.population.agents[agent_index];
+        let here = agent.state.position;
+        let apart = |there: (i32, i32, i32)| (here.0 - there.0).abs().max((here.1 - there.1).abs());
+
+        let mut best: Option<(i32, &crate::agents::Agent, (Action, &'static str))> = None;
         for other in self.population.agents.iter() {
             if other.id == agent.id || !other.state.is_alive {
                 continue;
             }
-            let bleeding = other.state.bleeding >= crate::agents::Agent::BLEEDING_WORTH_PRESSING;
-            let to_bind = can_bind && other.state.an_open_wound > 0.0 && now >= other.state.wound_dressed_until;
-            if !bleeding && !to_bind {
+            let paces = apart(other.state.position);
+            if paces > Self::how_far_i_would_go_for(agent, other) || best.as_ref().is_some_and(|(so_far, ..)| paces >= *so_far) {
                 continue;
             }
-            let paces = apart(other.state.position);
-            let near_enough = paces <= Self::WITHIN_A_HANDS_REACH
-                || (is_mine(other) && paces <= Self::HOW_FAR_YOU_WILL_GO_TO_A_WOUND);
-            if near_enough && best.map(|(so_far, _)| paces < so_far).unwrap_or(true) {
-                best = Some((paces, other));
+            let who = Some(other.id);
+            let state = &other.state;
+            let wanted = if state.bleeding >= crate::agents::Agent::BLEEDING_WORTH_PRESSING {
+                // A kind heart cannot bring itself to lay a brand on somebody
+                if can.sear && state.bleeding >= Self::BLEEDING_HEAVY_ENOUGH_TO_SEAR && !agent.traits.has(Trait::KindHearted) {
+                    Some((Action::Cauterise { who }, "wound: seared somebody's"))
+                } else if can.bind {
+                    Some((Action::Bandage { who }, "wound: bound up somebody's"))
+                } else {
+                    Some((Action::PressOnWound { who }, "wound: pressed on somebody's"))
+                }
+            } else if can.set && state.a_broken_limb > 0.0 && !state.limb_set {
+                Some((Action::SetBone { who: other.id }, "bone: set somebody's"))
+            } else {
+                self.what_an_open_wound_wants(other, can, who, "somebody's")
+            };
+            if let Some(wanted) = wanted {
+                best = Some((paces, other, wanted));
             }
         }
 
-        let (paces, other) = best?;
+        let (paces, other, wanted) = best?;
         if paces > Self::WITHIN_A_HANDS_REACH {
             return Some((Action::Move { target: other.state.position }, "wound: went to one of mine"));
         }
-        if can_bind {
-            return Some((Action::Bandage { who: Some(other.id) }, "wound: bound up somebody's"));
-        }
-        Some((Action::PressOnWound { who: Some(other.id) }, "wound: pressed on somebody's"))
+        Some(wanted)
     }
+
+    /// Somebody whose child is coming, that this one knows how to help and
+    /// would go to (#403): walked to, and stayed with until it comes.
+    fn what_a_birth_asks(&self, agent_index: usize) -> Option<(Action, &'static str)> {
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("AttendBirth") || agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+        let here = agent.state.position;
+        let now = self.current_turn;
+        let apart = |there: (i32, i32, i32)| (here.0 - there.0).abs().max((here.1 - there.1).abs());
+        let (paces, mother) = self
+            .population
+            .agents
+            .iter()
+            .filter(|other| other.id != agent.id && other.state.is_alive)
+            .filter(|other| {
+                other
+                    .pregnancy
+                    .as_ref()
+                    .is_some_and(|carrying| carrying.due_turn <= now + Self::A_BIRTH_IS_NEAR)
+            })
+            .map(|other| (apart(other.state.position), other))
+            .filter(|(paces, other)| *paces <= Self::how_far_i_would_go_for(agent, other).max(Self::AT_A_BIRTH))
+            .min_by_key(|(paces, _)| *paces)?;
+        if paces > Self::AT_A_BIRTH - 1 {
+            return Some((Action::Move { target: mother.state.position }, "birth: went to the mother"));
+        }
+        Some((Action::AttendBirth { who: mother.id }, "birth: stayed with the mother"))
+    }
+
+    /// How near the birth has to be for a midwife to go and stay (#403): a
+    /// day.
+    pub(in crate::analytics) const A_BIRTH_IS_NEAR: u32 = crate::environment::seasons::TICKS_PER_DAY;
 
     /// How far somebody goes to one of their own who is bleeding: across the
     /// camp.

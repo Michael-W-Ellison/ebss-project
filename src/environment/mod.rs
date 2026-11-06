@@ -291,6 +291,11 @@ pub enum Action {
     /// garden: Stage 2 of the agricultural path, "composting and midden
     /// enrichment" (#386)
     DigOutMidden,
+    /// Line a bare store of the camp's where the agent stands at it (#394)
+    LineStore,
+    /// Lay the brush in hand along the edge round the camp's fields where the
+    /// agent stands (#398)
+    HedgeAField,
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
     /// Go over a standing field pulling weeds out of it and picking pests off
@@ -414,6 +419,18 @@ pub enum Action {
     PressOnWound { who: Option<uuid::Uuid> },
     /// Bind up an open wound with a strip of something (#351).
     Bandage { who: Option<uuid::Uuid> },
+    /// Wash the dirt out of an open wound, with water carried or at hand
+    /// (#399).
+    CleanWound { who: Option<uuid::Uuid> },
+    /// Sear a bleeding wound shut with a brand out of the fire (#400).
+    Cauterise { who: Option<uuid::Uuid> },
+    /// Close an open wound with a point and a thread of sinew (#401).
+    StitchWound { who: Option<uuid::Uuid> },
+    /// Pull a broken limb straight and splint it (#402). Always somebody
+    /// else's: nobody sets their own.
+    SetBone { who: uuid::Uuid },
+    /// Be with somebody whose child is coming, and help it come (#403).
+    AttendBirth { who: uuid::Uuid },
     /// Wait/idle
     Wait,
 }
@@ -469,6 +486,8 @@ impl Action {
             Action::BurnOff => Some(DriveType::Sustenance), // A burn is next season's flush
             Action::DigDitch => Some(DriveType::Sustenance), // Watered stands bear in the dry
             Action::DigOutMidden => Some(DriveType::Sustenance), // Compost is next year's crop
+            Action::LineStore => Some(DriveType::Preparedness), // What vermin do not take is put by
+            Action::HedgeAField => Some(DriveType::Sustenance), // What beasts do not trample is eaten
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::TakeFrom { .. } => Some(DriveType::Utility),
@@ -506,9 +525,15 @@ impl Action {
             // Taking something for it answers the want to be well enough to
             // work, which is what `Rest` is; giving it to somebody else is
             // looking after your own, which is `Protection`.
-            Action::Treat { who } | Action::PressOnWound { who } | Action::Bandage { who } => {
+            Action::Treat { who }
+            | Action::PressOnWound { who }
+            | Action::Bandage { who }
+            | Action::CleanWound { who }
+            | Action::Cauterise { who }
+            | Action::StitchWound { who } => {
                 Some(if who.is_some() { DriveType::Protection } else { DriveType::Rest })
             }
+            Action::SetBone { .. } | Action::AttendBirth { .. } => Some(DriveType::Protection),
             Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
             Action::WearClothing { .. } => Some(DriveType::Shelter),
             Action::Move { .. } => None,

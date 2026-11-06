@@ -163,7 +163,7 @@ fn a_pack_stacks_on_the_same_terms() {
 /// with a store is put this autumn's load in **beside** last autumn's.
 #[test]
 fn a_pit_puts_this_load_beside_the_last_one() {
-    let mut pit = Pit {
+    let mut pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(0, 0),
         holds: vec![a_lot_of("food", 40, 0)],
         covered: true,
@@ -189,7 +189,7 @@ fn a_pit_puts_this_load_beside_the_last_one() {
 /// Loads put by in the same week are the same load.
 #[test]
 fn a_pit_joins_up_what_went_in_together() {
-    let mut pit = Pit {
+    let mut pit = Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(0, 0),
         holds: vec![a_lot_of("food", 40, A_DAY)],
         covered: true,

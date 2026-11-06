@@ -947,6 +947,10 @@ impl crate::analytics::Simulation {
             _ => {}
         }
 
+        // And, to somebody who divides the work, where their hand stands at
+        // it against their camp's, as far as the need leaves room for it (#407)
+        worth.relief *= self.what_my_hand_is_worth_to_the_camp(agent, way, agent.how_hard_it_presses(need));
+
         worth
     }
 

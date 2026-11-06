@@ -197,7 +197,9 @@ fn a_farmer_keeps_seed_back_and_sows_it() {
     agent.inventory.remove_item("grain", agent.how_many_i_have("grain"));
     assert_eq!(agent.find_best_food_to_eat(), None, "seed is not food");
 
-    // It goes into the next field.
+    // It goes into the next field: by the measure, so one handful and no
+    // more - thrown by the eye, a third of fields take a second (#409)
+    agent.found_out_how_to("know:measured_sowing");
     let sown = Simulation::what_this_one_would_sow(agent, 1.0);
     assert_eq!(sown, ResourceType::Grain);
     let tilled = simulation.execute_action(&Action::TillSoil, 0);

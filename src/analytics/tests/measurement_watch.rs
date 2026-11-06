@@ -36,7 +36,11 @@ fn zz_discovery_watch() {
     }
     let mut sim = Simulation::new(crate::world::World::new(cfg), population);
     sim.bring_everybody_to_the_middle();
-    crate::core::dice::seed(seed * 7919 + 3);
+    // REDRAW=n keeps the same world and founders and draws the rest of the
+    // run's dice afresh, so the spread a counter has between runs of the same
+    // code can be measured (#413). Unset, the dice are those they always were.
+    let redraw: u64 = std::env::var("REDRAW").ok().and_then(|r| r.parse().ok()).unwrap_or(0);
+    crate::core::dice::seed(seed * 7919 + 3 + redraw * 104_729);
     // At the development pace unless told otherwise (#389)
     if let Some(pace) = std::env::var("PACE").ok().and_then(|p| p.parse::<f64>().ok()) {
         crate::core::discovery::set(pace);
@@ -125,6 +129,54 @@ fn zz_discovery_watch() {
         ("ditches_dug", sim.world.ditches_dug),
         ("compost_dug", sim.world.compost_dug),
         ("lessons_taught", sim.world.lessons_taught),
+        ("stores_lined", sim.world.stores_lined),
+        ("stores_sealed", sim.world.stores_sealed),
+        ("field_crop_fallen", sim.world.field_crop_fallen),
+        ("field_crop_brought_in", sim.world.field_crop_brought_in),
+        ("crops_ripened_full", sim.world.crops_ripened_full),
+        ("crops_ripened_short", sim.world.crops_ripened_short),
+        ("fields_hedged", sim.world.fields_hedged),
+        ("wounds_cleaned", sim.world.wounds_cleaned),
+        ("wounds_cauterised", sim.world.wounds_cauterised),
+        ("wounds_stitched", sim.world.wounds_stitched),
+        ("poultices_laid", sim.world.poultices_laid),
+        ("teas_made", sim.world.teas_made),
+        ("wounds_turned", sim.world.wounds_turned),
+        ("bones_broken", sim.world.bones_broken),
+        ("bones_set", sim.world.bones_set),
+        ("bones_knit_crooked", sim.world.bones_knit_crooked),
+        ("bones_knit_straight", sim.world.bones_knit_straight),
+        ("hard_births", sim.world.hard_births),
+        ("children_lost_at_birth", sim.world.children_lost_at_birth),
+        ("mothers_lost_in_childbirth", sim.world.mothers_lost_in_childbirth),
+        ("births_with_a_midwife", sim.world.births_with_a_midwife),
+        ("calls_raised", sim.world.calls_raised),
+        ("heard_a_call", sim.world.heard_a_call),
+        ("blows_a_call_would_have_spared", sim.world.blows_a_call_would_have_spared),
+        ("ways_weighed_by_the_hand", sim.ways_weighed_by_the_hand.get()),
+        ("better_hands_seen", sim.world.better_hands_seen),
+        ("stores_reckoned_by_tally", sim.stores_reckoned_by_tally.get()),
+        ("stores_found_short", sim.population.stats.stores_found_short),
+        ("fields_sown_thin", sim.world.fields_sown_thin),
+        ("fields_sown_thick", sim.world.fields_sown_thick),
+        ("fields_sown_measured", sim.world.fields_sown_measured),
+        // How far the best seed anybody keeps has been bred, in hundredths
+        // (#397)
+        (
+            "best_seed_line_x100",
+            (sim.population.agents.iter().filter(|a| a.state.is_alive).map(|a| a.seed_line).fold(0.0f32, f32::max)
+                * 100.0) as u64,
+        ),
+        // The most fields inside an edge and outside one anybody has weeded,
+        // which is what the edge is found out from (#398)
+        (
+            "most_hedged_fields_weeded",
+            sim.population.agents.iter().filter_map(|a| a.field_pests.get("hedged")).map(|(n, _)| *n as u64).max().unwrap_or(0),
+        ),
+        (
+            "most_open_fields_weeded",
+            sim.population.agents.iter().filter_map(|a| a.field_pests.get("open")).map(|(n, _)| *n as u64).max().unwrap_or(0),
+        ),
         (
             "stands_watered",
             sim.world.resources.iter().filter(|node| node.watered >= 0.5).count() as u64,

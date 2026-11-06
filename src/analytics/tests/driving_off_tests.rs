@@ -232,6 +232,7 @@ fn a_closed_ring_turns_a_boar_and_not_a_hare() {
     }
     let now = simulation.world.turn;
     simulation.world.thorn_hedges.push(crate::world::ThornHedge {
+        round_fields: false,
         around: crate::world::Position::new(HEARTH.0, HEARTH.1),
         started: now,
         laid: crate::world::ThornHedge::WHAT_IT_TAKES,
@@ -340,6 +341,7 @@ fn no_watch_where_none_is_wanted() {
     let mut ringed = a_troubled_camp_at_night(3);
     let now = ringed.world.turn;
     ringed.world.thorn_hedges.push(crate::world::ThornHedge {
+        round_fields: false,
         around: crate::world::Position::new(HEARTH.0, HEARTH.1),
         started: now,
         laid: crate::world::ThornHedge::WHAT_IT_TAKES,
@@ -414,6 +416,7 @@ fn a_ring_with_a_beast_inside_it_is_still_watched() {
     let mut simulation = a_troubled_camp_at_night(3);
     let now = simulation.world.turn;
     simulation.world.thorn_hedges.push(crate::world::ThornHedge {
+        round_fields: false,
         around: crate::world::Position::new(HEARTH.0, HEARTH.1),
         started: now,
         laid: crate::world::ThornHedge::WHAT_IT_TAKES,
@@ -439,6 +442,7 @@ fn the_ring_turns_a_scavenger_drawn_to_meat_inside_it() {
     let now = simulation.world.turn;
     simulation.world.a_carcass_lies_here(meat, 20, now);
     simulation.world.thorn_hedges.push(crate::world::ThornHedge {
+        round_fields: false,
         around: crate::world::Position::new(HEARTH.0, HEARTH.1),
         started: now,
         laid: crate::world::ThornHedge::WHAT_IT_TAKES,

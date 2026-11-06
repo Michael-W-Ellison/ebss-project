@@ -127,7 +127,7 @@ fn a_strangers_hole_is_still_an_answer_when_it_is_the_only_one() {
     let mut simulation = two_people();
     let his = simulation.population.agents[1].id;
 
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(30, 25),
         holds: Vec::new(),
         covered: true,
@@ -162,14 +162,14 @@ fn a_hole_of_ones_own_is_walked_to_before_a_strangers() {
     let his = simulation.population.agents[1].id;
 
     // His is three paces off; mine is eight.
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(28, 25),
         holds: Vec::new(),
         covered: true,
         dug: 0,
         belongs: Belongs::To(his),
     });
-    simulation.world.pits.push(Pit {
+    simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
         where_it_is: Position::new(33, 25),
         holds: Vec::new(),
         covered: true,
@@ -216,7 +216,7 @@ fn a_strangers_hole_beats_ones_own_a_long_way_off() {
     let far = Position::new(here.0 + beyond, here.1 + beyond);
     assert!(simulation.world.grid.get_tile(&far).is_some(), "the fixture's map is too small");
     for (at, whose) in [(near, his), (far, mine)] {
-        simulation.world.pits.push(Pit {
+        simulation.world.pits.push(Pit { gnawed: 0, last_opened: None,
             where_it_is: at,
             holds: Vec::new(),
             covered: true,
