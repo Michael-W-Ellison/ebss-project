@@ -30523,10 +30523,9 @@ paths: births 163 to 192 (t 2.40) and alive 640 to 671 (t 2.52). Against
 r422: hunger deaths 9 to 0 (t -3.36) and alive 631 to 671 (t 3.52).
 Person-days wasting fell to under a fifth of r415's.
 
-Field crop brought in fell back from r423's 105,121 to 68,631, about r415's
-level, while fish caught, hunts and cooking rose. Fishers now empty their
-traps before the day's walk, and that may take the place of some
-harvesting. This has not been traced.
+Field crop brought in went from r423's 105,121 to 68,631, about r415's
+level, while fish caught, hunts and cooking rose. That is the noise in the
+counter, not the change: see #413.
 
 **Tests**:
 
@@ -30548,3 +30547,75 @@ ignored, once the year's dice count was recorded.
 
 **Dice counts**: 6,765 (seed 4242, 120 turns), unchanged; 908,858 (seed 0,
 a year), down 6.0% from 967,182.
+
+### 413. Field crop brought in did not fall back: it is that noisy
+
+#412 left field crop brought in at 68,631, down from r423's 105,121 and
+back to about r415's 67,015. Fish caught, hunts and cooking all rose at the
+same time, so it looked as if emptying traps before the day's walk might
+have taken the place of harvesting.
+
+**What was found.** Nothing took the harvest's place. The counter moves this
+much between two runs of the same code.
+
+- **No pair of runs differs.** In paired tests over the same forty worlds,
+  no two runs from r415 to r424 differ significantly in crop brought in.
+  The largest |t| is 1.67 (r422 to r423), and r423 to r424 is t -1.20.
+  r423 was the high one: r415, r422 and r424 brought in 60,307 to 68,631.
+- **A few worlds make the total.** In r423, two worlds brought in 32,575 of
+  the 105,121 between them: smooth 13 brought in 17,753 and scattered 13
+  14,822. In r424 the same two brought in 1,476 and 283. Other worlds went
+  the other way: smooth 3 went from 244 to 9,296, and scattered 6 from 52
+  to 3,326.
+- **Not the traps.** Across the forty worlds, the change in trap checks
+  from r423 to r424 does not go with the change in crop brought in
+  (r = -0.01). Crop brought in goes with how much a world sowed (r = 0.70
+  thin fields, 0.80 thick), and r424 sowed a little more than r423 (444
+  thin and thick fields against 393). The day sowing is found out goes with it only
+  weakly (r = -0.17 over 160 world-runs). Worlds that found it on day 93
+  and day 94 brought in nothing.
+- **Same code, fresh dice.** The measurement watch now takes `REDRAW=n`,
+  which keeps the world and founders a seed makes and draws the rest of the
+  run's dice afresh. Unset, nothing changes. Each code was run a second
+  time with `REDRAW=1`:
+
+| | r423 code | r423 code, redrawn | r424 code | r424 code, redrawn |
+|---|---|---|---|---|
+| field crop brought in | 105,121 | 74,045 | 68,631 | 80,504 |
+| field crop fallen | 472,192 | 519,131 | 456,907 | 442,906 |
+| fish caught | 75,396 | 76,560 | 89,127 | 94,348 |
+| cooked | 74,735 | 76,713 | 84,905 | 83,069 |
+| person-days wasting | 530 | 582 | 118 | 234 |
+| hunger deaths | 2 | 2 | 0 | 0 |
+| alive at two years | 659 | 660 | 671 | 670 |
+
+The same code brought in 105,121 once and 74,045 the next time. In smooth
+13, r424's code brought in 1,476 and then 15,485; r423's code 17,753 and
+then 3,406. Between runs of the same code, a forty-world total of crop
+brought in has a standard deviation of about 17,800, so the difference
+between two runs has one of about 25,000. r423 to r424 was 36,490, about
+one and a half of those. Twelve to fourteen worlds in each run bring in
+no crop at all. Between r424 and its redraw, twelve worlds switched
+between bringing in none and bringing in some.
+
+Over both draws of each code, by world: crop brought in 89,583 to 74,568
+(t -0.99), not a change. Fish caught 75,978 to 91,738 (t 4.50), cooked
+75,724 to 83,987 (t 2.45), person-days wasting 556 to 176 (t -2.73), and
+alive 660 to 670 (t 1.94) are #412's, and hold with fresh dice. So does
+nobody starving: two hunger deaths in each draw of r423's code, none in
+either of r424's.
+
+**What changed.** Only the measurement watch. `REDRAW` is there to tell a
+change from the noise. Crop brought in should not be read from one forty-
+world run: a difference under about 50,000 needs a redraw, or more worlds,
+before it says anything.
+
+**Still open.** Most ripe field crop is never brought in. In every run,
+crop fallen to the season is six to seven times crop brought in: 456,907
+against 68,631 in r424. Many worlds break and sow a few hundred fields
+without kept seed and bring none of it in. That is the same in every run,
+so it is not what moved here, but it is the waste the farming is meant to
+avoid, and it has not been looked into.
+
+**Tests**: none. The watch is an ignored test, and with `REDRAW` unset it
+draws the dice it always did. The dice counts are unchanged.

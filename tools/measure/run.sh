@@ -3,6 +3,8 @@
 # years each, three at a time, one file per settlement in OUT. Settlements
 # already finished in OUT are skipped, so a run cut short can be resumed.
 # Seeds default to smooth 1-24 and scattered 1-16.
+# REDRAW=n in the environment keeps each world and its founders and draws
+# the run's dice afresh, to see how far a counter moves on its own (#413).
 BIN=$1; OUT=$2
 SM=${3:-"$(seq -s ' ' 1 24)"}; SC=${4:-"$(seq -s ' ' 1 16)"}
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
