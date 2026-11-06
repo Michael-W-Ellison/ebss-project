@@ -28089,6 +28089,9 @@ later entry. These were not. Each line names the entry that left it.
   take food out of a store; spares now make room (#411). The last two who
   starved had walked between a full trap and the day's better ground, or
   set their only basket down; nobody starves in forty worlds now (#412).
+  Ground broken with nothing to sow is broken about home, where the
+  harvest looks for it; two fifths more field crop comes in, and two
+  fifths less falls (#414).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30615,7 +30618,98 @@ crop fallen to the season is six to seven times crop brought in: 456,907
 against 68,631 in r424. Many worlds break and sow a few hundred fields
 without kept seed and bring none of it in. That is the same in every run,
 so it is not what moved here, but it is the waste the farming is meant to
-avoid, and it has not been looked into.
+avoid. See #414.
 
 **Tests**: none. The watch is an ignored test, and with `REDRAW` unset it
 draws the dice it always did. The dice counts are unchanged.
+
+### 414. Fields broken with nothing to sow went in a day's walk from home
+
+#413 left most ripe field crop fallen to the season, six to seven times
+what was brought in, and many worlds breaking a few hundred fields without
+kept seed and bringing in none of it.
+
+**What was found.** People broke ground wherever they stood, and the
+harvest looks for fields only about home.
+
+- **Fields without seed are not the trouble in themselves.** Somebody with
+  nothing sowable in the pack sows what they have been eating, as a Food
+  field. A Food field grows as well as a seeded one: in smooth world 10 of
+  r424, 189 of 228 Food fields ripened, at about 141 a field.
+- **They went in out of reach.** Farming counted, tended and broke fields
+  about wherever one stood, so somebody a day's walk out with the
+  Sustenance drive on them broke ground there. Bringing a harvest in,
+  hedging, and a camp staying for its crop all look only within a walk
+  (twelve paces) of the hearth. In smooth world 10, 72 of 291 sowings were
+  within twelve of the sower's hearth: 93 were 13 to 30 away, 83 were 31 to
+  60, and 43 further. About 29,000 units stood ripe on day 600, and 1,116
+  units of Food came in off fields. Ripe unit-days within twelve of any
+  hearth were 864,700, and beyond thirty 2,505,080.
+- **Late as well, in some worlds.** In scattered world 11, 249 of 251
+  sowings were Food and all came after day 600, because breaking ground was
+  found out on day 485. Those were sown too late to bear inside the run, and
+  only 28 were within twelve of home.
+- **Seeded fields far out are not wasted.** Every unit gathered off a field
+  was logged with its crop and how far it stood from the gatherer's hearth,
+  in smooth worlds 3, 6 and 10 of r424. Food came in only within twelve of
+  home: 857 and 1,116 units, and none at all from further out. Grain, pods
+  and roots came in from everywhere, because foraging takes the nearest
+  food and does not ask whose field it is. Of 8,225 units brought in off
+  fields in smooth world 10, 3,674 came from fields more than twelve paces
+  from the gatherer's hearth; in smooth world 3, 4,194 of 9,296; in smooth
+  world 6, 2,818 of 5,068.
+
+**What changed.** A first fix reckoned all field work about home and did
+it only within a walk of it. Over two draws of each code (paired by
+world), against r424's code:
+
+| | r424 | r424, redrawn | home only | home only, redrawn | seedless home only | seedless home only, redrawn |
+|---|---|---|---|---|---|---|
+| field crop brought in | 68,631 | 80,504 | 48,426 | 50,426 | 99,144 | 112,111 |
+| field crop fallen | 456,907 | 442,906 | 152,381 | 147,601 | 255,022 | 269,726 |
+| Food fields sown | 6,197 | 5,075 | 1,998 | 1,572 | 1,519 | 2,309 |
+| grain fields sown | 204 | 193 | 76 | 70 | 337 | 457 |
+| pod fields sown | 191 | 189 | 92 | 112 | 347 | 383 |
+| root fields sown | 388 | 352 | 150 | 159 | 895 | 637 |
+| fish caught | 89,127 | 94,348 | 99,373 | 101,035 | 96,009 | 97,489 |
+| cooked | 84,905 | 83,069 | 90,172 | 89,203 | 86,963 | 87,291 |
+| person-days wasting | 118 | 234 | 112 | 174 | 143 | 172 |
+| hunger deaths | 0 | 0 | 0 | 0 | 0 | 0 |
+| alive at two years | 671 | 670 | 669 | 679 | 671 | 675 |
+
+Home only cut crop fallen to a third (t -6.55) and crop brought in by a
+third (74,568 to 49,426 a draw, t -3.52). It held seeded sowing to home as
+well, and seeded fields a walk out were half of what came in. So that was
+taken back: farming counts, tends and sows about where one stands, as
+before, and only somebody with nothing to sow but what they have been
+eating breaks ground about home, and only within a walk of it
+(`Simulation::carrying_seed_to_sow`). Kept seed, grain, pods or roots in
+the pack sow where one stands.
+
+Over both draws, against r424's code: crop brought in 74,568 to 105,628 a
+draw (t 3.50), crop fallen 449,906 to 262,374 (t -6.26), Food fields sown
+5,636 to 1,914 (t -6.31). Seeded fields about doubled: grain 198 to 397
+(t 1.78), pods 190 to 365 (t 2.83), roots 370 to 766 (t 4.05). That is
+probably because a stand of seedless fields about somebody counted toward
+the six they want and stopped them sowing seed there. Fish caught 91,738
+to 96,749 (t 4.52) and cooked 83,987 to 87,127 (t 2.10) rose; person-days
+wasting (176 to 158, t -0.52) and alive at two years (670 to 673, t 0.66)
+did not change, and nobody starved in any run.
+
+In r424 and its redraw, eleven world-runs sowed a hundred Food fields or
+more and brought in nothing; with the fix, none did. Twelve worlds in each
+draw still bring in no field crop, mostly ones that find out breaking
+ground late or not at all. Crop fallen is still two and a half times crop
+brought in. One world (smooth 20, redrawn) sowed 735 Food fields, over
+and over on the few about its hearths, and brought in 5,140.
+
+**Tests**: `husbandry_tests::fields_without_seed_are_broken_about_home`.
+Twenty paces from home with nothing to sow, a farmer breaks no ground.
+With grain in hand at the same spot, they still sow about where they
+stand. About home, they work ground within a walk of it. Without the fix
+the first assertion fails: it walked to (25, 46).
+
+The full suite, in one piece: 3,133 tests, 3,127 passed, 0 failed, 6
+ignored, in 24 minutes. The dice counts are unchanged, at 6,765 and
+908,858: neither the 120 turns of seed 4242 nor seed 0's year gets as far
+as anybody breaking ground.

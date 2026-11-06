@@ -28,9 +28,9 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #412, a trap at hand and a basket kept):
-`cargo test --lib` in one piece, 3,132 tests: 3,126 passed, 0 failed, 6
-ignored, in 26 minutes.
+**Last full run** (ISSUES_FOUND #414, seedless ground broken about home):
+`cargo test --lib` in one piece, 3,133 tests: 3,127 passed, 0 failed, 6
+ignored, in 24 minutes.
 - The dice counts are 6,765 (seed 4242, 120 turns) and 908,858 (seed 0, a
   year).
 - #363 turned nineteen tests red that leaned on what it fixed. Most made a man
