@@ -266,6 +266,13 @@ impl Simulation {
         if sown_of == Some(crate::agents::Agent::SEED) {
             field.bred = self.population.agents[agent_index].seed_line;
         }
+        // What this crop has cost already: the turn of hard work, and the
+        // handful that went in the ground instead of into the sower (#416)
+        let seed_cost = if sown_of.is_some() { self.what_an_item_of_this_crop_is_worth(sown) } else { 0.0 };
+        field.somebody_put_into_the_crop(
+            self.population.agents[agent_index].id,
+            Self::what_a_turn_of_this_work_costs(Self::BREAKING_GROUND_COSTS) + seed_cost,
+        );
         self.world.put_a_node_down(field);
 
         let agent = &mut self.population.agents[agent_index];
@@ -288,8 +295,30 @@ impl Simulation {
 
         ActionResult::success()
             .with_drive_change(DriveType::Sustenance, -0.4)
-            .with_energy_cost(12.0)
+            .with_energy_cost(Self::BREAKING_GROUND_COSTS)
             .with_message("Broke ground and sowed a field".to_string())
+    }
+
+    /// What a turn breaking ground and sowing it costs, and a turn weeding.
+    pub(in crate::analytics) const BREAKING_GROUND_COSTS: f32 = 12.0;
+    pub(in crate::analytics) const WEEDING_COSTS: f32 = 7.0;
+
+    /// What a turn of work at this cost takes out of a body, in the energy
+    /// food is reckoned in (#416): a turn's worth of minutes, burned at the
+    /// rate the work burns.
+    pub(in crate::analytics) fn what_a_turn_of_this_work_costs(energy_cost: f32) -> f32 {
+        crate::environment::seasons::MINUTES_PER_TURN as f32
+            * crate::agents::physiology::what_the_work_costs(energy_cost)
+    }
+
+    /// What one handful of this crop is worth to eat, in energy (#416).
+    pub(in crate::analytics) fn what_an_item_of_this_crop_is_worth(&self, crop: crate::world::ResourceType) -> f32 {
+        use crate::agents::physiology::{what_a_unit_of_this_is_worth, ENERGY_OF_ORDINARY_FOOD, UNITS_IN_ONE_ITEM};
+        let energy = Self::edible_item_for(crop)
+            .and_then(|item| self.food_database.get(&item))
+            .map(|template| template.base_nutrition.energy)
+            .unwrap_or(ENERGY_OF_ORDINARY_FOOD);
+        UNITS_IN_ONE_ITEM * what_a_unit_of_this_is_worth(energy)
     }
 
     /// How often seed thrown by the eye goes in too thin for the ground, and
@@ -550,6 +579,10 @@ impl Simulation {
             .copied();
         if let Some(index) = standing_at {
             self.looking_at_the_crop(agent_index, index);
+            // And a turn's work into the crop (#416)
+            let who = self.population.agents[agent_index].id;
+            self.world.resources[index]
+                .somebody_put_into_the_crop(who, Self::what_a_turn_of_this_work_costs(Self::WEEDING_COSTS));
         }
         let standing = standing_at.map(|index| {
             let resource = &self.world.resources[index];
@@ -618,7 +651,7 @@ impl Simulation {
 
         ActionResult::success()
             .with_drive_change(DriveType::Sustenance, -0.2)
-            .with_energy_cost(7.0)
+            .with_energy_cost(Self::WEEDING_COSTS)
             .with_message(format!("Worked the field, clearing {cleared:.2}"))
     }
 

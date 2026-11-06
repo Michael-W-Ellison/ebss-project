@@ -348,6 +348,12 @@ pub struct World {
     /// Units of field crop that went into somebody's pack (#395).
     #[serde(default)]
     pub field_crop_brought_in: u64,
+    /// Field crops that gave back less than was put into them, and crops
+    /// that gave back more (#416).
+    #[serde(default)]
+    pub crops_that_failed: u64,
+    #[serde(default)]
+    pub crops_that_paid: u64,
     /// Field crops that ripened at their full stand, and that ripened short
     /// on the last day of their season (#395).
     #[serde(default)]
@@ -417,6 +423,11 @@ pub struct World {
     /// over, since the people about were last told (#395).
     #[serde(default)]
     pub crops_lost_to_the_season: Vec<Position>,
+    /// Field crops that have come in or been lost since the people who put
+    /// work into them were last told (#416): what the crop was, and who put
+    /// how much into it, against how many units came off it.
+    #[serde(default)]
+    pub crops_settled: Vec<(ResourceType, Vec<(uuid::Uuid, f32)>, u32)>,
     /// Things a child was taught that a grown person of their camp knew
     /// (#388).
     #[serde(default)]
@@ -2071,6 +2082,8 @@ impl World {
             stores_sealed: 0,
             field_crop_fallen: 0,
             field_crop_brought_in: 0,
+            crops_that_failed: 0,
+            crops_that_paid: 0,
             crops_ripened_full: 0,
             crops_ripened_short: 0,
             fields_hedged: 0,
@@ -2097,6 +2110,7 @@ impl World {
             fields_sown_measured: 0,
             beasts_lately_seen: Vec::new(),
             crops_lost_to_the_season: Vec::new(),
+            crops_settled: Vec::new(),
             lessons_taught: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
@@ -4048,16 +4062,36 @@ impl World {
             if taken > 0 {
                 self.grid.a_crop_came_off(&at, now);
             }
+            // What the work put into it has brought back so far (#416)
+            resource.taken_off_this_crop = resource.taken_off_this_crop.saturating_add(taken);
 
-            if resource.the_harvest_is_in() {
+            let came_to_an_end = if resource.the_harvest_is_in() {
                 // Three quarters of the ripe crop has come off by hand
                 self.grid
                     .the_harvest_is_in(&at, resource.resource_type.feeds_the_ground(), now);
                 resource.it_is_growing_again();
+                true
             } else if resource.ripe_stand > 0 && resource.what_can_be_taken() == 0 {
                 // Or it fell, or was eaten off, before anybody brought it in.
                 // Nobody's hand took it, so it wears nothing.
                 resource.it_is_growing_again();
+                true
+            } else {
+                false
+            };
+
+            // Either way the crop is over, and what was put into it is set
+            // against what came off it, for the people who put it in (#416).
+            // What grows on afterwards had nothing put into it, and is
+            // nobody's loss.
+            if came_to_an_end && !resource.put_into_this_crop.is_empty() {
+                self.crops_settled.push((
+                    resource.resource_type,
+                    std::mem::take(&mut resource.put_into_this_crop),
+                    std::mem::take(&mut resource.taken_off_this_crop),
+                ));
+            } else if came_to_an_end {
+                resource.taken_off_this_crop = 0;
             }
         }
     }

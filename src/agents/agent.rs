@@ -3923,6 +3923,61 @@ impl Agent {
     /// that turns is why a man with aloe is better off than a man without.
     pub const OFF_A_WOUND_THAT_TURNED: &'static str = "a wound that turned";
 
+    /// What a crop came to, against what this one put into it (#416).
+    ///
+    /// Planting is food safety bought with time and energy: a turn breaking
+    /// ground, the seed that was not eaten, turns weeding, all laid down
+    /// against a crop that should give back more than went into it. A crop
+    /// that does is a quiet satisfaction. One that does not - fell in the
+    /// field, came up thin, was taken by the weeds and the vermin - is the
+    /// work and the seed thrown away, and it weighs on the people who put
+    /// them in, as much as a temperament lets it: grief comes harder to the
+    /// empathic and slides off the cold-hearted. It is also a try that did
+    /// not work, both at farming and at that crop, which is what the next
+    /// choice of whether to farm, and what to sow, is made from.
+    pub fn what_my_crop_came_to(&mut self, put_in: f32, came_back: f32, called: Option<&str>) {
+        use super::EmotionSource;
+        use crate::agents::practices::Practice;
+
+        if put_in <= 0.0 {
+            return;
+        }
+        if came_back < put_in {
+            // How much of what was put in is gone: all of it for a crop that
+            // fell with nobody's hand on it
+            let lost = 1.0 - came_back / put_in;
+            self.emotions.add_sadness_with_traits(
+                EmotionSource::Event(Self::A_CROP_THAT_FAILED.to_string()),
+                Self::WHAT_A_FAILED_CROP_WEIGHS * lost,
+                &self.traits,
+            );
+            self.practices.record_outcome(Practice::Farming, false);
+            if let Some(called) = called {
+                self.lessons.record_particular(&format!("sow:{called}"), false);
+            }
+        } else {
+            let gained = (came_back / put_in - 1.0).min(1.0);
+            self.emotions.add_happiness_with_traits(
+                EmotionSource::Event(Self::A_CROP_THAT_PAID.to_string()),
+                Self::WHAT_A_CROP_THAT_PAID_CHEERS * gained,
+                &self.traits,
+            );
+        }
+    }
+
+    /// What the sadness and happiness of a crop are laid to (#416).
+    pub const A_CROP_THAT_FAILED: &'static str = "a crop that failed";
+    pub const A_CROP_THAT_PAID: &'static str = "a crop that paid";
+
+    /// The sadness of a crop that came to nothing at all, less as more of it
+    /// came back: more than food gone off in the hand, which is worry over a
+    /// meal, and well short of a child lost.
+    pub const WHAT_A_FAILED_CROP_WEIGHS: f32 = 0.3;
+
+    /// And the happiness of a crop that gave back twice what went in, or
+    /// more.
+    pub const WHAT_A_CROP_THAT_PAID_CHEERS: f32 = 0.1;
+
     /// Food went off in this agent's own hands.
     ///
     /// Worry rather than grief. What has been lost is not the meal so much as

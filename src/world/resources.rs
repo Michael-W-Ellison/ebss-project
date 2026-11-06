@@ -1070,6 +1070,18 @@ pub struct ResourceNode {
     /// of it for the ground, carries less (#409).
     #[serde(default)]
     pub sown_thin_by: Option<uuid::Uuid>,
+    /// What each person has put into the crop standing here, in a body's
+    /// energy: the turns spent breaking the ground and sowing it and weeding
+    /// it, and the seed that went in the ground instead of into somebody
+    /// (#416). A crop is an investment of time and food against a return, and
+    /// this is the investment. Settled, and cleared, when the crop comes in or
+    /// is lost - see `World::what_came_off_the_fields`.
+    #[serde(default)]
+    pub put_into_this_crop: Vec<(uuid::Uuid, f32)>,
+    /// Units taken off the crop by hand since the work above began to go into
+    /// it, which is the return (#416).
+    #[serde(default)]
+    pub taken_off_this_crop: u32,
 }
 
 impl ResourceNode {
@@ -1139,6 +1151,19 @@ impl ResourceNode {
             bred: 0.0,
             sown_on: None,
             sown_thin_by: None,
+            put_into_this_crop: Vec::new(),
+            taken_off_this_crop: 0,
+        }
+    }
+
+    /// Somebody put this much of their own energy into the crop here (#416).
+    pub fn somebody_put_into_the_crop(&mut self, who: uuid::Uuid, energy: f32) {
+        if energy <= 0.0 {
+            return;
+        }
+        match self.put_into_this_crop.iter_mut().find(|(them, _)| *them == who) {
+            Some((_, theirs)) => *theirs += energy,
+            None => self.put_into_this_crop.push((who, energy)),
         }
     }
 

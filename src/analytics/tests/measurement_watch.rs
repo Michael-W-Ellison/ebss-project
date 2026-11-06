@@ -133,6 +133,8 @@ fn zz_discovery_watch() {
         ("stores_sealed", sim.world.stores_sealed),
         ("field_crop_fallen", sim.world.field_crop_fallen),
         ("field_crop_brought_in", sim.world.field_crop_brought_in),
+        ("crops_that_failed", sim.world.crops_that_failed),
+        ("crops_that_paid", sim.world.crops_that_paid),
         ("crops_ripened_full", sim.world.crops_ripened_full),
         ("crops_ripened_short", sim.world.crops_ripened_short),
         ("fields_hedged", sim.world.fields_hedged),
