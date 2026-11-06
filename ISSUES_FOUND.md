@@ -28091,7 +28091,9 @@ later entry. These were not. Each line names the entry that left it.
   set their only basket down; nobody starves in forty worlds now (#412).
   Ground broken with nothing to sow is broken about home, where the
   harvest looks for it; two fifths more field crop comes in, and two
-  fifths less falls (#414).
+  fifths less falls (#414). The worlds that bring in none break ground in
+  their second summer or never, a year too late for a two-year run
+  (#415).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30713,3 +30715,83 @@ The full suite, in one piece: 3,133 tests, 3,127 passed, 0 failed, 6
 ignored, in 24 minutes. The dice counts are unchanged, at 6,765 and
 908,858: neither the 120 turns of seed 4242 nor seed 0's year gets as far
 as anybody breaking ground.
+
+### 415. The worlds that bring in no field crop break ground a year late, or never
+
+#414 left twelve worlds in each forty-world draw bringing in no field crop
+at all: 24 of 80 world-runs in r426 and its redraw.
+
+**What was found.** A harvest is the last of four steps, and each waits
+on the one before. Seed is scattered about camp (`do:ScatterSeed`); ground
+is broken for it (`do:TillSoil`); a ripe crop is seen to fall in a field
+near home twice, and the seasons come to mind (`know:seasons`); only then
+does anybody bring a harvest in (`a_harvest_to_bring_in` asks for the
+seasons). The year is 360 days and crops bear once in it (berries days 120
+to 269), so a step missed one autumn waits for the next.
+
+- **All 24 never come to the seasons.** Every one of them, and no world
+  that comes to the seasons brings in nothing. The seasons come on only six
+  days: 256, 271 or 286, the days a crop goes over, or the same a year
+  later. A world needs a crop of its own fields to fall before it can bring
+  one in.
+- **They break ground late, or never.** By when ground breaking is found
+  out, over r426 and its redraw:
+
+| ground broken | world-runs | bring in nothing | crop brought in, mean |
+|---|---|---|---|
+| in the first year | 30 | 1 | 5,283 |
+| in the second year | 29 | 11 | 1,693 |
+| never | 21 | 12 | 175 |
+
+  r424 is the same, run for run, because nothing before ground is broken
+  changed in #414. A world that breaks ground in its second summer sows
+  then, sees the crop fall that autumn at the earliest, and could bring
+  one in in the third summer. The run ends at day 720.
+- **The second year is the one way it is meant to come.** Ground breaking
+  comes to somebody who has gathered twelve times off stands they
+  scattered themselves (`GATHERED_FROM_SOWN_BEFORE_GARDENS`). Second-year
+  worlds come to it on days 394 to 600, 17 of 29 between 477 and 515: the
+  opening of the second year's bearing, when somebody's twelfth gathering
+  comes. A probe of five worlds counted every gathering off a scattered
+  stand. Almost all were by somebody other than the sower, which does not
+  count: 3 own against 97 in scattered world 3, 9 against 367 in smooth 1,
+  53 against 300 in smooth 4, 116 against 1,153 in smooth 11. The stands
+  are on the camp's ground, and whoever passes takes the nearest food.
+  Few are scattered, too: a camp keeps no more than twelve
+  (`STANDS_A_CAMP_SOWS`), smooth 1 had none until day 330 and scattered 3
+  none until day 510, and in both two years brought only 12 and 2.
+- **The first year comes by accident.** The curiosity verb `dig` is done as
+  `Action::TillSoil`, by anybody, whether or not they know how to break
+  ground for a crop. It makes a field and sows what the digger carries.
+  Smooth world 10 had three fields on day 60 and nine on day 150, and
+  nobody alive knew how to break ground until day 173. Ground breaking
+  spreads by watching (`observation_processing`: somebody who knows how to
+  scatter seed sees it done), so smooth 10 had it twelve days after it
+  scattered seed. Of 30 first-year worlds, 7 came to it within 15 days of
+  scattering seed. Smooth 1, scattered 3 and smooth 11 had no field at
+  all before they came to it the slow way, or never. Smooth 4 had two,
+  dug on day 300, but nobody there scattered seed until day 318, so
+  nobody watching could take it up from them.
+- **And once ground breaking is known, the drive has to be on.** A probe
+  of what stops somebody who knows how, turn by turn: in smooth 11, from
+  day 498, when it came, to day 630, the Sustenance drive was off for
+  about 95% of their turns. It came on in the winter, and the first
+  fields went in on day 660, too late to bear. Smooth 10's people had the
+  drive off most turns too, but had a year of it.
+
+**What changed.** Nothing. The worlds that bring in nothing are those that
+come to farming late, and late at the development pace is a year: the
+four steps take three bearing seasons at the least, and a two-year run has
+two. Breaking ground for one's own crop is the step that sets the pace,
+and what sets it is mostly luck: whether somebody digs out of curiosity
+near a camp that scatters seed, or whether one sower gets to their own
+stands twelve times before the rest of the camp does.
+
+**Open.** Whether gatherings off a stand by somebody other than the sower
+should teach the sower anything (they see their seed come up as food, and
+this would make ground breaking come much sooner), and whether a scattered
+stand falling unharvested should teach the seasons as a field does.
+Either would change the pace of the agricultural path, and is left as a
+choice.
+
+**Tests**: none. Nothing changed. The probes were scratch builds.
