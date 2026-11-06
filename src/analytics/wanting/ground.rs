@@ -393,6 +393,15 @@ impl Simulation {
     /// bothers throwing more: a handful of patches, not a field.
     pub(in crate::analytics) const STANDS_A_CAMP_SOWS: usize = 12;
 
+    /// Whether this one has something to sow besides what it has been
+    /// eating: kept seed, grain, pods or roots (#414).
+    pub(in crate::analytics) fn carrying_seed_to_sow(agent: &crate::agents::Agent) -> bool {
+        Self::what_can_be_sown()
+            .iter()
+            .filter(|(_, crop, feeds_anybody)| *feeds_anybody && *crop != crate::world::ResourceType::Food)
+            .any(|(called, _, _)| agent.how_many_i_have(called) > 0)
+    }
+
     /// Breaking ground, and walking to somewhere worth breaking.
     ///
     /// Wild food regrows about four times slower than a grown settlement eats
@@ -428,25 +437,12 @@ impl Simulation {
             return None;
         }
 
-        // Fields are home's (#414). Bringing a harvest in, hedging and the
-        // camp staying for a crop all look for fields within a walk of where
-        // one lives, and this looked about wherever one stood: somebody a
-        // day's walk out with the drive on them broke ground there, and three
-        // in four fields went in out of reach of any hearth, ripened and fell.
-        // So the fields counted, tended and broken are those about home, and
-        // only somebody within a walk of it sets about them.
-        let home = Self::where_this_one_lives(agent);
-        if !Self::within((agent_position.0, agent_position.1), home, Self::FIELD_WALK_RADIUS as i32) {
-            return None;
-        }
-        let at_home = (home.0, home.1, agent_position.2);
-
         // A standing field that has gone over to weeds is worth more than a
         // new one. "Farmers should not just drop seeds and get crops" - a
         // field neglected for a season carries almost nothing, and going round
         // it pulling weeds and picking pests off is most of what growing a
         // crop consists of.
-        if let Some(field) = self.field_wanting_work(at_home) {
+        if let Some(field) = self.field_wanting_work(agent_position) {
             if field.x == agent_position.0 && field.y == agent_position.1 {
                 return Some(Action::TendField);
             }
@@ -457,7 +453,7 @@ impl Simulation {
         }
 
         // Enough fields around here already
-        if self.fields_within(at_home, Self::FIELD_WALK_RADIUS) >= Self::FIELDS_WANTED {
+        if self.fields_within(agent_position, Self::FIELD_WALK_RADIUS) >= Self::FIELDS_WANTED {
             return None;
         }
 
@@ -490,7 +486,7 @@ impl Simulation {
         // would break ground at all is a man who would plough a crop in, and
         // because the ground he already has is nearer than the ground he has
         // not.
-        if let Some(under) = self.a_stand_worth_turning_under(agent, at_home) {
+        if let Some(under) = self.a_stand_worth_turning_under(agent, agent_position) {
             if under.x == agent_position.0 && under.y == agent_position.1 {
                 return Some(Action::TillSoil);
             }
@@ -516,7 +512,30 @@ impl Simulation {
             });
         }
 
-        let ground = self.ground_to_break(at_home)?;
+        // Ground broken with seed in hand is worth breaking where one
+        // stands: grain, pods and roots sown a day's walk out are picked by
+        // whoever passes, and half of all field crop brought in came off
+        // fields more than a walk from the gatherer's hearth (#414). Ground
+        // broken with nothing to sow but what one has been eating is not. It
+        // comes up the same as the berries and greens all round it, and
+        // nobody brought in a mouthful off one more than a walk from home,
+        // where only the harvest goes looking for it - three fields in four
+        // of these were sown out there, and ripened and fell. So somebody
+        // with nothing to sow breaks ground only about home, and only within
+        // a walk of it.
+        let ground = if Self::carrying_seed_to_sow(agent) {
+            self.ground_to_break(agent_position)?
+        } else {
+            let home = Self::where_this_one_lives(agent);
+            if !Self::within((agent_position.0, agent_position.1), home, Self::FIELD_WALK_RADIUS as i32) {
+                return None;
+            }
+            let at_home = (home.0, home.1, agent_position.2);
+            if self.fields_within(at_home, Self::FIELD_WALK_RADIUS) >= Self::FIELDS_WANTED {
+                return None;
+            }
+            self.ground_to_break(at_home)?
+        };
 
         if ground.x == agent_position.0 && ground.y == agent_position.1 {
             return Some(Action::TillSoil);
