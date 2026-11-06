@@ -231,6 +231,59 @@ fn nobody_farms_on_an_empty_stomach() {
     );
 }
 
+/// Fields are broken about home, not wherever one happens to be standing
+/// (#414). A farmer a day's walk out breaks no ground there: three in four
+/// fields went in out of reach of any hearth and ripened with nobody to
+/// bring them in.
+#[test]
+fn fields_are_broken_about_home() {
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+
+    let home = (25, 25);
+    {
+        let agent = &mut simulation.population.agents[0];
+        agent.hearth = Some(home);
+        if let Some(drive) = agent.drives.get_mut(DriveType::Sustenance) {
+            drive.value = 1.0;
+        }
+        if let Some(drive) = agent.drives.get_mut(DriveType::Hunger) {
+            drive.value = 0.0;
+        }
+        agent.practices.saw_it_work(crate::agents::practices::Practice::Farming);
+        agent.practices.saw_it_work(crate::agents::practices::Practice::Farming);
+        agent.found_out_how_to("do:ScatterSeed");
+        agent.found_out_how_to("do:TillSoil");
+    }
+
+    let away = (25, 45, 0);
+    simulation.population.agents[0].state.position = away;
+    assert_eq!(
+        simulation.farming_action(&simulation.population.agents[0], away),
+        None,
+        "twenty paces from home he breaks no ground"
+    );
+
+    let about_home = |action: Option<Action>, standing: (i32, i32, i32)| -> (i32, i32) {
+        match action {
+            Some(Action::Move { target }) => (target.0, target.1),
+            Some(_) => (standing.0, standing.1),
+            None => panic!("within a walk of home he goes to work"),
+        }
+    };
+    for standing in [(25, 25, 0), (33, 25, 0)] {
+        simulation.population.agents[0].state.position = standing;
+        let action = simulation.farming_action(&simulation.population.agents[0], standing);
+        let at = about_home(action, standing);
+        assert!(
+            (at.0 - home.0).abs().max((at.1 - home.1).abs()) <= Simulation::FIELD_WALK_RADIUS as i32,
+            "standing at {standing:?} he works ground at {at:?}, out of a walk of home"
+        );
+    }
+}
+
 /// A parent goes after a child that has wandered off.
 #[test]
 fn a_parent_goes_after_a_straying_child() {
