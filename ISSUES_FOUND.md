@@ -28093,7 +28093,10 @@ later entry. These were not. Each line names the entry that left it.
   harvest looks for it; two fifths more field crop comes in, and two
   fifths less falls (#414). The worlds that bring in none break ground in
   their second summer or never, a year too late for a two-year run
-  (#415).
+  (#415). A crop is an investment now: the work and seed put into it are
+  set against what comes off it, and a crop that gives back less than it
+  took saddens the people who put work in and shakes their belief in
+  farming and in that crop (#416).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30795,3 +30798,87 @@ Either would change the pace of the agricultural path, and is left as a
 choice.
 
 **Tests**: none. Nothing changed. The probes were scratch builds.
+
+### 416. A crop that fails is the work and seed thrown away, and weighs on whoever put them in
+
+**Asked.** Planting is a form of food safety: time and energy put in, in
+the hope of getting more energy back. A farmer who spends the time and
+energy and then sees the crop fail should feel it.
+
+**What it was.** Nothing kept track of what went into a crop. A field fell
+or was harvested, `it_is_growing_again` started it over, and nobody who
+had worked it heard anything about it. Belief in farming moved only on
+how a sowing or harvest turn went, not on what the crop came to.
+
+**What changed.**
+- **What is put in.** Each field (`ResourceNode`) keeps an account,
+  `put_into_this_crop`, of who put how much energy into it:
+  - breaking ground and sowing (`tilling_soil`): a turn of the work at
+    `BREAKING_GROUND_COSTS`, plus the worth of the item of seed sown;
+  - each turn weeding it (`tending_a_field`): a turn at `WEEDING_COSTS`.
+
+  A turn is costed in the body's own units (`MINUTES_PER_TURN` times
+  `physiology::what_the_work_costs`). Walking to the field, mucking it and
+  hedging it are not counted.
+- **What comes back.** Everything anybody takes off the field by hand is
+  counted (`taken_off_this_crop`). It is valued at the item's food energy.
+- **When it is settled.** When the crop ends, `what_came_off_the_fields`
+  sets it aside in `World::crops_settled`. A crop ends when the harvest is
+  in, or when it falls or is eaten off. A crop nobody put work into
+  (what grows on after) settles nothing. `what_the_crops_came_to` runs
+  each turn after `what_the_fields_lost`. It shares what came back among
+  the investors in proportion to what each put in, and tells each living
+  one through `Agent::what_my_crop_came_to`.
+- **What a farmer feels.**
+  - If less came back than went in: sadness from the event "a crop that
+    failed". The amount is `WHAT_A_FAILED_CROP_WEIGHS` (0.3) times the
+    share lost. Traits scale it as they do other sadness: twice for the
+    empathic, half for the cold-hearted. Their belief in farming falls,
+    as for a failed attempt, and so does the lesson for that crop
+    (`sow:<crop>`).
+  - If as much or more came back: happiness from "a crop that paid", up to
+    `WHAT_A_CROP_THAT_PAID_CHEERS` (0.1) for a crop that returns double.
+    This was not asked for. It is there so that a crop is weighed both
+    ways, and it is kept small.
+- Mood on its own steers nothing in this model; `well_being` is read only
+  by the metrics. What a failed crop changes in what people do comes
+  through the belief and the lesson. A farmer who has sown a few times and
+  lost every crop gives farming up, as `would_try` already decides.
+- `World::crops_that_failed` and `crops_that_paid` count the crops settled
+  each way. The measurement watch stores them.
+
+**Measured.** Forty worlds, 720 days, two draws each, against the code
+before the change (r426 and r426b against r427 and r427b):
+
+| | before | after | t |
+|---|---:|---:|---:|
+| field crop brought in | 105,628 | 110,190 | +0.62 |
+| field crop fallen | 262,374 | 254,520 | −0.90 |
+| fields sown | 3,442 | 3,398 | −0.52 |
+| fish caught | 96,749 | 96,222 | −1.14 |
+| cooked | 87,127 | 86,630 | −0.90 |
+| wasting person-days | 158 | 135 | −1.09 |
+| hunger deaths | 0 | 0 | |
+| alive on day 720 | 673 | 674 | +0.27 |
+
+Nothing moved beyond the noise between draws. Of the crops that had work
+in them, about half failed: 1,224 failed and 1,313 paid in the first draw,
+1,209 and 1,068 in the second. Crops failed in 34 and 31 worlds. Five and
+nine worlds settled none, the worlds of #415 that come to farming late.
+Belief does not give way: those who farm see enough crops pay to keep at
+it, and a failure costs half what a success earns
+(`record_outcome`: +0.2, −0.1).
+
+**Tests**: `crop_investment_tests` (6):
+- sowing and weeding are put into the crop;
+- a crop that falls unharvested weighs on its farmer: sadness, belief in
+  farming and in grain, and the count;
+- a crop brought in pays its farmer;
+- a crop nobody worked is nobody's loss;
+- a failed crop weighs as much as was lost, shared between two who put in
+  different amounts;
+- a temperament sets how hard a failed crop lands.
+
+Full suite: `cargo test --lib`, 3,133 passed, 0 failed, 6 ignored, in 51
+minutes (sharing the machine with the two draws). The dice counts are
+unchanged.
