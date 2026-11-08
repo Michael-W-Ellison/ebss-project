@@ -30957,7 +30957,7 @@ its time, and breaks no ground while nothing they carry is: the choice of
 what to sow takes the day (`what_this_one_would_sow_on`).
 
 It came late and to few: short crops are one in six, and a calendar was
-kept in four of six worlds in the probe, by one to seven people.
+kept in five of six worlds in the probe, by one to seven people.
 
 ### 420. Manuring the worn fields
 
