@@ -46,6 +46,17 @@ fn zz_discovery_watch() {
         crate::core::discovery::set(pace);
     }
     println!("STORE slowness {}", crate::core::discovery::slowness() as u64);
+    // FARMING=1 starts the founders as farmers of stage 3 of the
+    // agricultural path: they scatter seed, break ground, keep the seasons in
+    // mind and save seed (#417). What comes after stage 3 is seldom reached
+    // inside a two-year run from foraging (#415), so it is measured from here.
+    if std::env::var("FARMING").is_ok() {
+        for agent in sim.population.agents.iter_mut() {
+            for what in ["do:ScatterSeed", "do:TillSoil", "know:seasons", "know:save_seed"] {
+                agent.found_out_how_to(what);
+            }
+        }
+    }
 
     let mut first: BTreeMap<String, u32> = BTreeMap::new();
     let note = |sim: &Simulation, first: &mut BTreeMap<String, u32>, day: u32| {
@@ -67,6 +78,10 @@ fn zz_discovery_watch() {
             sim.take_a_turn();
         }
         note(&sim, &mut first, day + 1);
+        // How the fields stand, once a month (#417)
+        if (day + 1) % 30 == 0 {
+            farm_line(&sim, day + 1);
+        }
         for agent in sim.population.agents.iter().filter(|a| a.state.is_alive) {
             if agent.state.physiology.is_wasting() {
                 wasting_days += 1;
@@ -201,5 +216,50 @@ fn zz_discovery_watch() {
         sim.population.stats.total_births,
         sim.population.stats.total_deaths,
         alive.len()
+    );
+}
+
+/// One line on how a world's farming stands (#417): its fields and how worn
+/// they are, what is in crop on them, what has come in and fallen so far,
+/// what is put by in stores, and how many live and how many farm.
+fn farm_line(sim: &Simulation, day: u32) {
+    use crate::world::soil::SoilGrade;
+    let mut grades = [0u32; 5];
+    for (_, field) in sim.world.grid.every_field() {
+        let rung = SoilGrade::LADDER.iter().position(|g| *g == field.grade).unwrap_or(0);
+        grades[rung] += 1;
+    }
+    let crops: Vec<_> = sim.world.resources.iter().filter(|node| node.on_a_field).collect();
+    let ripe = crops.iter().filter(|node| node.ripe_stand > 0).count();
+    let standing: u32 = crops.iter().map(|node| node.amount).sum();
+    let mut by_crop: BTreeMap<String, u32> = BTreeMap::new();
+    for node in &crops {
+        *by_crop.entry(format!("{:?}", node.resource_type)).or_insert(0) += 1;
+    }
+    let put_by: u32 = sim
+        .world
+        .pits
+        .iter()
+        .flat_map(|pit| pit.holds.iter())
+        .filter(|item| item.food_data.is_some())
+        .map(|item| item.quantity)
+        .sum();
+    let alive: Vec<_> = sim.population.agents.iter().filter(|a| a.state.is_alive).collect();
+    let farmers = alive
+        .iter()
+        .filter(|a| a.practices.is_established(crate::agents::practices::Practice::Farming))
+        .count();
+    let crops_by: Vec<String> = by_crop.iter().map(|(k, v)| format!("{k}:{v}")).collect();
+    println!(
+        "FARMX D{day:04} fields={} grades={:?} crops={} ripe={ripe} standing={standing} [{}] in={} fallen={} paid={} failed={} put_by={put_by} alive={} farmers={farmers}",
+        grades.iter().sum::<u32>(),
+        grades,
+        crops.len(),
+        crops_by.join(","),
+        sim.world.field_crop_brought_in,
+        sim.world.field_crop_fallen,
+        sim.world.crops_that_paid,
+        sim.world.crops_that_failed,
+        alive.len(),
     );
 }
