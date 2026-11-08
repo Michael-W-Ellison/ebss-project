@@ -28096,7 +28096,11 @@ later entry. These were not. Each line names the entry that left it.
   (#415). A crop is an investment now: the work and seed put into it are
   set against what comes off it, and a crop that gives back less than it
   took saddens the people who put work in and shakes their belief in
-  farming and in that crop (#416).
+  farming and in that crop (#416). Stage 4 of the agricultural path:
+  farmers keep the fields they have while their crops are not paying,
+  sow by a calendar, carry muck to worn fields, raise granaries over the
+  camp's stores and settle on the crop that pays them best; irrigation is
+  left out, since no field is on ground that dries (#417 to #422).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30882,3 +30886,159 @@ it, and a failure costs half what a success earns
 Full suite: `cargo test --lib`, 3,133 passed, 0 failed, 6 ignored, in 51
 minutes (sharing the machine with the two draws). The dice counts are
 unchanged.
+
+### 417. Stage 4 of the agricultural path: what a farming world wastes
+
+The user asked: "Implement Agricultural stage 4." Settled field
+agriculture: permanent fields, simple irrigation, manuring, granaries,
+planting calendars, dedicated staple crops; and for products, cereal
+fields, pulse plots, managed orchards and a larger surplus.
+
+**Measuring it at all.** A two-year run from foraging reaches stage 3 late
+or never (#415), so stage 4 would show in few worlds. The measurement
+watch takes `FARMING=1` now: the twelve founders start knowing how to
+scatter seed and break ground, keep the seasons in mind and save seed,
+and the run goes on from there. It prints a line on the fields once a
+month (`FARMX`): how many, how worn, what is in crop, what has come in and
+fallen, what is put by. `run.sh` passes `DAYS` through.
+
+**What a farming world is short of.** A probe of six such worlds over
+three years, before any of stage 4:
+
+- **Not food.** Stores held 15,000 to 43,000 units at the turn of each year
+  for twelve to eighteen people, and nobody spent a day wasting.
+- **The harvest.** Field crop that fell unharvested came to 1.3 to 4.7 times
+  what was brought in by the third year, and the gap widened every year.
+  A third of all crops with work in them failed (#416).
+- **Worn ground.** 10% to 25% of fields were exhausted.
+- **Vermin.** 4,000 to 17,000 units out of the stores.
+- **Fields already stand.** What is sown grows on after each harvest; a
+  field wears a rung a crop and is brought back by muck, a bean crop or a
+  year's rest; a farmer already stays by a standing crop. What stage 4
+  names as permanent fields is mostly there.
+
+So stage 4 here is about what is wasted: work put into fields that fall,
+ground worn out, food lost from stores.
+
+**What changed**, each found out by something that happens to somebody,
+and acted on as their temperament and their reckoning say:
+
+| | what it does | found out by |
+|---|---|---|
+| keeping fields (#417) | no new ground broken while one's last crops were lost more often than paid | three crops of one's own lost |
+| planting calendar (#418) | only what has most of its season ahead is sown | three crops one worked ripening short, keeping the seasons |
+| manuring (#419) | muck carried to the most worn field about home | twenty armfuls off worn fields, knowing muck |
+| granary (#420) | the fullest store at home raised on poles: four pits' worth, vermin as past a pot | six lined stores opened gnawed, by somebody who breaks ground |
+| staple crop (#421) | the kind that has plainly paid best goes in first | four crops each of two kinds, one paying half again the other |
+
+### 418. Keeping the fields one has
+
+**What changed.** Every crop a farmer worked is kept in mind as paid or
+lost, the last six (`Agent::crops_lately`). A farmer who has lost three
+crops of their own (`CROPS_LOST_BEFORE_KEEPING_FIELDS`) is apt to keep the
+fields they have (`know:keep_fields`). Somebody who keeps them breaks no
+new ground while more of their last crops were lost than paid
+(`are_my_crops_paying`); they tend and bring in what they have. Asked
+after a pod row has been turned under, which is working a field one has.
+
+The catalogue's "permanent or semi-permanent fields": a field already
+stood as long as anybody worked it. What was missing was the farmer who
+stops breaking more when the ones there go to waste.
+
+### 419. A planting calendar
+
+**What changed.** A crop grows only in its season, so one sown with less
+than half of its season left ripens short (`is_it_the_time_to_sow`).
+Whoever put work into a crop that ripens short sees it
+(`World::crops_ripened_short_for`, `what_ripened_short`); three of them,
+to somebody who keeps the seasons, bring the calendar to mind
+(`know:planting_calendar`). Somebody who keeps one sows only what is in
+its time, and breaks no ground while nothing they carry is: the choice of
+what to sow takes the day (`what_this_one_would_sow_on`).
+
+It came late and to few: short crops are one in six, and a calendar was
+kept in four of six worlds in the probe, by one to seven people.
+
+### 420. Manuring the worn fields
+
+**What changed.** Muck was tipped on whatever field somebody happened to
+stand on, when they were in the mood to try it. Somebody who knows muck
+does a field good and takes crop off fields worn below what their ground
+was, twenty times (`CROPS_OFF_WORN_GROUND_BEFORE_MANURING`), is apt to
+manure them (`know:manure_fields`). Carrying muck - fold dung, compost,
+what went off - they walk it to the field about home worn furthest below
+its ground (`the_most_worn_field_about_home`) and spread it, whatever
+their mood (`World::worn_fields_mucked`).
+
+### 421. Granaries
+
+**What changed.** A store can be raised into a granary
+(`Action::RaiseGranary`): the fullest covered store at home, on a floor of
+poles under a thatch, of ten wood (`WOOD_A_GRANARY_TAKES`). The floor is
+kept with the store as a lining is (`Pit::GRANARY`). A granary holds four
+pits' worth (`WHAT_A_GRANARY_TAKES`, 1,200), vermin take from it as from a
+fired pot, and it keeps at least as a lined store does.
+
+A farmer who lines stores and opens six lined ones gnawed is apt to think
+of it (`know:granary`). They raise one where what the camp has put by
+about home, up to what a granary holds, would save over a season more
+than the granary costs (`WHAT_RAISING_A_GRANARY_COSTS`, forty units), by
+what they reckon a lined store loses and how much waste bothers them
+(`a_store_to_raise`): the frugal raise one over three pits' worth, the
+lazy do not. Not while home has a granary with room.
+
+The catalogue's "larger surplus" is what a granary holds.
+
+### 422. Staple crops, and what is not modelled
+
+**Staple crops.** Each farmer keeps an account, by kind, of what their
+crops took and gave back (`Agent::crop_returns`, from #416). Somebody who
+has grown two kinds four times each (`CROPS_BEFORE_A_STAPLE`) and seen one
+pay half again what the other does (`PLAINLY_WORSE`) settles on it
+(`know:staple`, `my_staple_crop`): a comparison of what was seen, at no
+pace. It goes in first whenever they carry it, ahead of the pod row on
+tired ground (`WHAT_A_STAPLE_IS_WORTH`). Cereal fields and pulse plots are
+staples of grain and of pods.
+
+**Managed orchards** are the fruit fields of slips moved in beside the
+camp (#384) and the trees about home cut to the stool (#382); grafting and
+pruning for fruit are not modelled apart from these.
+
+**Irrigation is not modelled.** Fields go only on plains and meadow, and
+that ground holds what a plant does best on whatever the sky does
+(`Soil::humidity`); water led to a field would change nothing. The ditch
+of stage 1 waters stands on hills, which cannot be broken (#383). It wants
+ground that dries out in a dry spell, and the ground holds no memory of
+the weather.
+
+**Probe**, the six farming worlds over three years, against the same
+worlds before stage 4:
+
+| world | fields | exhausted | brought in | fallen | put by | granaries |
+|---|---|---|---|---|---|---|
+| scattered 1 | 186 → 193 | 21 → 7 | 25,941 → 21,225 | 33,162 → 33,304 | 34,087 → 40,031 | 1 |
+| scattered 2 | 245 → 232 | 24 → 0 | 22,317 → 17,584 | 52,246 → 50,394 | 33,953 → 40,876 | 5 |
+| smooth 1 | 92 → 66 | 4 → 1 | 3,252 → 2,501 | 21,789 → 18,493 | 15,237 → 20,282 | 4 |
+| smooth 2 | 141 → 110 | 18 → 5 | 22,656 → 24,435 | 29,519 → 20,009 | 23,502 → 30,876 | 2 |
+| smooth 3 | 183 → 149 | 16 → 4 | 20,762 → 24,606 | 42,233 → 45,987 | 16,210 → 17,981 | 2 |
+| smooth 4 | 111 → 104 | 5 → 2 | 4,960 → 14,984 | 23,247 → 12,419 | 24,763 → 27,483 | 1 |
+
+Keeping fields, manuring and staples came to every world, between days
+115 and 640; granaries between days 140 and 560. Fewer fields were broken
+in five worlds of six, and exhausted ground fell in all six. More was put
+by at the end in all six. What was brought in went both ways.
+
+**Tests** (`settled_fields_tests`, 13): losing crops is how keeping
+fields comes to mind; a keeper breaks no more ground while the crops do
+not pay; a crop is in its time before its season and early in it; a
+calendar keeper sows only what is in its time; short crops are how the
+calendar comes to mind; a manurer carries muck to the most worn field;
+crop off worn ground is how manuring comes to mind; a granary holds a
+harvest and keeps the vermin off; the frugal raise a granary the lazy
+would not; a store of the camp's is raised into a granary; lined stores
+gnawed are how a farmer thinks of a granary; a crop that plainly pays
+best becomes a staple; a staple goes in first.
+
+**Full suite**: `cargo test --lib`, 3,152 tests: 3,146 passed, 0 failed, 6
+ignored, in 39 minutes (sharing the machine with two measurement draws).
+The dice counts are unchanged.
