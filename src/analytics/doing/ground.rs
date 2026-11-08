@@ -184,6 +184,14 @@ impl Simulation {
             ));
         }
 
+        // Nothing broken for a crop out of its time, by somebody who keeps a
+        // planting calendar (#418). Asked before the ground is broken, since
+        // a calendar says nothing about the ground.
+        let today = self.world.climate.calendar.day_of_year;
+        if Self::what_this_one_would_sow_on(&self.population.agents[agent_index], 1.0, Some(today)).is_none() {
+            return ActionResult::failure("Nothing to sow that is in its time".to_string());
+        }
+
         // Broken, and on the record as a field from today: what kind of ground
         // it is and what grade it was, which a rest brings it back to.
         let now = self.world.turn;
@@ -209,10 +217,25 @@ impl Simulation {
             self.world.grid.how_good_the_ground_is(&tile_position)
         };
 
-        let sown = Self::what_this_one_would_sow(
+        // By a planting calendar, only what is in its time (#418)
+        let Some(sown) = Self::what_this_one_would_sow_on(
             &self.population.agents[agent_index],
             how_good_the_ground_is,
-        );
+            Some(today),
+        ) else {
+            return ActionResult::failure("Nothing to sow that is in its time".to_string());
+        };
+
+        // A field of the crop somebody has settled on (#421)
+        {
+            let agent = &self.population.agents[agent_index];
+            let staple = agent.knows_the_way("staple").then(|| agent.my_staple_crop()).flatten();
+            if staple.is_some_and(|called| {
+                Self::what_can_be_sown().into_iter().any(|(name, crop, _)| name == called && crop == sown)
+            }) {
+                self.world.staple_fields_sown += 1;
+            }
+        }
 
         // The seed itself goes in the ground. Sowing was free before
         // this, which made a field a thing you got for a day's digging
@@ -722,7 +745,12 @@ impl Simulation {
         // itself: muck tipped on a field that can still take it is muck that
         // will tell, and muck tipped anywhere else never will.
         let now = self.world.turn;
+        let worn = self.world.grid.field_at(&tile_position).is_some_and(|field| field.grade < field.natural);
         let worked = self.world.grid.somebody_mucked(&tile_position, worth, now);
+        // Carried to a worn field on purpose (#419)
+        if worked && worn && self.population.agents[agent_index].knows_the_way("manure_fields") {
+            self.world.worn_fields_mucked += 1;
+        }
 
         let agent = &mut self.population.agents[agent_index];
         agent.practices.record_outcome(Practice::SpreadingMuck, worked);

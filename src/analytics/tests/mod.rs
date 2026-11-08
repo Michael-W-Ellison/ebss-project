@@ -157,6 +157,7 @@ mod coppicing_tests;
 mod lining_tests;
 mod seed_and_field_tests;
 mod crop_investment_tests;
+mod settled_fields_tests;
 mod medicine_tests;
 mod social_paths_tests;
 mod ditching_tests;

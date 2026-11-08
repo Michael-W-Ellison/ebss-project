@@ -474,6 +474,26 @@ impl Simulation {
         }
     }
 
+    /// Somebody who put work into a crop sees it ripen short (#418). Seen
+    /// often enough by somebody who keeps the seasons in mind, it comes to
+    /// them that a crop wants sowing ahead of its season, not in it.
+    pub(in crate::analytics) fn what_ripened_short(&mut self) {
+        use crate::agents::Agent;
+        let saw = std::mem::take(&mut self.world.crops_ripened_short_for);
+        for who in saw {
+            let Some(agent) = self.population.agents.iter_mut().find(|agent| agent.id == who && agent.state.is_alive)
+            else {
+                continue;
+            };
+            agent.skills.made_one(Agent::A_CROP_OF_MINE_SHORT);
+            if agent.knows_the_way("seasons")
+                && agent.skills.times_made(Agent::A_CROP_OF_MINE_SHORT) >= Agent::SHORT_CROPS_BEFORE_A_CALENDAR
+            {
+                agent.it_comes_to_me("know:planting_calendar", Agent::SHORT_CROPS_BEFORE_A_CALENDAR);
+            }
+        }
+    }
+
     /// The people of a camp see a ripe crop of theirs fall in the field, its
     /// season over and nobody having brought it in (#395): everybody grown
     /// whose home is within a walk of the field. Seen often enough, it comes

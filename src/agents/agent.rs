@@ -2077,6 +2077,15 @@ pub struct Agent {
     /// better.
     #[serde(default)]
     pub field_pests: std::collections::BTreeMap<String, (f64, f64)>,
+    /// What this one's crops have come to, by what was sown (#421): energy
+    /// put in, energy taken off, and how many crops. What lets somebody who
+    /// has grown two kinds see which pays.
+    #[serde(default)]
+    pub crop_returns: std::collections::BTreeMap<String, (f64, f64, u32)>,
+    /// Whether each of this one's last few crops paid, the latest last
+    /// (#417): what says whether another field would be worth breaking.
+    #[serde(default)]
+    pub crops_lately: Vec<bool>,
     /// Every swap this one has tried, by `what_that_swap_is_called`.
     ///
     /// Kept apart from `lessons` for the same reason as `times_laid_up`. A
@@ -2347,6 +2356,8 @@ impl Agent {
             store_losses: std::collections::BTreeMap::new(),
             seed_line: 0.0,
             field_pests: std::collections::BTreeMap::new(),
+            crop_returns: std::collections::BTreeMap::new(),
+            crops_lately: Vec::new(),
             swaps_tried: std::collections::BTreeSet::new(),
             what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
@@ -3885,6 +3896,11 @@ impl Agent {
     pub const A_LINED_STORE_GNAWED: &'static str = "a lined store gnawed";
     pub const LINED_STORES_GNAWED_BEFORE_SEALING: u32 = 3;
 
+    /// And what it calls one opened by somebody who grows a harvest, and how
+    /// many before the store goes up off the ground: a granary (#420).
+    pub const A_LINED_STORE_GNAWED_BY_A_FARMER: &'static str = "a lined store gnawed by a farmer";
+    pub const LINED_STORES_GNAWED_BEFORE_A_GRANARY: u32 = 6;
+
     /// What being laid up by filth teaches (#357): enough of it, and a
     /// midden; with a midden and a people settled, a latrine.
     pub fn what_filth_teaches(&mut self) {
@@ -3942,6 +3958,7 @@ impl Agent {
         if put_in <= 0.0 {
             return;
         }
+        self.what_i_have_seen_crops_come_to(put_in, came_back, called);
         if came_back < put_in {
             // How much of what was put in is gone: all of it for a crop that
             // fell with nobody's hand on it
@@ -3964,6 +3981,98 @@ impl Agent {
             );
         }
     }
+
+    /// Keep the account of a crop of this one's (#417, #421): what it came
+    /// to against its kind, and whether it paid among the last few. A
+    /// farmer who has lost crops of their own enough times thinks to keep
+    /// the fields they have rather than break more; one who has grown two
+    /// kinds long enough to see one plainly outpay the other settles on it.
+    fn what_i_have_seen_crops_come_to(&mut self, put_in: f32, came_back: f32, called: Option<&str>) {
+        self.crops_lately.push(came_back >= put_in);
+        if self.crops_lately.len() > Self::CROPS_REMEMBERED {
+            self.crops_lately.remove(0);
+        }
+        if let Some(called) = called {
+            let account = self.crop_returns.entry(called.to_string()).or_insert((0.0, 0.0, 0));
+            account.0 += f64::from(put_in);
+            account.1 += f64::from(came_back);
+            account.2 += 1;
+        }
+        if came_back < put_in {
+            self.skills.made_one(Self::A_CROP_OF_MINE_LOST);
+            if self.skills.times_made(Self::A_CROP_OF_MINE_LOST) >= Self::CROPS_LOST_BEFORE_KEEPING_FIELDS {
+                self.it_comes_to_me("know:keep_fields", Self::CROPS_LOST_BEFORE_KEEPING_FIELDS);
+            }
+        }
+        if self.my_staple_crop().is_some() && !self.knows_the_way("staple") {
+            self.came_to_it_myself("know:staple");
+        }
+    }
+
+    /// What the practice record calls a crop of this one's that ripened
+    /// short of its full stand, and how many before somebody who keeps the
+    /// seasons thinks to sow ahead of them (#418).
+    pub const A_CROP_OF_MINE_SHORT: &'static str = "acropofmineshort";
+    pub const SHORT_CROPS_BEFORE_A_CALENDAR: u32 = 3;
+
+    /// What the practice record calls an armful taken off a field worn below
+    /// what its ground was, and how many before somebody who knows muck does
+    /// a field good carries it to the worn ones on purpose (#419): about a
+    /// season's gathering off them.
+    pub const A_CROP_OFF_WORN_GROUND: &'static str = "acropoffwornground";
+    pub const CROPS_OFF_WORN_GROUND_BEFORE_MANURING: u32 = 20;
+
+    /// How many of their last crops somebody keeps in mind (#417).
+    pub const CROPS_REMEMBERED: usize = 6;
+
+    /// What the practice record calls a crop of this one's that came back
+    /// less than went into it, and how many before keeping the fields one
+    /// has comes to mind (#417): a season or two of them.
+    pub const A_CROP_OF_MINE_LOST: &'static str = "acropofminelost";
+    pub const CROPS_LOST_BEFORE_KEEPING_FIELDS: u32 = 3;
+
+    /// Whether this one's crops lately have been paying (#417): no more of
+    /// the last few lost than paid. Somebody who has not had three yet
+    /// gives a field the benefit of the doubt.
+    pub fn are_my_crops_paying(&self) -> bool {
+        if self.crops_lately.len() < 3 {
+            return true;
+        }
+        let paid = self.crops_lately.iter().filter(|paid| **paid).count();
+        paid * 2 >= self.crops_lately.len()
+    }
+
+    /// What a crop of this kind has given back for each unit put into it,
+    /// in this one's experience, and how many crops that is (#421).
+    pub fn what_this_crop_pays_me(&self, called: &str) -> Option<(f64, u32)> {
+        let (put_in, came_back, crops) = *self.crop_returns.get(called)?;
+        (put_in > 0.0).then(|| (came_back / put_in, crops))
+    }
+
+    /// The crop this one has settled on as their staple, if they have grown
+    /// enough of two kinds to tell (#421): the best paying of the kinds
+    /// with `CROPS_BEFORE_A_STAPLE` crops behind them, if it paid
+    /// `PLAINLY_WORSE` times the worst of them.
+    pub fn my_staple_crop(&self) -> Option<String> {
+        let known: Vec<(&String, f64)> = self
+            .crop_returns
+            .iter()
+            .filter(|(_, (put_in, _, crops))| *crops >= Self::CROPS_BEFORE_A_STAPLE && *put_in > 0.0)
+            .map(|(called, (put_in, came_back, _))| (called, came_back / put_in))
+            .collect();
+        if known.len() < 2 {
+            return None;
+        }
+        let (best, pays) = known
+            .iter()
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| b.0.cmp(a.0)))?;
+        let worst = known.iter().map(|(_, pays)| *pays).fold(f64::INFINITY, f64::min);
+        (*pays > 0.0 && *pays >= worst * Self::PLAINLY_WORSE).then(|| (*best).clone())
+    }
+
+    /// How many crops of a kind before somebody would say what it pays
+    /// (#421): a few seasons of it.
+    pub const CROPS_BEFORE_A_STAPLE: u32 = 4;
 
     /// What the sadness and happiness of a crop are laid to (#416).
     pub const A_CROP_THAT_FAILED: &'static str = "a crop that failed";
@@ -4387,7 +4496,7 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 14] = [
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 19] = [
         "selective_harvest",
         "coppice",
         "clean_water",
@@ -4403,6 +4512,12 @@ impl Agent {
         "division_of_labour",
         "tally",
         "measured_sowing",
+        // The fourth stage of the agricultural path (#417 to #421)
+        "keep_fields",
+        "planting_calendar",
+        "manure_fields",
+        "granary",
+        "staple",
     ];
 
     /// What the practice record calls a gather from a wild stand within a
@@ -9003,6 +9118,7 @@ impl Agent {
             Action::DigOutMidden => "digoutmidden".to_string(),
             Action::LineStore => "linestore".to_string(),
             Action::HedgeAField => "hedgeafield".to_string(),
+            Action::RaiseGranary => "raisegranary".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),

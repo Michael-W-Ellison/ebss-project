@@ -265,6 +265,7 @@ impl Simulation {
         self.what_the_fields_lost();
         // And what each crop came to, against what was put into it (#416)
         self.what_the_crops_came_to();
+        self.what_ripened_short();
         // And what happened to anybody's body is seen by the people round
         // them (#399, #402)
         self.what_the_camp_saw_of_bodies();

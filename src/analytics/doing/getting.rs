@@ -633,7 +633,26 @@ impl Simulation {
                     .map(|tile| tile.terrain.is_cultivated())
                     .unwrap_or(false)
             {
+                // And a crop off worn ground, often enough, by somebody who
+                // knows muck does something for a field, is how anybody
+                // thinks to carry it to the worn ones on purpose (#419)
+                let worn = self
+                    .world
+                    .grid
+                    .field_at(&where_it_grew)
+                    .is_some_and(|field| field.grade < field.natural);
                 let agent = &mut self.population.agents[agent_index];
+                if worn && agent.knows_how_to_do("SpreadMuck") {
+                    agent.skills.made_one(crate::agents::Agent::A_CROP_OFF_WORN_GROUND);
+                    if agent.skills.times_made(crate::agents::Agent::A_CROP_OFF_WORN_GROUND)
+                        >= crate::agents::Agent::CROPS_OFF_WORN_GROUND_BEFORE_MANURING
+                    {
+                        agent.it_comes_to_me(
+                            "know:manure_fields",
+                            crate::agents::Agent::CROPS_OFF_WORN_GROUND_BEFORE_MANURING,
+                        );
+                    }
+                }
                 agent
                     .practices
                     .record_outcome(crate::agents::practices::Practice::Farming, true);

@@ -153,6 +153,28 @@ fn zz_discovery_watch() {
         ("crops_ripened_full", sim.world.crops_ripened_full),
         ("crops_ripened_short", sim.world.crops_ripened_short),
         ("fields_hedged", sim.world.fields_hedged),
+        // The fourth stage of the agricultural path (#417 to #421)
+        ("ground_left_unbroken", sim.ground_left_unbroken.get()),
+        ("sowings_put_off", sim.sowings_put_off.get()),
+        ("worn_fields_mucked", sim.world.worn_fields_mucked),
+        ("granaries_built", sim.world.granaries_built),
+        ("staple_fields_sown", sim.world.staple_fields_sown),
+        (
+            "put_by_at_the_end",
+            sim.world.pits.iter().map(|pit| u64::from(pit.how_much_is_in_it())).sum(),
+        ),
+        (
+            "in_granaries_at_the_end",
+            sim.world.pits.iter().filter(|pit| pit.is_a_granary()).map(|pit| u64::from(pit.how_much_is_in_it())).sum(),
+        ),
+        (
+            "fields_at_the_end",
+            sim.world.grid.every_field().count() as u64,
+        ),
+        (
+            "fields_worn_at_the_end",
+            sim.world.grid.every_field().filter(|(_, field)| field.grade < field.natural).count() as u64,
+        ),
         ("wounds_cleaned", sim.world.wounds_cleaned),
         ("wounds_cauterised", sim.world.wounds_cauterised),
         ("wounds_stitched", sim.world.wounds_stitched),

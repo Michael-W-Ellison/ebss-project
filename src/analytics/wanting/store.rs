@@ -300,7 +300,7 @@ impl Simulation {
             .iter()
             .filter(|pit| here.distance_to(&pit.where_it_is) <= Self::WORTH_WALKING_TO_THE_STORE)
             .map(|pit| {
-                crate::world::Pit::WHAT_A_PIT_TAKES.saturating_sub(pit.how_much_is_in_it())
+                pit.how_much_room_is_left()
             })
             .sum()
     }

@@ -10105,6 +10105,9 @@ name = "Permanent or semi-permanent fields"
 path = "agricultural"
 stage = 4
 role = "technique"
+model = ["know:keep_fields"]
+needs = ["agricultural.2.small_garden_plots_near_dwellings"]
+note = "A field already stands as long as somebody works it: what is sown grows on after each harvest, wears a rung a crop and is brought back by muck, beans or a year's rest (soil::Field). What stage 4 adds is the farmer who keeps the fields they have: they break no new ground while more of their own last crops have been lost than paid (Agent::are_my_crops_paying), and tend and bring in what they have instead. Found out by losing crops of one's own, each the work and seed put in set against what came off it (#416, Agent::CROPS_LOST_BEFORE_KEEPING_FIELDS) (#417)."
 
 [[tech]]
 id = "agricultural.4.simple_irrigation_or_runoff_capture"
@@ -10112,6 +10115,7 @@ name = "Simple irrigation or runoff capture"
 path = "agricultural"
 stage = 4
 role = "technique"
+note = "Not modelled (#422). Fields go only on plains and meadow (Terrain::can_be_tilled), and that ground holds as much water as a plant does best on whatever the sky does (Soil::humidity), so water led to a field would change nothing. The ditch of stage 1 waters stands on dry ground - hills, which cannot be broken (#383). Irrigation wants ground that dries out in a dry spell, and the ground holds no memory of the weather."
 
 [[tech]]
 id = "agricultural.4.animal_or_human_manuring"
@@ -10119,6 +10123,9 @@ name = "Animal or human manuring"
 path = "agricultural"
 stage = 4
 role = "technique"
+model = ["know:manure_fields"]
+needs = ["agricultural.2.small_garden_plots_near_dwellings"]
+note = "Muck - fold dung, midden compost, what went off in a pack - carried to the field about home worn furthest below what its ground was and spread there on purpose, not tipped wherever somebody happens to stand when the mood takes them (Simulation::the_most_worn_field_about_home). Found out by somebody who knows muck does a field good taking crop off worn fields often enough (Agent::CROPS_OFF_WORN_GROUND_BEFORE_MANURING) (#419)."
 
 [[tech]]
 id = "agricultural.4.granaries"
@@ -10126,6 +10133,9 @@ name = "Granaries"
 path = "agricultural"
 stage = 4
 role = "technique"
+model = ["know:granary"]
+needs = ["storage.1.woven_bins"]
+note = "The fullest store about home raised on a floor of poles under a thatch, of ten wood: vermin take from it as little as from a fired pot, it keeps as a lined store does, and it holds four pits' worth (Pit::is_a_granary, WHAT_A_GRANARY_TAKES). Raised where what the camp has put by would save more over a season than the granary costs, by how much waste bothers somebody. Found out by a farmer opening lined stores gnawed often enough (Agent::LINED_STORES_GNAWED_BEFORE_A_GRANARY) (#420)."
 
 [[tech]]
 id = "agricultural.4.seasonal_planting_calendars"
@@ -10133,6 +10143,9 @@ name = "Seasonal planting calendars"
 path = "agricultural"
 stage = 4
 role = "technique"
+model = ["know:planting_calendar"]
+needs = ["agricultural.3.basic_seasonality_knowledge"]
+note = "A crop grows only in its season, so one sown with less than half of its season left ripens short. Somebody who keeps a planting calendar sows only what has most of its season ahead of it (Simulation::is_it_the_time_to_sow), and breaks no ground while nothing they carry is in its time. Found out by somebody who keeps the seasons seeing crops they put work into ripen short (Agent::SHORT_CROPS_BEFORE_A_CALENDAR) (#418)."
 
 [[tech]]
 id = "agricultural.4.dedicated_staple_crops"
@@ -10140,6 +10153,8 @@ name = "Dedicated staple crops"
 path = "agricultural"
 stage = 4
 role = "technique"
+model = ["know:staple"]
+note = "Every crop a farmer puts work into is set against what came off it (#416), by kind (Agent::crop_returns). Somebody who has grown two kinds four times each and seen one pay half again what the other does settles on it: it goes in first whenever they carry it (Agent::my_staple_crop, Simulation::WHAT_A_STAPLE_IS_WORTH). A comparison of what was seen, not an idea, so it comes at no pace (#421)."
 
 [[tech]]
 id = "agricultural.4.cereal_fields"
@@ -10147,6 +10162,9 @@ name = "Cereal fields"
 path = "agricultural"
 stage = 4
 role = "product"
+model = ["know:staple"]
+same_as = ["agricultural.4.dedicated_staple_crops"]
+note = "A camp's fields of grain where grain is what has paid its farmers best (#421)."
 
 [[tech]]
 id = "agricultural.4.pulse_plots"
@@ -10154,6 +10172,9 @@ name = "Pulse plots"
 path = "agricultural"
 stage = 4
 role = "product"
+model = ["know:staple"]
+same_as = ["agricultural.4.dedicated_staple_crops"]
+note = "Fields of pods where pods have paid best; and pods sown on tired ground, which they feed (Simulation::WHAT_A_POD_ROW_IS_WORTH_ON_TIRED_GROUND) (#421)."
 
 [[tech]]
 id = "agricultural.4.managed_orchards"
@@ -10161,6 +10182,9 @@ name = "Managed orchards"
 path = "agricultural"
 stage = 4
 role = "product"
+model = ["do:PlantCutting", "know:coppice"]
+same_as = ["agricultural.2.propagation_from_cuttings_tubers_and_saved", "agricultural.1.coppicing_and_pruning_of_useful_trees"]
+note = "Fruit fields of slips moved in beside the camp (#384), and the trees about home cut to the stool and kept (#382). Fruit trees grafted or pruned for fruit are not modelled apart from these (#422)."
 
 [[tech]]
 id = "agricultural.4.larger_surplus"
@@ -10168,6 +10192,9 @@ name = "Larger surplus"
 path = "agricultural"
 stage = 4
 role = "product"
+model = ["know:granary"]
+same_as = ["agricultural.4.granaries"]
+note = "What a granary holds and keeps: four pits' worth, which vermin hardly come at (#420)."
 
 [[tech]]
 id = "agricultural.5.plows_ards"

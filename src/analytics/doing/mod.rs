@@ -110,6 +110,7 @@ impl Simulation {
             Action::DigDitch => self.digging_a_ditch(agent_index),
             Action::DigOutMidden => self.digging_out_the_midden(agent_index),
             Action::LineStore => self.lining_a_store(agent_index),
+            Action::RaiseGranary => self.raising_a_granary(agent_index),
             Action::HedgeAField => self.hedging_a_field(agent_index, turn_now),
             Action::TrySwapping { instead_of_making, instead_of, put_in } => self.trying_a_swap(instead_of_making, instead_of, put_in, agent_index, turn_now),
             Action::TakeFrom { from } => self.taking_from(from, agent_index, turn_now),

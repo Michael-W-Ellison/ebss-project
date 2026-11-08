@@ -354,6 +354,19 @@ pub struct World {
     pub crops_that_failed: u64,
     #[serde(default)]
     pub crops_that_paid: u64,
+    /// Who put work into a crop that ripened short today, one entry each
+    /// (#418): what they see of it.
+    #[serde(default)]
+    pub crops_ripened_short_for: Vec<uuid::Uuid>,
+    /// Muck carried to a worn field and spread on it, by somebody who
+    /// manures fields (#419); granaries put up (#420); and fields sown with
+    /// somebody's staple (#421).
+    #[serde(default)]
+    pub worn_fields_mucked: u64,
+    #[serde(default)]
+    pub granaries_built: u64,
+    #[serde(default)]
+    pub staple_fields_sown: u64,
     /// Field crops that ripened at their full stand, and that ripened short
     /// on the last day of their season (#395).
     #[serde(default)]
@@ -785,6 +798,8 @@ impl Pit {
     pub fn how_it_is_shut(&self) -> &'static str {
         if !self.covered {
             "open"
+        } else if self.is_a_granary() {
+            "raised"
         } else if self.holds.iter().any(|item| item.item_id == "stoneware" || item.item_id == "sealedbasket") {
             "sealed"
         } else if self.is_lined() {
@@ -798,6 +813,8 @@ impl Pit {
     pub fn what_vermin_get_at(&self) -> f32 {
         if !self.covered {
             Self::VERMIN_IN_AN_OPEN_HOLE
+        } else if self.is_a_granary() {
+            Self::VERMIN_PAST_A_POT
         } else if self.holds.iter().any(|item| item.item_id == "stoneware" || item.item_id == "sealedbasket") {
             Self::VERMIN_PAST_A_POT
         } else if self.is_lined() {
@@ -843,7 +860,36 @@ impl Pit {
 
     /// Whether there is room for more.
     pub fn has_room(&self) -> bool {
-        self.how_much_is_in_it() < Self::WHAT_A_PIT_TAKES
+        self.how_much_is_in_it() < self.what_it_takes()
+    }
+
+    /// How much this store holds: a pit's worth, or a granary's.
+    pub fn what_it_takes(&self) -> u32 {
+        if self.is_a_granary() {
+            Self::WHAT_A_GRANARY_TAKES
+        } else {
+            Self::WHAT_A_PIT_TAKES
+        }
+    }
+
+    /// And how much more it would take.
+    pub fn how_much_room_is_left(&self) -> u32 {
+        self.what_it_takes().saturating_sub(self.how_much_is_in_it())
+    }
+
+    /// What the floor of poles a granary stands on is called among what a
+    /// store holds (#420): kept with it, as a lining is, and not food.
+    pub const GRANARY: &'static str = "granary";
+
+    /// A store raised on a floor of poles under a thatch, for a harvest
+    /// (#420): four pits' worth.
+    pub const WHAT_A_GRANARY_TAKES: u32 = 4 * Self::WHAT_A_PIT_TAKES;
+
+    /// Whether this store is a granary (#420): up off the ground where the
+    /// burrowers cannot get in and the damp does not come up, so vermin take
+    /// next to nothing, as from a pot, and it keeps as a lined store does.
+    pub fn is_a_granary(&self) -> bool {
+        self.holds.iter().any(|item| item.item_id == Self::GRANARY)
     }
 
     /// Whether there is anything in it worth walking to.
@@ -999,8 +1045,18 @@ impl Pit {
     /// bury is made on cannot drift apart - two spellings of that, and the
     /// second would be the one the decision was made on.
     pub fn with_the_lid_on(&self) -> f32 {
-        Self::BARE_EARTH * self.what_it_is_lined_with()
+        let lined_with = self.what_it_is_lined_with();
+        // Up off the ground and out of the wet, a granary keeps at least as a
+        // lined store does (#420)
+        if self.is_a_granary() {
+            return Self::BARE_EARTH * lined_with.min(Self::WHAT_A_GRANARY_KEEPS);
+        }
+        Self::BARE_EARTH * lined_with
     }
+
+    /// What a granary's floor and thatch are worth to keeping, as a lining
+    /// is: a basket's half (#420).
+    const WHAT_A_GRANARY_KEEPS: f32 = 0.5;
 
     /// What the best thing in here is worth as a lining.
     ///
@@ -2084,6 +2140,10 @@ impl World {
             field_crop_brought_in: 0,
             crops_that_failed: 0,
             crops_that_paid: 0,
+            crops_ripened_short_for: Vec::new(),
+            worn_fields_mucked: 0,
+            granaries_built: 0,
+            staple_fields_sown: 0,
             crops_ripened_full: 0,
             crops_ripened_short: 0,
             fields_hedged: 0,
@@ -4591,6 +4651,9 @@ impl World {
                         self.crops_ripened_full += 1;
                     } else {
                         self.crops_ripened_short += 1;
+                        // Seen by whoever put work into it (#418)
+                        self.crops_ripened_short_for
+                            .extend(resource.put_into_this_crop.iter().map(|(who, _)| *who));
                     }
                     resource.it_has_ripened();
                     if resource.resource_type.feeds_the_ground() {

@@ -54,11 +54,38 @@ impl Simulation {
     /// first, and for one that has walked back to a field of berries three
     /// autumns running is emphatically not berries. An agent carrying nothing
     /// sowable puts in what it has been eating, and learns from that too.
+    #[cfg(test)]
     pub(in crate::analytics) fn what_this_one_would_sow(
         agent: &crate::agents::Agent,
         how_good_the_ground_is: f32,
     ) -> crate::world::ResourceType {
+        Self::what_this_one_would_sow_on(agent, how_good_the_ground_is, None)
+            .unwrap_or(crate::world::ResourceType::Food)
+    }
+
+    /// What this one would sow on this day of the year, or nothing if
+    /// nothing they would sow is in its time (#418): the same choice, with
+    /// a staple put first by somebody who has one (#421), and, by somebody
+    /// who keeps a planting calendar, only what is in its time. With no day,
+    /// every crop is in its time.
+    pub(in crate::analytics) fn what_this_one_would_sow_on(
+        agent: &crate::agents::Agent,
+        how_good_the_ground_is: f32,
+        day_of_year: Option<u32>,
+    ) -> Option<crate::world::ResourceType> {
         use crate::world::ResourceType;
+
+        let in_its_time = |crop: ResourceType| match day_of_year {
+            Some(day) if agent.knows_the_way("planting_calendar") => Self::is_it_the_time_to_sow(crop, day),
+            _ => true,
+        };
+        // The crop somebody has settled on, by the kind it is (#421)
+        let staple = agent.knows_the_way("staple").then(|| agent.my_staple_crop()).flatten().and_then(|called| {
+            Self::what_can_be_sown()
+                .into_iter()
+                .find(|(name, _, _)| *name == called)
+                .map(|(_, crop, _)| crop)
+        });
 
         let mut best: Option<(ResourceType, f32)> = None;
 
@@ -71,13 +98,19 @@ impl Simulation {
                 continue;
             }
 
-            if agent.how_many_i_have(called) == 0 {
+            if agent.how_many_i_have(called) == 0 || !in_its_time(crop) {
                 continue;
             }
 
             let mut believed = agent
                 .lessons
                 .how_likely_to_try_this(&format!("sow:{called}"));
+
+            // What has paid best goes in first, by somebody who has settled
+            // on it (#421)
+            if staple == Some(crop) {
+                believed += Self::WHAT_A_STAPLE_IS_WORTH;
+            }
 
             // And what the ground under this man's feet is worth, which he
             // can see: thin, pale, hungry-looking stuff that grew a poor
@@ -101,7 +134,30 @@ impl Simulation {
             }
         }
 
-        best.map(|(crop, _)| crop).unwrap_or(ResourceType::Food)
+        match best {
+            Some((crop, _)) => Some(crop),
+            // An agent carrying nothing sowable puts in what it has been
+            // eating, if that is in its time
+            None => in_its_time(ResourceType::Food).then_some(ResourceType::Food),
+        }
+    }
+
+    /// How much a staple counts for in choosing what to sow (#421): more
+    /// than the pod row on tired ground, so a staple of grain still goes in
+    /// on poor ground, and enough to beat a middling opinion.
+    pub(in crate::analytics) const WHAT_A_STAPLE_IS_WORTH: f32 = 0.5;
+
+    /// Whether this is the time to sow this crop, by a planting calendar
+    /// (#418): before its season, or early enough in it that most of its
+    /// growing is still to come. A crop grows only in its season, so one
+    /// sown with less than half of it left ripens short, and a short crop
+    /// pays less than went into it.
+    pub(in crate::analytics) fn is_it_the_time_to_sow(crop: crate::world::ResourceType, day_of_year: u32) -> bool {
+        let window = crop.bearing_window();
+        match window.days_left(day_of_year) {
+            None => true,
+            Some(left) => left * 2 >= window.how_many_days(),
+        }
     }
 
     /// How poor ground has to look before a man puts beans in it rather than
@@ -286,6 +342,18 @@ impl Simulation {
             return None;
         }
 
+        // Somebody who manures fields (#419) carries it to the most worn
+        // field about home that will take it, and spreads it there without
+        // having to be in the mood to: they know what it does.
+        if agent.knows_the_way("manure_fields") && agent.immediate_needs_met() {
+            if let Some(field) = self.the_most_worn_field_about_home(agent) {
+                if (field.x, field.y) == (agent_position.0, agent_position.1) {
+                    return Some(Action::SpreadMuck);
+                }
+                return Some(Action::Move { target: (field.x, field.y, agent_position.2) });
+            }
+        }
+
         // On a field, which is where it might do some good
         let here = Position::new(agent_position.0, agent_position.1);
         let on_a_field = self
@@ -315,6 +383,26 @@ impl Simulation {
         }
 
         None
+    }
+
+    /// The field about this one's home worn furthest below what its ground
+    /// was, that muck would still bring up a rung (#419): not at the top,
+    /// and none rotting in it already. The nearest home of the most worn.
+    pub(in crate::analytics) fn the_most_worn_field_about_home(
+        &self,
+        agent: &crate::agents::Agent,
+    ) -> Option<crate::world::Position> {
+        use crate::world::soil::SoilGrade;
+        let home = Self::where_this_one_lives(agent);
+        let home_at = crate::world::Position::new(home.0, home.1);
+        let rung = |grade: SoilGrade| SoilGrade::LADDER.iter().position(|g| *g == grade).unwrap_or(0) as i32;
+        self.world
+            .grid
+            .every_field()
+            .filter(|(at, _)| Self::within((at.x, at.y), home, Self::FIELD_WALK_RADIUS as i32))
+            .filter(|(_, field)| field.grade < field.natural && field.mucked_ready_at.is_none())
+            .min_by_key(|(at, field)| (rung(field.grade) - rung(field.natural), home_at.distance_to(at), at.x, at.y))
+            .map(|(at, _)| at)
     }
 
     /// Scattering gathered seed on good ground near camp: Stage 1 of the
@@ -494,6 +582,24 @@ impl Simulation {
             return Some(Action::Move {
                 target: (under.x, under.y, agent_position.2),
             });
+        }
+
+        // Somebody who keeps a planting calendar breaks no ground for a crop
+        // out of its time (#418): with nothing to sow that would have most of
+        // its season ahead of it, the ground waits.
+        if Self::what_this_one_would_sow_on(agent, 1.0, Some(self.world.climate.calendar.day_of_year)).is_none() {
+            self.sowings_put_off.set(self.sowings_put_off.get() + 1);
+            return None;
+        }
+
+        // A farmer who keeps the fields they have (#417) breaks no more
+        // while their own crops lately have been lost more often than they
+        // paid: a field is time and seed put in against what comes off it,
+        // and another one when the ones there are going to waste is more of
+        // both thrown after them. They tend and bring in what they have.
+        if agent.knows_the_way("keep_fields") && !agent.are_my_crops_paying() {
+            self.ground_left_unbroken.set(self.ground_left_unbroken.get() + 1);
+            return None;
         }
 
         // Seed before ground. A farmer sows what he is carrying, and grain
