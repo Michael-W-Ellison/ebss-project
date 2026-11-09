@@ -159,6 +159,11 @@ fn zz_discovery_watch() {
         ("worn_fields_mucked", sim.world.worn_fields_mucked),
         ("granaries_built", sim.world.granaries_built),
         ("staple_fields_sown", sim.world.staple_fields_sown),
+        ("new_ground_by_keepers_paying", sim.world.new_ground_broken_by[0]),
+        ("new_ground_by_keepers_untried", sim.world.new_ground_broken_by[1]),
+        ("new_ground_by_keepers_failing", sim.world.new_ground_broken_by[2]),
+        ("new_ground_by_others", sim.world.new_ground_broken_by[3]),
+        ("new_ground_away_from_home", sim.world.new_ground_broken_away_from_home),
         (
             "put_by_at_the_end",
             sim.world.pits.iter().map(|pit| u64::from(pit.how_much_is_in_it())).sum(),

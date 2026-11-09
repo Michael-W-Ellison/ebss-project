@@ -367,6 +367,16 @@ pub struct World {
     pub granaries_built: u64,
     #[serde(default)]
     pub staple_fields_sown: u64,
+    /// New ground broken, by who broke it (#423): somebody who keeps the
+    /// fields they have and whose crops are paying, one who keeps them but
+    /// has not had enough crops yet to say, one who keeps them though their
+    /// crops are not paying, and one who does not keep them at all.
+    #[serde(default)]
+    pub new_ground_broken_by: [u64; 4],
+    /// New ground broken more than a walk to a field from the breaker's
+    /// home (#423).
+    #[serde(default)]
+    pub new_ground_broken_away_from_home: u64,
     /// Field crops that ripened at their full stand, and that ripened short
     /// on the last day of their season (#395).
     #[serde(default)]
@@ -2144,6 +2154,8 @@ impl World {
             worn_fields_mucked: 0,
             granaries_built: 0,
             staple_fields_sown: 0,
+            new_ground_broken_by: [0; 4],
+            new_ground_broken_away_from_home: 0,
             crops_ripened_full: 0,
             crops_ripened_short: 0,
             fields_hedged: 0,

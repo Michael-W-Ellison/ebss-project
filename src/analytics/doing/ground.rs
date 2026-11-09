@@ -195,6 +195,23 @@ impl Simulation {
         // Broken, and on the record as a field from today: what kind of ground
         // it is and what grade it was, which a rest brings it back to.
         let now = self.world.turn;
+        if !crate::world::Terrain::new(ground).is_cultivated() {
+            let agent = &self.population.agents[agent_index];
+            let who = if !agent.knows_the_way("keep_fields") {
+                3
+            } else if agent.crops_lately.len() < 3 {
+                1
+            } else if agent.are_my_crops_paying() {
+                0
+            } else {
+                2
+            };
+            self.world.new_ground_broken_by[who] += 1;
+            let home = Self::where_this_one_lives(agent);
+            if !Self::within((tile_position.x, tile_position.y), home, Self::FIELD_WALK_RADIUS as i32) {
+                self.world.new_ground_broken_away_from_home += 1;
+            }
+        }
         self.world.grid.break_ground(&tile_position, now);
 
         // What goes in the ground is what the agent has to put in it,
