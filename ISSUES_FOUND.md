@@ -31028,6 +31028,59 @@ Keeping fields, manuring and staples came to every world, between days
 in five worlds of six, and exhausted ground fell in all six. More was put
 by at the end in all six. What was brought in went both ways.
 
+**Measured**, forty farming worlds (`FARMING=1`) over two years, two draws
+of the dice each, before stage 4 against after; totals per draw, paired t
+over the forty worlds:
+
+| | before | after | t | worlds down / up |
+|---|---|---|---|---|
+| exhausted fields at the end | 570 | 312 | −8.3 | 38 / 2 |
+| fields worn below their natural grade | 1,132 | 776 | −7.2 | 34 / 5 |
+| fields at the end | 5,953 | 5,834 | −1.0 | 18 / 22 |
+| field crop brought in | 459,564 | 450,328 | −0.9 | |
+| field crop fallen | 769,398 | 766,494 | −0.2 | |
+| crops that paid / failed | 6,064 / 3,738 | 6,067 / 3,682 | 0.0 / −0.7 | |
+| put by at the end | 824,321 | 849,621 | +1.4 | 15 / 25 |
+| lost to vermin | 329,601 | 329,367 | 0.0 | |
+| rotted | 50,533 | 50,014 | −0.7 | |
+| alive at the end | 679 | 672 | −1.2 | |
+
+What people did with it, per draw: ground left unbroken 46,448 times,
+worn fields mucked 3,354, staples sown first 324, sowings put off 414,
+granaries raised 64, holding 30,662 at the end.
+
+Who found it out, across the eighty runs:
+
+| | runs | first / median / last day | holders at the end |
+|---|---|---|---|
+| manuring | 80 | 94 / 120 / 638 | 56% |
+| granary | 79 | 109 / 235 / 704 | 61% |
+| keeping fields | 80 | 261 / 276 / 291 | 68% |
+| staple | 80 | 136 / 276 / 636 | 52% |
+| planting calendar | 51 | 255 / 615 / 645 | 13% |
+
+So stage 4 does what manuring and keeping fields are for: the ground is
+kept, and exhausted fields fall by almost half in 38 worlds of 40. It does
+not yet change what comes in, what is lost or what is put by; the probe's
+"more put by in all six" did not hold at forty.
+
+- **Keeping fields stops the farmer, not the camp.** A keeper holds back
+  forty-six thousand times a draw and the camp breaks as many fields as
+  before: the ones whose crops are failing stop, and whoever's crops are
+  paying breaks the ground instead.
+- **The granary is a pit's size to a camp's store.** A camp puts by about
+  21,000; one or two granaries hold 1,200 each, under 4% of it, so what
+  vermin take does not move.
+- **The calendar comes late and to few.** It wants three short crops to
+  somebody keeping the seasons, and most crops do not ripen short.
+- **Deaths**, 2 before and 11 after over the two draws: five mothers in
+  childbirth, five by a blow, one of hunger. Hard births came to 47 on
+  each side; a hard birth takes the mother one time in ten, nothing in
+  stage 4 touches it, and about five were to be expected on each side, so
+  the 0 before is the luck. The hunger death (smooth 12, day 670) was a
+  person who starved with 22,674 put by in the world, which is a matter of
+  where the food was and is left for its own entry.
+
 **Tests** (`settled_fields_tests`, 13): losing crops is how keeping
 fields comes to mind; a keeper breaks no more ground while the crops do
 not pay; a crop is in its time before its season and early in it; a
