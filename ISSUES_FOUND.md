@@ -31066,8 +31066,8 @@ not yet change what comes in, what is lost or what is put by; the probe's
 
 - **Keeping fields stops the farmer, not the camp.** A keeper holds back
   forty-six thousand times a draw and the camp breaks as many fields as
-  before: the ones whose crops are failing stop, and whoever's crops are
-  paying breaks the ground instead.
+  before. Most likely the ones whose crops are failing stop and whoever's crops are
+  paying breaks the ground instead; this is not yet traced.
 - **The granary is a pit's size to a camp's store.** A camp puts by about
   21,000; one or two granaries hold 1,200 each, under 4% of it, so what
   vermin take does not move.
