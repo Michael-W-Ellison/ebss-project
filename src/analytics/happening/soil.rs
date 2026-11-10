@@ -521,4 +521,35 @@ impl Simulation {
             }
         }
     }
+
+    /// How far a field is from the nearest home of anybody alive, as a
+    /// band (#424): 0 within a walk to a field, 1 within two, 2 farther or
+    /// nobody living anywhere.
+    pub(in crate::analytics) fn how_far_from_home(&self, field: (i32, i32)) -> usize {
+        let walk = Self::FIELD_WALK_RADIUS as i32;
+        let nearest = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| {
+                let home = Self::where_this_one_lives(agent);
+                (home.0 - field.0).abs().max((home.1 - field.1).abs())
+            })
+            .min();
+        match nearest {
+            Some(paces) if paces <= walk => 0,
+            Some(paces) if paces <= 2 * walk => 1,
+            _ => 2,
+        }
+    }
+
+    /// Where today's fallen field crop fell, by how far from home (#424).
+    pub(in crate::analytics) fn where_the_field_crop_fell(&mut self) {
+        let fallen = std::mem::take(&mut self.world.field_crop_fallen_where);
+        for (field, amount) in fallen {
+            let band = self.how_far_from_home((field.x, field.y));
+            self.world.field_crop_fallen_by_distance[band] += u64::from(amount);
+        }
+    }
 }

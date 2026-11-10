@@ -165,6 +165,12 @@ fn zz_discovery_watch() {
         ("new_ground_by_keepers_failing", sim.world.new_ground_broken_by[2]),
         ("new_ground_by_others", sim.world.new_ground_broken_by[3]),
         ("new_ground_away_from_home", sim.world.new_ground_broken_away_from_home),
+        ("fallen_within_a_walk", sim.world.field_crop_fallen_by_distance[0]),
+        ("fallen_within_two_walks", sim.world.field_crop_fallen_by_distance[1]),
+        ("fallen_farther", sim.world.field_crop_fallen_by_distance[2]),
+        ("brought_in_within_a_walk", sim.world.field_crop_brought_in_by_distance[0]),
+        ("brought_in_within_two_walks", sim.world.field_crop_brought_in_by_distance[1]),
+        ("brought_in_farther", sim.world.field_crop_brought_in_by_distance[2]),
         (
             "put_by_at_the_end",
             sim.world.pits.iter().map(|pit| u64::from(pit.how_much_is_in_it())).sum(),

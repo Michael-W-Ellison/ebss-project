@@ -863,6 +863,8 @@ impl Simulation {
                 }
                 if went_in_the_pack && off_a_field {
                     self.world.field_crop_brought_in += took as u64;
+                    let band = self.how_far_from_home((where_it_grew.x, where_it_grew.y));
+                    self.world.field_crop_brought_in_by_distance[band] += took as u64;
                 }
                 if it_is_food {
                     self.food_items_into_packs += took as u64;

@@ -377,6 +377,19 @@ pub struct World {
     /// home (#423).
     #[serde(default)]
     pub new_ground_broken_away_from_home: u64,
+    /// Field crop fallen, by how far the field was from the nearest home
+    /// when it fell (#424): within a walk to a field
+    /// (`FIELD_WALK_RADIUS`), within two walks, and farther or with
+    /// nobody living anywhere.
+    #[serde(default)]
+    pub field_crop_fallen_by_distance: [u64; 3],
+    /// Field crop brought in, the same way (#424).
+    #[serde(default)]
+    pub field_crop_brought_in_by_distance: [u64; 3],
+    /// Where field crop fell today and how much, for the people's side to
+    /// sort by how far it was from home (#424). Not kept: it is a day long.
+    #[serde(skip)]
+    pub field_crop_fallen_where: Vec<(Position, u32)>,
     /// Field crops that ripened at their full stand, and that ripened short
     /// on the last day of their season (#395).
     #[serde(default)]
@@ -2156,6 +2169,9 @@ impl World {
             staple_fields_sown: 0,
             new_ground_broken_by: [0; 4],
             new_ground_broken_away_from_home: 0,
+            field_crop_fallen_by_distance: [0; 3],
+            field_crop_brought_in_by_distance: [0; 3],
+            field_crop_fallen_where: Vec::new(),
             crops_ripened_full: 0,
             crops_ripened_short: 0,
             fields_hedged: 0,
@@ -4638,7 +4654,11 @@ impl World {
             let a_growing_day =
                 Self::a_day_for_a_node(resource, terrain_type, what_the_ground_yields, kept, &day);
             if ripe_before && !resource.resource_type.is_it_bearing(day.today) {
-                self.field_crop_fallen += u64::from(standing_before.saturating_sub(resource.amount));
+                let fell = standing_before.saturating_sub(resource.amount);
+                self.field_crop_fallen += u64::from(fell);
+                if fell > 0 {
+                    self.field_crop_fallen_where.push((resource.position, fell));
+                }
                 // The first day of it, which the people about see (#395)
                 let yesterday = (day.today + crate::environment::seasons::DAYS_PER_YEAR - 1)
                     % crate::environment::seasons::DAYS_PER_YEAR;

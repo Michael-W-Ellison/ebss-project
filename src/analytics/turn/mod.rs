@@ -263,6 +263,7 @@ impl Simulation {
         // And the camp sees what its fields lost to the turn of the season
         // (#395)
         self.what_the_fields_lost();
+        self.where_the_field_crop_fell();
         // And what each crop came to, against what was put into it (#416)
         self.what_the_crops_came_to();
         self.what_ripened_short();
