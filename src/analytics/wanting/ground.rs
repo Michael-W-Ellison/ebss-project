@@ -494,12 +494,18 @@ impl Simulation {
     /// has goes (#417, #423).
     ///
     /// A keeper holds off while their own crops lately, or their camp's,
-    /// have been lost more often than paid. Where half or more of the grown
-    /// people about their home keep their fields, that is the camp's way:
-    /// while the camp's crops are not paying, somebody who does not keep
-    /// fields goes along with it and breaks none either, unless they are a
-    /// rebel or stubborn, who go their own way. Wherever the camp keeps its
-    /// fields, whatever ground is broken is broken about home.
+    /// have been lost more often than paid. Where anybody grown about their
+    /// home keeps their fields, that is the camp's way: while the camp's
+    /// crops are not paying, somebody who does not keep fields goes along
+    /// with it and breaks none either, unless they are a rebel or stubborn,
+    /// who go their own way. Wherever the camp keeps its fields, whatever
+    /// ground is broken is broken about home.
+    ///
+    /// Not half the camp, as it was first: the new ground of a farming
+    /// world goes in the second spring, a season after keeping fields first
+    /// comes to anybody, when two grown people of a dozen keep them, and
+    /// two thirds of it went in a day's walk out from home, by seed carriers
+    /// breaking ground where they stood (#423).
     pub(in crate::analytics) fn how_this_one_keeps_the_fields(&self, agent: &crate::agents::Agent) -> KeepingFields {
         use crate::core::traits::Trait;
 
@@ -521,7 +527,7 @@ impl Simulation {
             return KeepingFields::AboutHome;
         }
 
-        let the_camps_way = keepers > 0 && keepers * 2 >= camp.len();
+        let the_camps_way = keepers > 0;
         if !the_camps_way {
             return KeepingFields::Not;
         }
@@ -647,9 +653,9 @@ impl Simulation {
         // falling, and a third of the camp who did not keep fields broke
         // most of the new ground there was: a keeper held back forty-six
         // thousand times a draw and the camp broke as many fields as
-        // before. Where half the camp's grown people keep their fields, it
-        // is the camp's way, and the rest go along with it unless they are
-        // the kind who go their own way.
+        // before. Where anybody grown in the camp keeps their fields, it is
+        // the camp's way, and the rest go along with it unless they are the
+        // kind who go their own way.
         let keeping = self.how_this_one_keeps_the_fields(agent);
         match keeping {
             KeepingFields::HoldsOff => {

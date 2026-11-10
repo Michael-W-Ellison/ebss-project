@@ -8,8 +8,9 @@
 //!   have been lost more often than paid, and does while they pay (#417)
 //! - a keeper holds off while their camp's crops are lost, though their
 //!   own pay (#423)
-//! - where half the camp keeps its fields, the rest go along with it while
-//!   the camp's crops are lost, unless they go their own way (#423)
+//! - where anybody of the camp keeps their fields, the rest go along with
+//!   it while the camp's crops are lost, unless they go their own way, and
+//!   break no ground a day out from home (#423)
 //! - a field kept is broken about home, seed or no seed (#423)
 //! - a crop is in its time before its season or early in it, and not late
 //!   in it (#418)
@@ -173,29 +174,29 @@ fn a_keeper_holds_off_while_the_camps_crops_are_lost() {
     assert!(simulation.farming_action(&agent, at).is_some(), "and once the camp's pay, they break ground");
 }
 
-/// Where half or more of the camp's grown people keep their fields and the
-/// camp's crops are being lost, somebody who does not keep fields goes
-/// along with it and breaks none (#423); a rebel or a stubborn one goes
-/// their own way. Where fewer keep them, it is nobody's way but theirs.
+/// Where anybody grown in the camp keeps their fields and the camp's crops
+/// are being lost, somebody who does not keep fields goes along with it and
+/// breaks none (#423); a rebel or a stubborn one goes their own way. Where
+/// nobody keeps them, it is nobody's way.
 #[test]
 fn where_the_camp_keeps_its_fields_the_rest_go_along() {
     let mut simulation = a_farmer_at_home();
     simulation.population.agents[0].inventory.add_item(grain(3));
     let at = simulation.population.agents[0].state.position;
-    let first = one_of_the_camp(&mut simulation, &[false, false, false], true);
+    let first = one_of_the_camp(&mut simulation, &[false, false, false], false);
     let _second = one_of_the_camp(&mut simulation, &[false, true, false], false);
-    let third = one_of_the_camp(&mut simulation, &[false, false], false);
+    let _third = one_of_the_camp(&mut simulation, &[false, false], false);
 
     let agent = simulation.population.agents[0].clone();
     assert!(
         simulation.farming_action(&agent, at).is_some(),
-        "one keeper in four is not the camp's way"
+        "where nobody keeps fields, ground is broken"
     );
 
-    simulation.population.agents[third].found_out_how_to("know:keep_fields");
+    simulation.population.agents[first].found_out_how_to("know:keep_fields");
     let agent = simulation.population.agents[0].clone();
     assert!(!agent.knows_the_way("keep_fields"));
-    assert_eq!(simulation.farming_action(&agent, at), None, "two in four is");
+    assert_eq!(simulation.farming_action(&agent, at), None, "one keeper in four makes it the camp's way");
     assert_eq!(simulation.ground_left_by_the_camps_way.get(), 1);
 
     for own_way in [crate::core::traits::Trait::Rebel, crate::core::traits::Trait::Stubborn] {
@@ -211,6 +212,25 @@ fn where_the_camp_keeps_its_fields_the_rest_go_along() {
         simulation.farming_action(&agent, at).is_some(),
         "and while the camp's crops pay, ground is broken"
     );
+}
+
+/// Somebody who does not keep fields, carrying seed a day out from home,
+/// breaks no ground out there once anybody of their camp keeps fields
+/// (#423).
+#[test]
+fn a_camp_that_keeps_its_fields_breaks_no_ground_a_day_out() {
+    let mut simulation = a_farmer_at_home();
+    simulation.population.agents[0].inventory.add_item(grain(3));
+    let away = (HOME.0 + 15, HOME.1, 0);
+    simulation.population.agents[0].state.position = away;
+    let keeper = one_of_the_camp(&mut simulation, &[true, true, true], false);
+
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.farming_action(&agent, away), Some(Action::TillSoil), "nobody keeps fields yet");
+
+    simulation.population.agents[keeper].found_out_how_to("know:keep_fields");
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.farming_action(&agent, away), None, "the camp keeps its fields about home");
 }
 
 /// Somebody carrying seed breaks ground where they stand, a day out from
