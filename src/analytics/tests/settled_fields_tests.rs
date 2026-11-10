@@ -6,6 +6,11 @@
 //!   mind (#417)
 //! - somebody who keeps their fields breaks no more while their crops lately
 //!   have been lost more often than paid, and does while they pay (#417)
+//! - a keeper holds off while their camp's crops are lost, though their
+//!   own pay (#423)
+//! - where half the camp keeps its fields, the rest go along with it while
+//!   the camp's crops are lost, unless they go their own way (#423)
+//! - a field kept is broken about home, seed or no seed (#423)
 //! - a crop is in its time before its season or early in it, and not late
 //!   in it (#418)
 //! - somebody who keeps a planting calendar sows only what is in its time,
@@ -127,6 +132,115 @@ fn a_keeper_breaks_no_more_ground_while_the_crops_do_not_pay() {
     simulation.population.agents[0].crops_lately = vec![true, true, false, true];
     let agent = simulation.population.agents[0].clone();
     assert!(simulation.farming_action(&agent, at).is_some(), "and one whose crops pay does");
+}
+
+/// Somebody else of the camp, grown and living at home, whose crops lately
+/// went as given, and who keeps their fields or not.
+fn one_of_the_camp(simulation: &mut Simulation, crops: &[bool], keeps_fields: bool) -> usize {
+    simulation.population.spawn_agent(AgentConfig::default());
+    let index = simulation.population.agents.len() - 1;
+    let agent = &mut simulation.population.agents[index];
+    agent.state.now_this_many_years_old(30);
+    agent.state.position = (HOME.0, HOME.1, 0);
+    agent.hearth = Some(HOME);
+    agent.traits = crate::core::traits::TraitSet::new();
+    agent.crops_lately = crops.to_vec();
+    if keeps_fields {
+        agent.found_out_how_to("know:keep_fields");
+    }
+    index
+}
+
+/// A keeper whose own crops pay breaks no new ground while the camp's
+/// crops lately have been lost more often than paid (#423), and does once
+/// the camp's pay.
+#[test]
+fn a_keeper_holds_off_while_the_camps_crops_are_lost() {
+    let mut simulation = a_farmer_at_home();
+    simulation.population.agents[0].inventory.add_item(grain(3));
+    simulation.population.agents[0].crops_lately = vec![true, true, true];
+    simulation.population.agents[0].found_out_how_to("know:keep_fields");
+    let lost = one_of_the_camp(&mut simulation, &[false, false, false, false, false], false);
+    let at = simulation.population.agents[0].state.position;
+
+    let agent = simulation.population.agents[0].clone();
+    assert!(agent.are_my_crops_paying(), "their own crops pay");
+    assert_eq!(simulation.farming_action(&agent, at), None, "but the camp's do not");
+    assert_eq!(simulation.ground_left_unbroken.get(), 1);
+
+    simulation.population.agents[lost].crops_lately = vec![true, true, false];
+    let agent = simulation.population.agents[0].clone();
+    assert!(simulation.farming_action(&agent, at).is_some(), "and once the camp's pay, they break ground");
+}
+
+/// Where half or more of the camp's grown people keep their fields and the
+/// camp's crops are being lost, somebody who does not keep fields goes
+/// along with it and breaks none (#423); a rebel or a stubborn one goes
+/// their own way. Where fewer keep them, it is nobody's way but theirs.
+#[test]
+fn where_the_camp_keeps_its_fields_the_rest_go_along() {
+    let mut simulation = a_farmer_at_home();
+    simulation.population.agents[0].inventory.add_item(grain(3));
+    let at = simulation.population.agents[0].state.position;
+    let first = one_of_the_camp(&mut simulation, &[false, false, false], true);
+    let _second = one_of_the_camp(&mut simulation, &[false, true, false], false);
+    let third = one_of_the_camp(&mut simulation, &[false, false], false);
+
+    let agent = simulation.population.agents[0].clone();
+    assert!(
+        simulation.farming_action(&agent, at).is_some(),
+        "one keeper in four is not the camp's way"
+    );
+
+    simulation.population.agents[third].found_out_how_to("know:keep_fields");
+    let agent = simulation.population.agents[0].clone();
+    assert!(!agent.knows_the_way("keep_fields"));
+    assert_eq!(simulation.farming_action(&agent, at), None, "two in four is");
+    assert_eq!(simulation.ground_left_by_the_camps_way.get(), 1);
+
+    for own_way in [crate::core::traits::Trait::Rebel, crate::core::traits::Trait::Stubborn] {
+        let mut agent = simulation.population.agents[0].clone();
+        agent.traits = crate::core::traits::TraitSet::new();
+        agent.traits.add_trait(own_way);
+        assert!(simulation.farming_action(&agent, at).is_some(), "{:?} goes their own way", own_way);
+    }
+
+    simulation.population.agents[first].crops_lately = vec![true, true, true, true, true, true];
+    let agent = simulation.population.agents[0].clone();
+    assert!(
+        simulation.farming_action(&agent, at).is_some(),
+        "and while the camp's crops pay, ground is broken"
+    );
+}
+
+/// Somebody carrying seed breaks ground where they stand, a day out from
+/// home; where the camp keeps its fields, they break none out there, and do
+/// about home (#423).
+#[test]
+fn a_kept_field_is_broken_about_home() {
+    let mut simulation = a_farmer_at_home();
+    simulation.population.agents[0].inventory.add_item(grain(3));
+    let away = (HOME.0 + 15, HOME.1, 0);
+    simulation.population.agents[0].state.position = away;
+
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(
+        simulation.farming_action(&agent, away),
+        Some(Action::TillSoil),
+        "somebody who does not keep fields breaks ground where they stand"
+    );
+
+    simulation.population.agents[0].found_out_how_to("know:keep_fields");
+    simulation.population.agents[0].crops_lately = vec![true, true, true];
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.farming_action(&agent, away), None, "a keeper breaks none a day out");
+
+    simulation.population.agents[0].state.position = (HOME.0, HOME.1, 0);
+    let agent = simulation.population.agents[0].clone();
+    assert!(
+        simulation.farming_action(&agent, (HOME.0, HOME.1, 0)).is_some(),
+        "and does about home"
+    );
 }
 
 // ---------------------------------------------------------------------------

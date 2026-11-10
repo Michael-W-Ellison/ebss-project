@@ -222,6 +222,9 @@ pub struct Simulation {
     /// How many times a farmer who keeps the fields they have left ground
     /// unbroken because their crops lately had not paid (#417).
     pub(crate) ground_left_unbroken: std::cell::Cell<u64>,
+    /// And by somebody who does not keep fields, going along with a camp
+    /// that does (#423).
+    pub(crate) ground_left_by_the_camps_way: std::cell::Cell<u64>,
     /// And how many times somebody who keeps a planting calendar put a crop
     /// by for its time rather than sow it late (#418).
     pub(crate) sowings_put_off: std::cell::Cell<u64>,
@@ -450,6 +453,7 @@ impl Simulation {
             ways_weighed_by_the_hand: Default::default(),
             stores_reckoned_by_tally: Default::default(),
             ground_left_unbroken: Default::default(),
+            ground_left_by_the_camps_way: Default::default(),
             sowings_put_off: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),
@@ -2096,6 +2100,7 @@ impl Simulation {
             ways_weighed_by_the_hand: Default::default(),
             stores_reckoned_by_tally: Default::default(),
             ground_left_unbroken: Default::default(),
+            ground_left_by_the_camps_way: Default::default(),
             sowings_put_off: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),

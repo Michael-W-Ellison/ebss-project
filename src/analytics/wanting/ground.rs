@@ -490,6 +490,50 @@ impl Simulation {
             .any(|(called, _, _)| agent.how_many_i_have(called) > 0)
     }
 
+    /// Whether this one breaks new ground, as far as keeping the fields one
+    /// has goes (#417, #423).
+    ///
+    /// A keeper holds off while their own crops lately, or their camp's,
+    /// have been lost more often than paid. Where half or more of the grown
+    /// people about their home keep their fields, that is the camp's way:
+    /// while the camp's crops are not paying, somebody who does not keep
+    /// fields goes along with it and breaks none either, unless they are a
+    /// rebel or stubborn, who go their own way. Wherever the camp keeps its
+    /// fields, whatever ground is broken is broken about home.
+    pub(in crate::analytics) fn how_this_one_keeps_the_fields(&self, agent: &crate::agents::Agent) -> KeepingFields {
+        use crate::core::traits::Trait;
+
+        let camp = self.who_lives_near(Self::where_this_one_lives(agent));
+        let keepers = camp
+            .iter()
+            .filter(|&&index| self.population.agents[index].knows_the_way("keep_fields"))
+            .count();
+        let the_camps_crops: Vec<bool> = camp
+            .iter()
+            .flat_map(|&index| self.population.agents[index].crops_lately.iter().copied())
+            .collect();
+        let the_camps_crops_pay = crate::agents::Agent::do_these_crops_pay(&the_camps_crops);
+
+        if agent.knows_the_way("keep_fields") {
+            if !agent.are_my_crops_paying() || !the_camps_crops_pay {
+                return KeepingFields::HoldsOff;
+            }
+            return KeepingFields::AboutHome;
+        }
+
+        let the_camps_way = keepers > 0 && keepers * 2 >= camp.len();
+        if !the_camps_way {
+            return KeepingFields::Not;
+        }
+        if agent.traits.has(Trait::Rebel) || agent.traits.has(Trait::Stubborn) {
+            return KeepingFields::Not;
+        }
+        if !the_camps_crops_pay {
+            return KeepingFields::GoesAlong;
+        }
+        KeepingFields::AboutHome
+    }
+
     /// Breaking ground, and walking to somewhere worth breaking.
     ///
     /// Wild food regrows about four times slower than a grown settlement eats
@@ -597,9 +641,26 @@ impl Simulation {
         // paid: a field is time and seed put in against what comes off it,
         // and another one when the ones there are going to waste is more of
         // both thrown after them. They tend and bring in what they have.
-        if agent.knows_the_way("keep_fields") && !agent.are_my_crops_paying() {
-            self.ground_left_unbroken.set(self.ground_left_unbroken.get() + 1);
-            return None;
+        //
+        // And not while their camp's are (#423). A keeper whose own crops
+        // paid used to go on breaking ground beside a camp whose crops were
+        // falling, and a third of the camp who did not keep fields broke
+        // most of the new ground there was: a keeper held back forty-six
+        // thousand times a draw and the camp broke as many fields as
+        // before. Where half the camp's grown people keep their fields, it
+        // is the camp's way, and the rest go along with it unless they are
+        // the kind who go their own way.
+        let keeping = self.how_this_one_keeps_the_fields(agent);
+        match keeping {
+            KeepingFields::HoldsOff => {
+                self.ground_left_unbroken.set(self.ground_left_unbroken.get() + 1);
+                return None;
+            }
+            KeepingFields::GoesAlong => {
+                self.ground_left_by_the_camps_way.set(self.ground_left_by_the_camps_way.get() + 1);
+                return None;
+            }
+            KeepingFields::AboutHome | KeepingFields::Not => {}
         }
 
         // Seed before ground. A farmer sows what he is carrying, and grain
@@ -629,7 +690,11 @@ impl Simulation {
         // of these were sown out there, and ripened and fell. So somebody
         // with nothing to sow breaks ground only about home, and only within
         // a walk of it.
-        let ground = if Self::carrying_seed_to_sow(agent) {
+        //
+        // And a field kept is a field about home (#423), seed or no seed: two
+        // thirds of the new ground broken in a farming world was broken more
+        // than a walk from home, where nobody tends it and the crop falls.
+        let ground = if Self::carrying_seed_to_sow(agent) && keeping == KeepingFields::Not {
             self.ground_to_break(agent_position)?
         } else {
             let home = Self::where_this_one_lives(agent);
@@ -1177,4 +1242,21 @@ impl Simulation {
 
         best.map(|(where_it_is, _)| where_it_is)
     }
+}
+
+/// What keeping the fields one has comes to for somebody about to break
+/// ground (#417, #423).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::analytics) enum KeepingFields {
+    /// They keep their fields, and theirs or their camp's crops are not
+    /// paying: no new ground.
+    HoldsOff,
+    /// They do not keep fields, but their camp does and its crops are not
+    /// paying, and they go along with it: no new ground.
+    GoesAlong,
+    /// They or their camp keep fields and the crops pay: new ground, about
+    /// home only.
+    AboutHome,
+    /// Neither they nor their camp keep fields, or they go their own way.
+    Not,
 }

@@ -4035,11 +4035,18 @@ impl Agent {
     /// the last few lost than paid. Somebody who has not had three yet
     /// gives a field the benefit of the doubt.
     pub fn are_my_crops_paying(&self) -> bool {
-        if self.crops_lately.len() < 3 {
+        Self::do_these_crops_pay(&self.crops_lately)
+    }
+
+    /// Whether these crops, paid or lost, have been paying: no more lost
+    /// than paid, and fewer than three gets the benefit of the doubt (#417,
+    /// #423).
+    pub fn do_these_crops_pay(crops: &[bool]) -> bool {
+        if crops.len() < 3 {
             return true;
         }
-        let paid = self.crops_lately.iter().filter(|paid| **paid).count();
-        paid * 2 >= self.crops_lately.len()
+        let paid = crops.iter().filter(|paid| **paid).count();
+        paid * 2 >= crops.len()
     }
 
     /// What a crop of this kind has given back for each unit put into it,
