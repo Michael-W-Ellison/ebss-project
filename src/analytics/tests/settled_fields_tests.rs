@@ -9,9 +9,9 @@
 //! - a keeper holds off while their camp's crops are lost, though their
 //!   own pay (#423)
 //! - where anybody of the camp keeps their fields, the rest go along with
-//!   it while the camp's crops are lost, unless they go their own way, and
-//!   break no ground a day out from home (#423)
-//! - a field kept is broken about home, seed or no seed (#423)
+//!   it while the camp's crops are lost, unless they go their own way (#423)
+//! - while the camp's crops pay, seed is still sown where it is carried, a
+//!   day out or not (#423)
 //! - a crop is in its time before its season or early in it, and not late
 //!   in it (#418)
 //! - somebody who keeps a planting calendar sows only what is in its time,
@@ -214,52 +214,33 @@ fn where_the_camp_keeps_its_fields_the_rest_go_along() {
     );
 }
 
-/// Somebody who does not keep fields, carrying seed a day out from home,
-/// breaks no ground out there once anybody of their camp keeps fields
-/// (#423).
+/// Where the camp keeps its fields and its crops pay, somebody carrying
+/// seed a day out from home still breaks ground where they stand, keeper or
+/// not (#423): a field sown out there is picked by whoever passes, and
+/// keeping a camp's fields about home cost a seventh of what came in.
 #[test]
-fn a_camp_that_keeps_its_fields_breaks_no_ground_a_day_out() {
+fn a_camp_that_keeps_its_fields_still_sows_seed_where_it_is_carried() {
     let mut simulation = a_farmer_at_home();
     simulation.population.agents[0].inventory.add_item(grain(3));
     let away = (HOME.0 + 15, HOME.1, 0);
     simulation.population.agents[0].state.position = away;
-    let keeper = one_of_the_camp(&mut simulation, &[true, true, true], false);
-
-    let agent = simulation.population.agents[0].clone();
-    assert_eq!(simulation.farming_action(&agent, away), Some(Action::TillSoil), "nobody keeps fields yet");
-
-    simulation.population.agents[keeper].found_out_how_to("know:keep_fields");
-    let agent = simulation.population.agents[0].clone();
-    assert_eq!(simulation.farming_action(&agent, away), None, "the camp keeps its fields about home");
-}
-
-/// Somebody carrying seed breaks ground where they stand, a day out from
-/// home; where the camp keeps its fields, they break none out there, and do
-/// about home (#423).
-#[test]
-fn a_kept_field_is_broken_about_home() {
-    let mut simulation = a_farmer_at_home();
-    simulation.population.agents[0].inventory.add_item(grain(3));
-    let away = (HOME.0 + 15, HOME.1, 0);
-    simulation.population.agents[0].state.position = away;
+    let keeper = one_of_the_camp(&mut simulation, &[true, true, true], true);
+    assert!(simulation.population.agents[keeper].knows_the_way("keep_fields"));
 
     let agent = simulation.population.agents[0].clone();
     assert_eq!(
         simulation.farming_action(&agent, away),
         Some(Action::TillSoil),
-        "somebody who does not keep fields breaks ground where they stand"
+        "somebody who goes along with the camp sows where they stand"
     );
 
     simulation.population.agents[0].found_out_how_to("know:keep_fields");
     simulation.population.agents[0].crops_lately = vec![true, true, true];
     let agent = simulation.population.agents[0].clone();
-    assert_eq!(simulation.farming_action(&agent, away), None, "a keeper breaks none a day out");
-
-    simulation.population.agents[0].state.position = (HOME.0, HOME.1, 0);
-    let agent = simulation.population.agents[0].clone();
-    assert!(
-        simulation.farming_action(&agent, (HOME.0, HOME.1, 0)).is_some(),
-        "and does about home"
+    assert_eq!(
+        simulation.farming_action(&agent, away),
+        Some(Action::TillSoil),
+        "and so does a keeper whose crops pay"
     );
 }
 

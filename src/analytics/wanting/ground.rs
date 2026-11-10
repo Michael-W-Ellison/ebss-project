@@ -498,14 +498,17 @@ impl Simulation {
     /// home keeps their fields, that is the camp's way: while the camp's
     /// crops are not paying, somebody who does not keep fields goes along
     /// with it and breaks none either, unless they are a rebel or stubborn,
-    /// who go their own way. Wherever the camp keeps its fields, whatever
-    /// ground is broken is broken about home.
+    /// who go their own way.
     ///
     /// Not half the camp, as it was first: the new ground of a farming
     /// world goes in the second spring, a season after keeping fields first
-    /// comes to anybody, when two grown people of a dozen keep them, and
-    /// two thirds of it went in a day's walk out from home, by seed carriers
-    /// breaking ground where they stood (#423).
+    /// comes to anybody, when two grown people of a dozen keep them (#423).
+    ///
+    /// Where the ground goes is left as it was. Keeping a camp's fields
+    /// about home as well, seed or no seed, cost a seventh of the field crop
+    /// brought in over forty worlds and a third of it in the worst: a field
+    /// sown with seed a day out is picked by whoever passes, and half of
+    /// what comes in comes off such fields (#414, #423).
     pub(in crate::analytics) fn how_this_one_keeps_the_fields(&self, agent: &crate::agents::Agent) -> KeepingFields {
         use crate::core::traits::Trait;
 
@@ -524,20 +527,20 @@ impl Simulation {
             if !agent.are_my_crops_paying() || !the_camps_crops_pay {
                 return KeepingFields::HoldsOff;
             }
-            return KeepingFields::AboutHome;
+            return KeepingFields::Breaks;
         }
 
         let the_camps_way = keepers > 0;
         if !the_camps_way {
-            return KeepingFields::Not;
+            return KeepingFields::Breaks;
         }
         if agent.traits.has(Trait::Rebel) || agent.traits.has(Trait::Stubborn) {
-            return KeepingFields::Not;
+            return KeepingFields::Breaks;
         }
         if !the_camps_crops_pay {
             return KeepingFields::GoesAlong;
         }
-        KeepingFields::AboutHome
+        KeepingFields::Breaks
     }
 
     /// Breaking ground, and walking to somewhere worth breaking.
@@ -656,8 +659,7 @@ impl Simulation {
         // before. Where anybody grown in the camp keeps their fields, it is
         // the camp's way, and the rest go along with it unless they are the
         // kind who go their own way.
-        let keeping = self.how_this_one_keeps_the_fields(agent);
-        match keeping {
+        match self.how_this_one_keeps_the_fields(agent) {
             KeepingFields::HoldsOff => {
                 self.ground_left_unbroken.set(self.ground_left_unbroken.get() + 1);
                 return None;
@@ -666,7 +668,7 @@ impl Simulation {
                 self.ground_left_by_the_camps_way.set(self.ground_left_by_the_camps_way.get() + 1);
                 return None;
             }
-            KeepingFields::AboutHome | KeepingFields::Not => {}
+            KeepingFields::Breaks => {}
         }
 
         // Seed before ground. A farmer sows what he is carrying, and grain
@@ -696,11 +698,7 @@ impl Simulation {
         // of these were sown out there, and ripened and fell. So somebody
         // with nothing to sow breaks ground only about home, and only within
         // a walk of it.
-        //
-        // And a field kept is a field about home (#423), seed or no seed: two
-        // thirds of the new ground broken in a farming world was broken more
-        // than a walk from home, where nobody tends it and the crop falls.
-        let ground = if Self::carrying_seed_to_sow(agent) && keeping == KeepingFields::Not {
+        let ground = if Self::carrying_seed_to_sow(agent) {
             self.ground_to_break(agent_position)?
         } else {
             let home = Self::where_this_one_lives(agent);
@@ -1260,9 +1258,7 @@ pub(in crate::analytics) enum KeepingFields {
     /// They do not keep fields, but their camp does and its crops are not
     /// paying, and they go along with it: no new ground.
     GoesAlong,
-    /// They or their camp keep fields and the crops pay: new ground, about
-    /// home only.
-    AboutHome,
-    /// Neither they nor their camp keep fields, or they go their own way.
-    Not,
+    /// The crops pay, or nobody about keeps fields, or they go their own
+    /// way: new ground as before.
+    Breaks,
 }
