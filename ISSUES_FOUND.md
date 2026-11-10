@@ -31067,7 +31067,8 @@ not yet change what comes in, what is lost or what is put by; the probe's
 - **Keeping fields stops the farmer, not the camp.** A keeper holds back
   forty-six thousand times a draw and the camp breaks as many fields as
   before. Most likely the ones whose crops are failing stop and whoever's crops are
-  paying breaks the ground instead; this is not yet traced.
+  paying breaks the ground instead; this is not yet traced. (Traced in
+  #423: the new ground was broken by people who did not keep fields.)
 - **The granary is a pit's size to a camp's store.** A camp puts by about
   21,000; one or two granaries hold 1,200 each, under 4% of it, so what
   vermin take does not move.
@@ -31095,3 +31096,103 @@ best becomes a staple; a staple goes in first.
 **Full suite**: `cargo test --lib`, 3,152 tests: 3,146 passed, 0 failed, 6
 ignored, in 39 minutes (sharing the machine with two measurement draws).
 The dice counts are unchanged.
+
+### 423. Keeping fields holds for the whole camp
+
+**Why.** #422 found that keeping fields stops the farmer and not the camp:
+a keeper held back forty-six thousand times a draw and the camp broke as
+many fields as before. A probe of six farming worlds, counting who broke
+each piece of new ground, found 117 broken by keepers whose crops paid,
+571 by people who did not keep fields, and none by keepers whose crops
+were failing or untried. 438 of the 688 (64%) went in more than a walk
+from home. Fields jump in the second spring, a season after keeping
+fields first comes to anybody (days 261 to 291).
+
+**What changed.** `Simulation::how_this_one_keeps_the_fields`:
+
+- A keeper holds off while their own crops lately, **or their camp's**,
+  have been lost more often than paid (`Agent::do_these_crops_pay` over
+  everybody grown about their home).
+- Where anybody grown about the home keeps their fields, it is the
+  camp's way. While the camp's crops are not paying, somebody who does
+  not keep fields goes along with it and breaks no ground either
+  (`ground_left_by_the_camps_way`), unless they are a rebel or stubborn,
+  who go their own way.
+- While the camp's crops pay, ground is broken as before, and seed is
+  sown where it is carried.
+
+**One keeper, not half the camp.** The first version made it the camp's
+way when half the grown people kept fields. It barely fired: in smooth 1
+the same fields went in and the same people broke them. A trace showed
+two keepers in a camp of twelve after day 298, the camp's crops paying
+22 of 37, and the new ground going in on days 364 to 377, 20 to 40 tiles
+from home. One keeper is enough now. That is a strong social rule, and
+can be raised.
+
+**About home, tried and taken out.** The second version also had a camp
+with a keeper break ground only within a walk of home and only up to
+`FIELDS_WANTED` there, seed or no seed, since two thirds of new ground
+went in a day out. Forty farming worlds, two draws, against stage 4
+alone:
+
+| | stage 4 | camp-wide, about home | t |
+|---|---|---|---|
+| fields at the end | 5,834 | 3,916 | −11.9 (40 / 0 down) |
+| field crop fallen | 766,494 | 541,054 | −9.1 |
+| exhausted fields | 312 | 200 | −5.2 |
+| field crop brought in | 450,328 | 383,570 | −5.9 |
+| put by at the end | 849,621 | 811,290 | −2.4 (29 down) |
+
+Less waste and less ground worn out, but a seventh less brought in. The
+loss was not the camp holding back: the worlds where it held back most
+(smooth 1, 4, 12, 17, 19) lost little or gained. A trace of scattered 9,
+the worst world (fields 213 → 115, brought in 14,184 → 9,410), showed
+seed carriers more than a walk from home turned back 1,295 times against
+86 at the six-field cap and 87 breaking ground about home. The fields
+sown where seed is carried are the ones #414 found bring in half the
+field crop, picked by whoever passes. So where the ground goes is left as
+it was.
+
+**Measured**, forty farming worlds (`FARMING=1`) over two years, two
+draws of the dice each, stage 4 against stage 4 with this; totals per
+draw, paired t over the forty worlds:
+
+| | stage 4 | camp-wide | t | worlds down / up |
+|---|---|---|---|---|
+| fields at the end | 5,834 | 5,520 | −4.5 | 33 / 3 |
+| crops that failed | 3,682 | 3,528 | −3.1 | |
+| crops that paid | 6,067 | 6,004 | −2.0 | |
+| field crop fallen | 766,494 | 740,337 | −2.4 | |
+| field crop brought in | 450,328 | 447,896 | −0.7 | |
+| exhausted fields at the end | 312 | 302 | −1.0 | 10 / 6 |
+| worn below their natural grade | 776 | 755 | −1.4 | 10 / 7 |
+| put by at the end | 849,621 | 845,965 | −0.4 | 15 / 21 |
+| lost to vermin | 329,367 | 327,404 | −0.9 | |
+| alive at the end | 672 | 674 | +0.4 | |
+
+Keepers held off 68,265 times a draw (46,448 before), the rest of a
+keeping camp 14,861. New ground: 4,360 by people who do not keep fields,
+1,130 by keepers whose crops paid, none by keepers whose crops did not;
+3,564 of the 5,490 (65%) more than a walk from home.
+
+So the camp now holds back with its keepers, and the fields that go to
+waste fall by about a twentieth at no cost to what comes in or is put
+by. It is a small effect. Holding back is a decision put off, not
+ground given up: once the camp's crops pay again the ground goes in.
+What falls unharvested is still 1.65 times what is brought in, and where
+it falls (about home or a day out) is not yet counted.
+
+**Deaths**: 11 before, 10 after over the two draws (7 in childbirth, 2
+by a blow, 1 of hunger). The hunger death is the one #422 left for its
+own entry, the same person on the same day (smooth 12, day 670).
+Births 396 and 397.
+
+**Tests** (`settled_fields_tests`, 16): a keeper holds off while the
+camp's crops are lost, though their own pay; where the camp keeps its
+fields the rest go along, rebels and the stubborn excepted, and nobody
+does while the crops pay; a camp that keeps its fields still sows seed
+where it is carried, keeper or not.
+
+**Full suite**: `cargo test --lib`, 3,155 tests: 3,149 passed, 0 failed,
+6 ignored, in 49 minutes (sharing the machine with two measurement
+draws). The dice counts are unchanged.
