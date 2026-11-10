@@ -12,6 +12,7 @@
 //!   it while the camp's crops are lost, unless they go their own way (#423)
 //! - while the camp's crops pay, seed is still sown where it is carried, a
 //!   day out or not (#423)
+//! - but not past two walks from home (#425)
 //! - a crop is in its time before its season or early in it, and not late
 //!   in it (#418)
 //! - somebody who keeps a planting calendar sows only what is in its time,
@@ -242,6 +243,32 @@ fn a_camp_that_keeps_its_fields_still_sows_seed_where_it_is_carried() {
         Some(Action::TillSoil),
         "and so does a keeper whose crops pay"
     );
+}
+
+/// Somebody carrying seed breaks ground where they stand within two walks
+/// of home, and not past it (#425), however the notion comes to them. The
+/// home is moved rather than the farmer, the plain being forty paces across.
+#[test]
+fn seed_is_not_sown_past_two_walks_from_home() {
+    let mut simulation = a_farmer_at_home();
+    simulation.population.agents[0].inventory.add_item(grain(3));
+    let two_walks = Simulation::FIELDS_ARE_BROKEN_WITHIN;
+    let at = simulation.population.agents[0].state.position;
+    let till = crate::environment::verbs::EVERY_VERB
+        .iter()
+        .find(|verb| verb.done_by == Some("tillsoil"))
+        .expect("a verb for breaking ground");
+
+    simulation.population.agents[0].hearth = Some((HOME.0 - two_walks, HOME.1));
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.farming_action(&agent, at), Some(Action::TillSoil), "two walks out");
+    assert_eq!(simulation.an_action_for(till, "tillsoil", &agent), Some(Action::TillSoil));
+
+    simulation.population.agents[0].hearth = Some((HOME.0 - two_walks - 1, HOME.1));
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.farming_action(&agent, at), None, "a pace past two walks");
+    assert_eq!(simulation.ground_left_too_far_out.get(), 1);
+    assert_eq!(simulation.an_action_for(till, "tillsoil", &agent), None, "nor out of curiosity");
 }
 
 // ---------------------------------------------------------------------------

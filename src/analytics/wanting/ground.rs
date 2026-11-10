@@ -698,8 +698,22 @@ impl Simulation {
         // of these were sown out there, and ripened and fell. So somebody
         // with nothing to sow breaks ground only about home, and only within
         // a walk of it.
+        //
+        // But not past two walks from home (#425): that ground is sown and
+        // left, and fourteen and a half units fell there for every one
+        // brought in (#424).
         let ground = if Self::carrying_seed_to_sow(agent) {
-            self.ground_to_break(agent_position)?
+            let reach = Self::FIELDS_ARE_BROKEN_WITHIN + Self::FIELD_WALK_RADIUS as i32;
+            if !Self::within((agent_position.0, agent_position.1), Self::where_this_one_lives(agent), reach) {
+                self.ground_left_too_far_out.set(self.ground_left_too_far_out.get() + 1);
+                return None;
+            }
+            let ground = self.ground_to_break(agent_position)?;
+            if Self::too_far_out_to_break(agent, (ground.x, ground.y)) {
+                self.ground_left_too_far_out.set(self.ground_left_too_far_out.get() + 1);
+                return None;
+            }
+            ground
         } else {
             let home = Self::where_this_one_lives(agent);
             if !Self::within((agent_position.0, agent_position.1), home, Self::FIELD_WALK_RADIUS as i32) {

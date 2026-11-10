@@ -1020,6 +1020,19 @@ impl Simulation {
 
     pub(in crate::analytics) const FIELD_WALK_RADIUS: u32 = 12;
 
+    /// How far from home anybody breaks ground: two walks to a field
+    /// (#425). Past it a field is sown and left. Over forty farming worlds
+    /// half of all the field crop that fell, fell there, fourteen and a half
+    /// units for every one brought in; within two walks, one and a quarter
+    /// at most (#424).
+    pub(in crate::analytics) const FIELDS_ARE_BROKEN_WITHIN: i32 = 2 * Self::FIELD_WALK_RADIUS as i32;
+
+    /// Whether ground at a place is too far from this one's home to break
+    /// (#425).
+    pub(in crate::analytics) fn too_far_out_to_break(agent: &crate::agents::Agent, at: (i32, i32)) -> bool {
+        !Self::within(Self::where_this_one_lives(agent), at, Self::FIELDS_ARE_BROKEN_WITHIN)
+    }
+
     /// How many fields a settlement wants within reach of where it is standing
     pub(in crate::analytics) const FIELDS_WANTED: usize = 6;
 

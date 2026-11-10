@@ -492,6 +492,8 @@ impl Simulation {
             "fish" => Action::Fish,
             "boil" => Action::Boil,
             "lightfire" => Action::LightFire,
+            // Not past two walks from home, however the notion came (#425)
+            "tillsoil" if Self::too_far_out_to_break(agent, (at.0, at.1)) => return None,
             "tillsoil" => Action::TillSoil,
             "tendfield" => Action::TendField,
             "excavate" => Action::Excavate,
