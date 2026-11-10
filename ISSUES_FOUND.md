@@ -31196,3 +31196,49 @@ where it is carried, keeper or not.
 **Full suite**: `cargo test --lib`, 3,155 tests: 3,149 passed, 0 failed,
 6 ignored, in 49 minutes (sharing the machine with two measurement
 draws). The dice counts are unchanged.
+
+### 424. Where the field crop falls
+
+**Why.** #423 left field crop fallen at 1.65 times what is brought in,
+and did not know where it fell.
+
+**What is counted.** Each unit of field crop that falls, and each unit
+brought in, by how far its field was from the nearest home of anybody
+alive at the time: within a walk to a field (`FIELD_WALK_RADIUS`, 12),
+within two walks, and farther (or nobody living anywhere). The world
+queues each day's fallen crop with its place (`field_crop_fallen_where`)
+and `Simulation::where_the_field_crop_fell` sorts it; brought-in is sorted
+where it goes into the pack. No behaviour changes: the forty worlds came
+out identical to #423's first draw in every counter.
+
+**Measured**, forty farming worlds over two years, one draw:
+
+| | within a walk | within two walks | farther | all |
+|---|---|---|---|---|
+| fallen | 166,695 (22%) | 199,821 (26%) | 407,401 (53%) | 773,917 |
+| brought in | 256,983 (58%) | 157,210 (36%) | 28,079 (6%) | 442,272 |
+| fallen per unit brought in | 0.65 | 1.27 | 14.5 | 1.75 |
+
+Smooth and scattered worlds split alike (farther: 53% and 52% of what
+fell, 6% and 6% of what came in). In only four worlds of forty did more
+than half the fallen crop fall within a walk.
+
+- **More than two walks out, almost nothing is brought in.** Half of all
+  the crop that falls falls there, and for every unit brought in off
+  those fields, fourteen and a half fall.
+- **Within two walks the fields earn their keep.** 94% of what is brought
+  in comes off fields within two walks of a home, and the band between
+  one and two walks brings in a third of it. That is the band #423's
+  about-home rule cut, which is why it cost a seventh of the crop.
+- **Not mainly fields left behind by a camp that moved.** In the
+  fourteen worlds where no camp moved, 44% of the fallen crop still fell
+  more than two walks from any home; in the ten that moved 6 to 15
+  times, 58%. Moves add to it; most of it was sown out there.
+
+So the waste is ground broken a long way out, by seed carriers breaking
+ground where they stand (#414). A field sown out there is not picked by
+whoever passes, as #414 supposed of fields beyond a walk: that holds to
+two walks and stops past it.
+
+**Test** (`seed_and_field_tests`): fallen crop is counted by how far it
+was from home, within a walk, within two and farther.
