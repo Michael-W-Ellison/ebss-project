@@ -31242,3 +31242,65 @@ two walks and stops past it.
 
 **Test** (`seed_and_field_tests`): fallen crop is counted by how far it
 was from home, within a walk, within two and farther.
+
+### 425. Nobody breaks ground more than two walks from home
+
+**Why.** #424 found half of all fallen field crop falling more than two
+walks from any home, at fourteen and a half units fallen for every unit
+brought in, and traced it to seed carriers breaking ground where they
+stand.
+
+**What changed.** Nobody breaks new ground more than two walks
+(`FIELDS_ARE_BROKEN_WITHIN`, 24 tiles) from their own home. It holds both
+ways ground gets broken: a seed carrier's plan (`farming_action`) and
+trying the action out of curiosity (`an_action_for`). A seed carrier past
+that line keeps the seed rather than sowing it on the spot; each time is
+counted (`ground_left_too_far_out`). Fields within a walk of home are
+unchanged.
+
+**Measured**, forty farming worlds over two years, two draws each,
+against #423's final version (r432/r432b):
+
+| per draw | #423 | #425 | t |
+|---|---|---|---|
+| field crop fallen | 740,337 | 522,646 (-29%) | -5.82 |
+| field crop brought in | 447,896 | 420,780 (-6%) | -1.53 |
+| food put by at the end | 845,965 | 817,175 (-3%) | -1.10 |
+| fallen per unit brought in | 1.65 | 1.24 | |
+| crops that paid | 6,004 | 5,134 | -6.20 |
+| crops that failed | 3,528 | 2,621 | -7.86 |
+| new ground broken away from home | 3,564 | 1,900 | -10.40 |
+| fields at the end | 5,520 | 4,242 (down in 36 worlds) | -7.82 |
+| farmers at the end | 294 | 446 (up in 35 worlds) | +7.60 |
+| seed carriers who held back | 0 | 16,295 | |
+
+By distance from home, against #424's draw (identical to r432):
+
+| per draw | within a walk | within two walks | farther |
+|---|---|---|---|
+| fallen, #424 | 166,695 | 199,821 | 407,401 |
+| fallen, #425 | 161,560 | 176,442 | 184,644 (-55%, t -3.79) |
+| brought in, #424 | 256,983 | 157,210 | 28,079 |
+| brought in, #425 | 253,776 | 150,548 | 16,456 (-41%, t -3.30) |
+
+- **The far-out waste more than halved, and the fields close in held.**
+  Fallen crop beyond two walks fell by 222,757 per draw; brought in off
+  those fields fell by 11,623, 2.6% of all crop brought in.
+- **Crop brought in and food put by did not fall measurably.** Both are
+  down (6% and 3%), but neither is outside the noise: the two #425 draws
+  alone differ by 15% in crop brought in.
+- **A third of the fallen crop still falls beyond two walks.** No new
+  ground is broken out there, so those fields were within two walks of
+  their breaker's home when broken, and that home has since moved or
+  emptied. Which of the two has not been traced.
+- **Half again as many people were farming at the end.** Not traced.
+- **Deaths**, over both draws: 10 under #423 (childbirth 7, a blow 2,
+  hunger 1), 6 under #425 (childbirth 3, a blow 3). Births 397 and 397.
+  Too few to read either way.
+
+**Tests** (`settled_fields_tests`): seed is not sown past two walks from
+home. With the hearth 24 tiles away both ways of breaking ground give
+TillSoil; at 25 both give nothing and the counter reads one. The year's
+dice count for seed 0 rose 3.5% to 940,724, recorded in
+`repeatable_tests.rs`. Full suite: 3,157 tests, 3,151 passed, 0 failed,
+6 ignored.
