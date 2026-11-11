@@ -713,7 +713,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // spared, and a basket lost is made again.
     // Up 3.5% to 940,724 for #425: nobody breaks ground more than two walks
     // from home, by plan or out of curiosity.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 940_724;
+    // Up 0.4% to 944,097 for #427: a crop standing by the camp holds its
+    // nightly drift, so it sleeps nearer its fields.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 944_097;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -157,6 +157,7 @@ fn zz_discovery_watch() {
         ("ground_left_unbroken", sim.ground_left_unbroken.get()),
         ("ground_left_by_the_camps_way", sim.ground_left_by_the_camps_way.get()),
         ("ground_left_too_far_out", sim.ground_left_too_far_out.get()),
+        ("nights_a_crop_held_the_camp", sim.nights_a_crop_held_the_camp.get()),
         ("sowings_put_off", sim.sowings_put_off.get()),
         ("worn_fields_mucked", sim.world.worn_fields_mucked),
         ("granaries_built", sim.world.granaries_built),

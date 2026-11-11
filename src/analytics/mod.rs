@@ -228,6 +228,9 @@ pub struct Simulation {
     /// Times somebody would have broken ground more than two walks from
     /// home and did not (#425).
     pub(crate) ground_left_too_far_out: std::cell::Cell<u64>,
+    /// Person-nights a crop standing by the camp kept it from drifting
+    /// off its fields (#427).
+    pub(crate) nights_a_crop_held_the_camp: std::cell::Cell<u64>,
     /// And how many times somebody who keeps a planting calendar put a crop
     /// by for its time rather than sow it late (#418).
     pub(crate) sowings_put_off: std::cell::Cell<u64>,
@@ -458,6 +461,7 @@ impl Simulation {
             ground_left_unbroken: Default::default(),
             ground_left_by_the_camps_way: Default::default(),
             ground_left_too_far_out: Default::default(),
+            nights_a_crop_held_the_camp: Default::default(),
             sowings_put_off: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),
@@ -2106,6 +2110,7 @@ impl Simulation {
             ground_left_unbroken: Default::default(),
             ground_left_by_the_camps_way: Default::default(),
             ground_left_too_far_out: Default::default(),
+            nights_a_crop_held_the_camp: Default::default(),
             sowings_put_off: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),

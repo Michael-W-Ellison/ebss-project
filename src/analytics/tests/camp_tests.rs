@@ -257,3 +257,41 @@ fn brush_does_not_anchor_a_camp() {
     simulation.world.add_building(Building::new(BuildingType::Burrow, near));
     assert_eq!(simulation.where_this_one_sleeps(0), Some((near.x, near.y)), "a finished burrow does");
 }
+
+/// A crop standing by the camp holds it: the camp drifts after its people
+/// only as far as keeps the field within a walk (#427). It used to drift off
+/// its fields within a season without ever moving (#426).
+#[test]
+fn a_crop_standing_holds_the_camp_s_drift() {
+    use crate::world::{Position, ResourceNode, ResourceType, TerrainType};
+
+    let everybody_out_at = |simulation: &mut Simulation, at: (i32, i32)| {
+        for agent in simulation.population.agents.iter_mut() {
+            agent.state.position = (at.0, at.1, 0);
+        }
+    };
+    let far_off = (HERE.0 + 20, HERE.1);
+    let a_little_way = (HERE.0 + 8, HERE.1);
+
+    // With no field, the camp drifts to where its people are tonight
+    let mut simulation = a_camp(3);
+    everybody_out_at(&mut simulation, far_off);
+    assert_eq!(simulation.where_this_one_sleeps(0), Some(far_off));
+
+    // With a crop standing three paces from home, it does not drift off it
+    let mut simulation = a_camp(3);
+    let field = Position::new(HERE.0 + 3, HERE.1);
+    if let Some(tile) = simulation.world.grid.get_tile_mut(&field) {
+        tile.terrain.terrain_type = TerrainType::Farmland;
+    }
+    let mut crop = ResourceNode::new(ResourceType::Grain, field, 40);
+    crop.on_a_field = true;
+    simulation.world.put_a_node_down(crop);
+    everybody_out_at(&mut simulation, far_off);
+    assert_eq!(simulation.where_this_one_sleeps(0), Some(HERE), "seventeen paces from the field is too far");
+    assert_eq!(simulation.where_this_one_sleeps_and_whether_a_crop_held_it(0), Some((HERE, true)));
+
+    // But it still drifts about its fields
+    everybody_out_at(&mut simulation, a_little_way);
+    assert_eq!(simulation.where_this_one_sleeps(0), Some(a_little_way), "five paces from the field is near enough");
+}
