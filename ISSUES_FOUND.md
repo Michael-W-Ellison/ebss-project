@@ -31304,3 +31304,55 @@ TillSoil; at 25 both give nothing and the counter reads one. The year's
 dice count for seed 0 rose 3.5% to 940,724, recorded in
 `repeatable_tests.rs`. Full suite: 3,157 tests, 3,151 passed, 0 failed,
 6 ignored.
+
+### 426. Where the far-out fallen crop still comes from
+
+**Why.** After #425 nobody breaks ground more than two walks from home,
+yet a third of the fallen field crop (185,000 a draw) still fell more than
+two walks from every home.
+
+**How it was traced.** A measurement build only
+(`tools/measure/trace_fallen_crop.py`, read by
+`fallen_crop_sources.py`). It records, for every field, who broke it and
+who last sowed it, with where their hearths were at the time. For every
+fall of crop it records who worked this season's crop and where each of
+those people's hearths is now. One draw of the forty farming worlds; it
+came out identical to #425's first draw in every counter.
+
+**Found**, crop fallen beyond two walks, 202,967 in the draw:
+
+| | fallen | share |
+|---|---|---|
+| sown or tended this season; the workers' hearths have since gone more than two walks away | 171,759 | 84.6% |
+| grew back unsown on a field sown in an earlier season; the last sower's hearth has gone away | 30,389 | 15.0% |
+| the workers or last sower are dead | 819 | 0.4% |
+
+- **The rule holds.** Every one of these fields was sown within two
+  walks of the sower's hearth at the time. None was broken by somebody with
+  no hearth, and 86 units came off ground ploughed in.
+- **The hearths drifted; the camps did not move.** For 98% of it the
+  sower's hearth had not moved since the sowing, by the reckoning of
+  `hearth_moved_at`, which records camp moves. 96.5% fell with no camp move
+  anywhere in that world between sowing and falling, and the fifteen
+  worlds with no camp moves at all shed a third of it. The hearth is
+  reset every night to the middle of where the camp's people are
+  (`where_this_one_sleeps`, #314), "so that a camp drifts towards the
+  ground it is foraging", and `settle_the_hearth` does not count this as
+  a move. A field does not hold the camp: only a roof does.
+- **Over one growing season.** Three quarters of it fell six to twelve
+  months after the sowing. By then the sower's hearth was 24 to 47 tiles
+  from the field for 65% of it, and 48 or more for 34%.
+- **A fifth more grows back on fields nobody sowed again.** A field crop
+  grows on after it falls ("is nobody's loss"), so a field the camp
+  drifted away from sheds again the next season.
+
+So the waste is a camp that drifts after its forage and leaves its fields
+behind. Nobody's choice to sow in the wrong place causes it. A standing
+crop ties a camp only when somebody would otherwise move off alone
+(`tied_to_this_ground`), never against the nightly drift.
+
+**Not changed.** This is a trace only. The obvious remedy is for a
+standing crop to hold the camp's drift as a roof does (the camp's
+sleeping place does not drift more than a walk from fields with a crop
+standing on them). It would trade forage ground for crop, so it needs
+measuring before it is taken.
