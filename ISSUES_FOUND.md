@@ -31356,3 +31356,57 @@ standing crop to hold the camp's drift as a roof does (the camp's
 sleeping place does not drift more than a walk from fields with a crop
 standing on them). It would trade forage ground for crop, so it needs
 measuring before it is taken.
+
+### 427. A crop standing by the camp holds its drift
+
+**Why.** #426 found that 85% of the field crop falling more than two walks
+from any home had been sown that season within two walks of the sower's
+hearth. The camp then drifted off its fields without ever moving.
+
+**What changed.** Each night a camp drifts to the middle of where its
+people are (`where_this_one_sleeps`, #314). It now drifts only as far as
+keeps the nearest field with a crop standing on it within a walk
+(`a_crop_holds_the_camp`). Otherwise it sleeps where it slept. A camp with no
+crop standing within a walk drifts as before, and a camp move still goes
+where it goes. Each person-night held is counted
+(`nights_a_crop_held_the_camp`).
+
+**Measured**, forty farming worlds over two years, two draws each,
+against #425 (r434/r434b):
+
+| per draw | #425 | #427 | t |
+|---|---|---|---|
+| field crop fallen | 522,646 | 412,706 (-21%) | -6.43 |
+| fallen more than two walks out | 184,644 | 95,983 (-48%) | -6.21 |
+| fallen within one to two walks | 176,442 | 157,562 (-11%) | -2.49 |
+| fallen within a walk | 161,560 | 159,161 | -0.31 |
+| field crop brought in | 420,780 | 427,220 (+1.5%) | +0.36 |
+| fallen per unit brought in | 1.24 | 0.97 | |
+| crops that failed | 2,621 | 1,974 (-25%) | -7.57 |
+| vermin | 309,184 | 276,272 (-11%) | -2.83 |
+| food put by at the end | 817,175 | 770,875 (-5.7%) | -1.64 |
+| fields at the end | 4,242 | 3,829 (down in 30 worlds) | -3.91 |
+| alive at the end | 676 | 668 (down in 21, up in 10) | -1.42 |
+| person-nights a crop held the camp | 0 | 81,310 | |
+
+Camp moves were 185 over the two draws and are 194.
+
+- **The far-out waste halved again.** Less now falls than is brought
+  in, for the first time since fields were kept (#417).
+- **Crop brought in held.** It was neither lost nor gained beyond the
+  noise.
+- **Food put by is down 5.7%, short of the noise.** Not traced. The
+  worry at the outset was a camp held on stripped forage.
+- **Deaths rose from 6 to 17 over the two draws**: a blow 3 to 9,
+  childbirth 3 to 8, no hunger or thirst. They fell in fifteen
+  different worlds, and both draws rose (8 and 9 against 3 and 3). The
+  last four draws of earlier builds had 3 to 6 deaths each. Earlier farming
+  builds ran 1 to 16 a draw, with a blow up to 7, so the rise may be chance.
+  It is not traced.
+
+**Tests** (`camp_tests`): a crop standing holds the camp's drift. With no
+field the camp sleeps where its people are, twenty paces out. With a crop
+three paces from home it stays home, and with its people eight paces out
+it drifts to them. The year's dice count for seed 0 rose 0.4% to 944,097,
+recorded in `repeatable_tests.rs`. Full suite: 3,158 tests, 3,152
+passed, 0 failed, 6 ignored.
