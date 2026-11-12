@@ -128,6 +128,60 @@ fn the_same_man_alone_runs() {
     );
 }
 
+/// Wolves at a child, and the parent already struck down to forty with the
+/// wound still open: one more go could be the last, and the parent breaks
+/// off (#429). People stood over their own against a lion and went again
+/// and again until they fell.
+fn wolves_at_the_child_and_the_parent_at_forty(opened: f32) -> Simulation {
+    let mut world = an_empty_country();
+    for at in [(32, 30), (32, 31), (31, 31), (32, 29)] {
+        world
+            .spawn_animal("wolf".to_string(), at)
+            .expect("a wolf should spawn");
+    }
+    let mut simulation = a_parent_and_a_child(world);
+    simulation.population.agents[0].state.health = 40.0;
+    simulation.population.agents[0].state.an_open_wound = opened;
+    simulation
+}
+
+fn what_the_parent_does(simulation: &mut Simulation) -> (&'static str, Option<Action>) {
+    simulation.feel_about_what_stands_in_the_way();
+    let here = simulation.population.agents[0].state.position;
+    simulation.what_this_threat_comes_to(&simulation.population.agents[0], here)
+}
+
+#[test]
+fn a_parent_beaten_down_breaks_off() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    let (branch, answer) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down, breaks off");
+    assert!(matches!(answer, Some(Action::FleeFrom { .. })), "{answer:?}");
+}
+
+/// The same parent, a protector, stands longer: forty is not yet down far
+/// enough for them.
+#[test]
+fn a_protector_at_forty_still_stands_over_the_child() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    let mut traits = crate::core::TraitSet::new();
+    traits.add_trait(crate::core::Trait::Protector);
+    simulation.population.agents[0].traits = traits;
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "stands over one of its own");
+}
+
+/// Forty from a fever or a lean month is not being beaten down. With no
+/// wound open the parent stands over the child as before.
+#[test]
+fn a_parent_low_without_a_wound_still_stands_over_the_child() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.0);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "stands over one of its own");
+}
+
 /// Somebody who could fight it themselves is not being protected.
 #[test]
 fn nobody_lays_down_their_life_for_a_grown_man() {

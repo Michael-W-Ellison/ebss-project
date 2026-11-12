@@ -405,7 +405,29 @@ impl Simulation {
         // standing over their child, whatever the odds are - and the odds are
         // exactly what this sets aside. It is the one place in the model
         // where an agent knowingly takes the worse of two options.
+        //
+        // Until it has beaten them down. Somebody struck down to where they
+        // would no longer stand, and with somewhere to go, breaks off rather
+        // than go at it again: people stood over their own against a lion
+        // or polar bear and went again and again the same day until they
+        // fell, and six of the thirteen who did died of it (#428, #429).
+        let breaks_off = || {
+            Self::beaten_down(agent)
+                && agent.could_i_run_at_all(Self::NOTHING_LEFT)
+                && self.is_there_anywhere_to_run(
+                    &agent.exploration_knowledge,
+                    agent_position,
+                    where_it_is,
+                )
+        };
+        let run = || Action::FleeFrom {
+            away_from: (where_it_is.0, where_it_is.1, agent_position.2),
+        };
+
         if could_fight && a_hunter_of_people && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
+            if breaks_off() {
+                return ("beaten down, breaks off", Some(run()));
+            }
             return (
                 "stands over one of its own",
                 Some(if paces <= Self::HUNT_REACH {
@@ -447,10 +469,6 @@ impl Simulation {
                     target: (where_it_is.0, where_it_is.1, agent_position.2),
                 }
             }
-        };
-
-        let run = || Action::FleeFrom {
-            away_from: (where_it_is.0, where_it_is.1, agent_position.2),
         };
 
         // Angry is not a reason to stand in front of something that outweighs
@@ -495,7 +513,11 @@ impl Simulation {
         }
 
         match (standing, could_fight, could_run) {
-            // What it wanted to do, and it can
+            // What it wanted to do, and it can - unless it has been beaten
+            // down to where it would not stand, and can get away
+            (true, true, true) if Self::beaten_down(agent) => {
+                ("beaten down, breaks off", Some(run()))
+            }
             (true, true, _) => ("stands its ground", Some(fight())),
             (false, _, true) => ("runs", Some(run())),
 
@@ -509,6 +531,46 @@ impl Simulation {
             (_, false, false) => ("freezes", Some(Action::Freeze)),
         }
     }
+
+    /// Whether this one has been beaten down: struck, with the wound still
+    /// open, and down to the shape it would no longer stand in.
+    ///
+    /// Read off the body rather than the fight. A blow is the one thing that
+    /// opens a wound (`take_damage`), so a person low from hunger or a fever
+    /// with no wound on them is not beaten down, and stands over their own
+    /// as before; one a lion has opened up twice is. How far down that is
+    /// depends on who they are (`the_shape_this_one_breaks_off_at`).
+    pub(in crate::analytics) fn beaten_down(agent: &crate::agents::Agent) -> bool {
+        agent.state.an_open_wound > 0.0
+            && Self::what_shape_i_am_in(agent) <= Self::the_shape_this_one_breaks_off_at(agent)
+    }
+
+    /// How far down somebody is struck before they break off a fight: half
+    /// a whole body for most people. A protector, the brave and the stubborn
+    /// stand longer; the anxious and a coward go sooner. Every trait that
+    /// bears on it counts, kept within reason so that nobody stands to the
+    /// last blow and nobody breaks off whole.
+    pub(in crate::analytics) fn the_shape_this_one_breaks_off_at(agent: &crate::agents::Agent) -> f32 {
+        use crate::core::Trait;
+        let leaning = agent
+            .traits
+            .get_traits()
+            .iter()
+            .map(|what| match what {
+                Trait::Protector => 0.6,
+                Trait::Brave => 0.7,
+                Trait::Stubborn => 0.8,
+                Trait::Anxious => 1.2,
+                Trait::Coward => 1.4,
+                _ => 1.0,
+            })
+            .product::<f32>();
+        (Self::BEATEN_DOWN * leaning).clamp(0.15, 0.85)
+    }
+
+    /// Half a whole body: where most people break off a fight they are
+    /// losing.
+    pub(in crate::analytics) const BEATEN_DOWN: f32 = 0.5;
 
     /// How much of a whole body this one has left to fight with: health on
     /// the scale it starts at, never less than a tenth.
