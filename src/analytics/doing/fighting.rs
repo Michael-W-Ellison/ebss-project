@@ -489,18 +489,37 @@ impl Simulation {
             }
             result
         } else {
-            // It got the better of the exchange
+            // It got the better of the exchange.
+            //
+            // And what gets through is what gets through the shaft in the
+            // way of it, as when a beast tries its luck (`predators_try_their_luck`) or a
+            // hunt turns (#327). The whole blow landed here instead, while
+            // the decision to stand had reckoned it through the spear
+            // (`could_i_fight_at_all` asks `what_a_blow_costs_me`): people
+            // with a spear stood over their own against a lion at sixteen
+            // health, sure they could take a blow of under sixteen, and took
+            // twenty-eight (#428, #430).
             let damage = species.attack_damage.max(1.0);
             let agent = &mut self.population.agents[agent_index];
-            let came_off_well = damage < agent.state.health * Self::A_SCRATCH;
-            agent.take_damage(damage);
+            let landed = agent.what_a_blow_costs_me(damage);
+            // And putting a shaft in the way of something is hard on the
+            // shaft
+            if damage - landed > 0.0 {
+                if let Some(broke) =
+                    agent.wear_what_i_worked_with(crate::agents::SkillType::MeleeCombat)
+                {
+                    debug!("Agent {} broke a {broke} keeping it off", agent.id);
+                }
+            }
+            let came_off_well = landed < agent.state.health * Self::A_SCRATCH;
+            agent.take_damage(landed);
             agent
                 .lessons
                 .record(crate::agents::practices::Undertaking::Fighting, came_off_well);
 
             ActionResult::failure(format!(
-                "{} got the better of it ({:.0} damage)",
-                species.name, damage
+                "{} got the better of it ({:.0} of {:.0} damage got through)",
+                species.name, landed, damage
             ))
             .with_energy_cost(12.0)
         }
