@@ -31410,3 +31410,70 @@ three paces from home it stays home, and with its people eight paces out
 it drifts to them. The year's dice count for seed 0 rose 0.4% to 944,097,
 recorded in `repeatable_tests.rs`. Full suite: 3,158 tests, 3,152
 passed, 0 failed, 6 ignored.
+
+### 428. Trace the extra deaths under #427
+
+**Why.** Under #427, deaths over two draws rose from 6 to 17: a blow
+3 to 9, childbirth 3 to 8.
+
+**Childbirth is chance.** A birth goes hard one time in eight
+(`A_BIRTH_GOES_HARD`), and a hard birth takes the mother one time in ten,
+or half that with a midwife. Nothing the camp eats or where it sleeps
+enters into it. Over two draws of the same forty worlds:
+
+| | #423 | #425 | #427 |
+|---|---|---|---|
+| hard births | 51 | 44 | 50 |
+| with a midwife | 4 | 0 | 5 |
+| mothers lost | 7 | 3 | 8 |
+
+About five mothers lost is what the dice give for fifty hard births.
+#425's three was the low one.
+
+**A blow is a person who fights a lion or polar bear and keeps at it.**
+The first draw was rerun with every injury and every fight with a beast
+logged. The rerun matched the original draw in all forty worlds, under
+both #425 and #427.
+
+- **Every blow death in this draw is one fight.** That is 2 under #425
+  and 5 under #427. The person goes at a lion or polar bear with full
+  health. Each blow that lands takes 28 (lion) or 35 (polar bear). They
+  go again and again the same day until they fall, or fall the day after
+  of the wound.
+- **They fought to cover one of their own.** Six of the seven came from
+  the threat tree's "stands over one of its own" branch
+  (`what_this_threat_comes_to`). That branch fights a hunter of people
+  when someone of theirs is in its way. The seventh was cornered by a
+  polar bear.
+- **Blows between people did not kill.** They are about 0.2 health each.
+
+**#427 did not bring more of these fights.** Fights with a beast in the
+first draw of all forty worlds:
+
+| | #425 | #427 |
+|---|---|---|
+| exchanges | 172 | 130 |
+| person-days fighting | 57 | 37 |
+| covering one of their own (exchanges) | 29 | 31 |
+| with a lion | 15 | 28 |
+| with a polar bear | 21 | 7 |
+| more than 24 tiles from home | 19 | 21 |
+| worlds that fought more / less | | 12 / 16 |
+
+| person-days covering one of their own | #425 | #427 |
+|---|---|---|
+| against a lion | 4, none died | 5, three died |
+| against a polar bear | 3, two died | 1, one died |
+
+The fights are as rare as before, and as near home. What changed is how
+many of them ended in a death: two of seven before and four of six now.
+Taken together, six of thirteen people who stood over one of their own
+against a lion or polar bear died of it. The rise from 3 to 9 is that
+lethal chance falling on a handful of fights.
+
+**Not changed.** This is a trace only. Nothing in the fight makes a
+person stop once they have been struck down to a third of their health.
+They re-decide each time, and covering one of their own outweighs it. A
+person who has lost every exchange of the day breaking off, or the one
+they cover getting away first, would be the place to look. It would need
+measuring against how many of those covered then die instead.
