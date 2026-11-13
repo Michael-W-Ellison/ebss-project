@@ -28,10 +28,11 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #427, a crop standing holds the camp's
-drift): `cargo test --lib` in one piece, 3,158 tests: 3,152 passed, 0
-failed, 6 ignored, in 67 minutes (sharing the machine with two measurement
-draws). Before it, #425: 3,157 tests, 3,151 passed, 0 failed.
+**Last full run** (ISSUES_FOUND #429 and #430, someone beaten down breaks
+off a fight and a spear turns the blow in one): `cargo test --lib` in one
+piece, 3,162 tests: 3,156 passed, 0 failed, 6 ignored, in 20 minutes. The
+four new tests are the whole difference. Before it, #427: 3,158 tests,
+3,152 passed, 0 failed.
 - The dice counts are 6,765 (seed 4242, 120 turns) and 944,097 (seed 0, a
   year).
 - #363 turned nineteen tests red that leaned on what it fixed. Most made a man
