@@ -518,6 +518,18 @@ impl Simulation {
             (true, true, true) if Self::beaten_down(agent) => {
                 ("beaten down, breaks off", Some(run()))
             }
+
+            // And beaten down with nowhere to go, it stops trading blows all
+            // the same. It cannot get away, so it covers up where it stands:
+            // the thing may still come at it, but a lost exchange no longer
+            // adds a blow of its own. Cornered fights went on to the last
+            // blow as standing over one's own did before #429 - a woolly
+            // mammoth took a person from 78 to nothing in one afternoon, two
+            // of the five blows in exchanges they went on trading at 33
+            // (#430, #431). Afraid or angry, it is the same corner.
+            (_, true, false) if Self::beaten_down(agent) => {
+                ("beaten down and cornered, covers up", Some(Action::Freeze))
+            }
             (true, true, _) => ("stands its ground", Some(fight())),
             (false, _, true) => ("runs", Some(run())),
 

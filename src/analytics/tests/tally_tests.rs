@@ -135,6 +135,8 @@ fn the_branches_of_the_tree_account_for_every_time_it_was_asked() {
         "stands its ground",
         // Either of those two, struck down to where it would not stand (#429)
         "beaten down, breaks off",
+        // And the same with nowhere to go (#431)
+        "beaten down and cornered, covers up",
         // Never once reached on the old scattered test map, so the list did
         // not have it; on smooth ground it is (#318).
         "backs away from something bigger",

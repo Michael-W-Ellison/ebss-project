@@ -383,6 +383,72 @@ fn a_cornered_man_turns_and_fights() {
     );
 }
 
+/// The same corner, struck down to where he would not stand: he stops
+/// trading blows and covers up where he is (#431).
+#[test]
+fn a_cornered_man_beaten_down_covers_up() {
+    let mut world = an_empty_country();
+    world
+        .spawn_animal("wolf".to_string(), (31, 30))
+        .expect("a wolf should spawn");
+    let mut simulation = one_person(world);
+    afraid_of(&mut simulation, "wolf");
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.population.agents[0].state.energy = 1.0;
+    simulation.population.agents[0].state.health = 40.0;
+    simulation.population.agents[0].state.an_open_wound = 0.6;
+
+    let here = simulation.population.agents[0].state.position;
+    let (branch, answer) =
+        simulation.what_this_threat_comes_to(&simulation.population.agents[0], here);
+
+    assert_eq!(branch, "beaten down and cornered, covers up");
+    assert!(matches!(answer, Some(Action::Freeze)), "{answer:?}");
+}
+
+/// Angry rather than afraid, it is the same corner.
+#[test]
+fn an_angry_man_beaten_down_with_nowhere_to_go_covers_up() {
+    let mut world = an_empty_country();
+    world
+        .spawn_animal("wolf".to_string(), (31, 30))
+        .expect("a wolf should spawn");
+    let mut simulation = one_person(world);
+    angry_at(&mut simulation, "wolf");
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.population.agents[0].state.energy = 1.0;
+    simulation.population.agents[0].state.health = 40.0;
+    simulation.population.agents[0].state.an_open_wound = 0.6;
+
+    let here = simulation.population.agents[0].state.position;
+    let (branch, _) =
+        simulation.what_this_threat_comes_to(&simulation.population.agents[0], here);
+
+    assert_eq!(branch, "beaten down and cornered, covers up");
+}
+
+/// Low with no wound open is not beaten down: cornered, he still fights.
+#[test]
+fn a_cornered_man_low_without_a_wound_still_fights() {
+    let mut world = an_empty_country();
+    world
+        .spawn_animal("wolf".to_string(), (31, 30))
+        .expect("a wolf should spawn");
+    let mut simulation = one_person(world);
+    afraid_of(&mut simulation, "wolf");
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.population.agents[0].state.energy = 1.0;
+    simulation.population.agents[0].state.health = 40.0;
+    simulation.population.agents[0].state.an_open_wound = 0.0;
+
+    let here = simulation.population.agents[0].state.position;
+    let (branch, answer) =
+        simulation.what_this_threat_comes_to(&simulation.population.agents[0], here);
+
+    assert_eq!(branch, "cornered, so fights");
+    assert!(matches!(answer, Some(Action::Fight { .. })), "{answer:?}");
+}
+
 /// Could overcome it but cannot lift an arm: go.
 #[test]
 fn a_man_who_cannot_lift_an_arm_goes() {
