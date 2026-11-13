@@ -532,7 +532,14 @@ impl Simulation {
         // raise a hand. Nothing happens. The agent stays exactly where
         // it is, which is the whole of what freezing costs - whatever
         // was coming is still coming, and is now a turn closer.
-        let agent = &self.population.agents[agent_index];
+        //
+        // Beaten down, it is covering up rather than frozen with fright, and
+        // that is something a beast that only wants it gone can see (#432).
+        let now = self.current_turn;
+        let agent = &mut self.population.agents[agent_index];
+        if Self::beaten_down(agent) {
+            agent.state.covered_up_at = Some(now);
+        }
         debug!("Agent {} froze", agent.id);
 
         ActionResult::success()

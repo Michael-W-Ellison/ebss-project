@@ -1197,6 +1197,12 @@ pub struct AgentState {
     #[serde(default)]
     pub an_open_wound: f32,
 
+    /// The tick this one last covered up: beaten down, they stopped
+    /// fighting and stayed where they were (#431). A beast that drives
+    /// people off its ground lets up on somebody who has (#432).
+    #[serde(default)]
+    pub covered_up_at: Option<u32>,
+
     /// How much health an open wound is losing a half hour (#351).
     ///
     /// Opened with the wound by a blow and slowing as the blood clots
@@ -1287,6 +1293,7 @@ impl AgentState {
             what_has_taken_health: Vec::new(),
             salt_in_me: 0.0,
             an_open_wound: 0.0,
+            covered_up_at: None,
             bleeding: 0.0,
             wound_dressed_until: 0,
             wound_cleaned: false,

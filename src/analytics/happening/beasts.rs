@@ -459,6 +459,22 @@ impl Simulation {
                             .max((position.1 - animal.position.1).abs())
                             <= Self::A_BEASTS_GROUND
                     })
+                    // **Not somebody who has covered up.** It charges to drive
+                    // people off, and one who has stopped fighting and gone
+                    // down is no longer contesting the ground. A person too
+                    // tired to run who covered up in a mammoth's ground was
+                    // charged twice more where they lay and died of it, and a
+                    // second the same afternoon (#431). A beast that is
+                    // hungry still hunts them, below.
+                    .filter(|(index, _)| {
+                        !self.population.agents[*index]
+                            .state
+                            .covered_up_at
+                            .is_some_and(|at| {
+                                current_turn.saturating_sub(at)
+                                    <= crate::environment::seasons::MINUTES_PER_TURN
+                            })
+                    })
                     .min_by_key(|(_, position)| {
                         (position.0 - animal.position.0).abs()
                             + (position.1 - animal.position.1).abs()

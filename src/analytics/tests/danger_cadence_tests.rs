@@ -531,3 +531,48 @@ fn somebody_dying_of_thirst_walks_into_a_beasts_ground() {
     let apart = (here.0 - boar.0).abs().max((here.1 - boar.1).abs());
     assert!(apart <= Simulation::A_BEASTS_GROUND, "a man dying of thirst stopped {apart} paces off");
 }
+
+/// Somebody who has covered up is let be by a beast that only wants them off
+/// its ground (#432). It charged a person too tired to run who had covered
+/// up in a mammoth's ground twice more where they lay (#431).
+#[test]
+fn a_beast_lets_up_on_somebody_who_has_covered_up() {
+    for kind in ["bear", "boar", "mammoth"] {
+        let mut simulation = one_person_beside(kind, 30);
+        let now = simulation.current_turn;
+        simulation.population.agents[0].state.covered_up_at = Some(now);
+        assert_eq!(struck_in(&mut simulation, 40), 0, "a {kind} charged somebody who had covered up");
+    }
+}
+
+/// For as long as they stay down. Half an hour on, a cover-up nobody has
+/// renewed is not one, and the beast drives them off as before.
+#[test]
+fn a_cover_up_long_over_is_charged_again() {
+    for kind in ["bear", "boar", "mammoth"] {
+        let mut simulation = one_person_beside(kind, 30);
+        simulation.current_turn = 10 * crate::environment::seasons::MINUTES_PER_TURN;
+        simulation.population.agents[0].state.covered_up_at = Some(0);
+        assert!(struck_in(&mut simulation, 40) > 0, "a {kind} let up on a cover-up long over");
+    }
+}
+
+/// Freezing beaten down is covering up; freezing whole is fright, and goes
+/// on the record as nothing (#432).
+#[test]
+fn freezing_beaten_down_is_what_covering_up_is() {
+    let mut simulation = one_person_beside("mammoth", 30);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.population.agents[0].state.health = 30.0;
+    simulation.population.agents[0].state.an_open_wound = 0.6;
+    simulation.execute_action(&crate::environment::Action::Freeze, 0);
+    assert_eq!(
+        simulation.population.agents[0].state.covered_up_at,
+        Some(simulation.current_turn)
+    );
+
+    let mut simulation = one_person_beside("mammoth", 30);
+    simulation.population.agents[0].state.an_open_wound = 0.0;
+    simulation.execute_action(&crate::environment::Action::Freeze, 0);
+    assert_eq!(simulation.population.agents[0].state.covered_up_at, None);
+}
