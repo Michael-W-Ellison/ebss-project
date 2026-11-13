@@ -31477,3 +31477,101 @@ They re-decide each time, and covering one of their own outweighs it. A
 person who has lost every exchange of the day breaking off, or the one
 they cover getting away first, would be the place to look. It would need
 measuring against how many of those covered then die instead.
+
+### 429. Someone beaten down breaks off the fight
+
+### 430. A spear turns the blow in a fight too
+
+**Why.** #428 found that every blow death came from a person who kept
+fighting a lion or polar bear until they fell. Nothing let them stop, and
+the threat tree reckoned the blow through their spear while the fight
+landed it whole (`fighting_a_beast` took the full `attack_damage`).
+
+**Changed.**
+- #429: a person with an open wound whose shape has fallen to
+  `the_shape_this_one_breaks_off_at` runs, if they can run and there is
+  somewhere to run to (`beaten_down`, branch "beaten down, breaks off" in
+  `what_this_threat_comes_to`). This applies both when they are standing
+  over one of their own and when they are standing their ground. The line
+  is half their shape, moved by traits: Protector 0.6, Brave 0.7, Stubborn
+  0.8, Anxious 1.2, Coward 1.4. It is clamped to 0.15–0.85. With no wound
+  they still stand.
+- #430: a blow lost in `fighting_a_beast` lands through
+  `what_a_blow_costs_me`, as it already does when a beast strikes on its
+  own (`predators_try_their_luck`) or a hunt turns (#327). A spear that
+  takes some of it wears.
+- Tests: `a_parent_beaten_down_breaks_off`,
+  `a_protector_at_forty_still_stands_over_the_child`,
+  `a_parent_low_without_a_wound_still_stands_over_the_child`,
+  `a_spear_turns_the_blow_in_a_fight_too`. The dice counts in
+  repeatable_tests are unchanged.
+
+**Measured together** against #427, two draws of the same forty worlds.
+The first draw was traced: every injury, every fight with a beast and
+every break-off was logged.
+
+| | #427 | #429 + #430 |
+|---|---|---|
+| deaths over two draws | 17 | 11 |
+| from a blow | 9 | 3 |
+| in childbirth | 8 | 8 |
+| alive at day 720, per draw | 668 | 672 (t +1.86) |
+| field crop brought in, per draw | 427,220 | 423,457 (t −1.13) |
+| wasting person-days, per draw | 92 | 98 (t +1.57) |
+
+The same eight mothers died on the same days. Nobody starved.
+
+**The spear.** 75 of the 80 exchanges a person lost to a beast were
+turned in part. About three-fifths of the blow got through.
+
+**Fights in the first draw** (fights by branch, as in #428):
+
+| | #427 | #429 + #430 |
+|---|---|---|
+| exchanges | 130 | 109 |
+| person-days fighting | 37 | 33 |
+| covering one of their own (exchanges) | 31 | 20 |
+| with a lion | 28 | 16 |
+| with a polar bear | 7 | 8 |
+| with a woolly mammoth | 0 | 2 |
+
+**Blow deaths in the first draw, 5 to 2.**
+- **Three people lived through the same fight.** It was the same person
+  on the same day: sc_s6 and sm_s18 against a lion, sc_s16 against a
+  polar bear, each covering one of their own. Each blow took 15–20
+  instead of 28 or 35. They broke off at 68, 37 and 41 health. The trace
+  cannot split the two changes, because in each case the spear eased
+  every blow and then the person broke off.
+- **One fight never came.** In sc_s10, the day-716 lion fight did not
+  happen: the world went another way from day 640, when a boar fight took
+  one exchange instead of two.
+- **One death was the same.** In sm_s23 a person cornered by a polar bear
+  died as before. Cornered means there is nowhere to run. The first blow
+  was turned to 31 of 35; the second landed whole.
+- **One death was new.** In sm_s7 a person was cornered by a woolly
+  mammoth on day 312, 33 tiles from home. The world had gone another way
+  from day 254. The mammoth landed five blows of 22–23 (of 40): two in
+  the fight and three on its own.
+
+**Blow deaths in the second draw, 4 to 1.** Only the new run was traced.
+- **One person broke off and lived.** In sm_s9 the person who died under
+  #427 covered one of their own against a polar bear on the same day.
+  Each blow took 25 of 35, and they broke off at 50 health.
+- **One person did not break off and died as before.** In sm_s16 the
+  person held a spear (23 of 28 per blow) against a lion, fought on at 31
+  health, and fell to the fourth blow. The trace does not log traits, so
+  whether one held them there is not measured.
+- **Two fights did not come.** The #427 deaths in sm_s7 (day 435) and
+  sm_s17 (day 588) had no fight on those days in this run.
+
+**Who broke off.** Eight people over the two draws:
+- five were covering one of their own against a lion or polar bear;
+- two were standing their ground against a boar;
+- one broke off from a threat on a day they did not fight.
+
+None of the eight died. Nobody else died in their worlds in that draw, so
+breaking off did not pass the death on to the one they covered.
+
+**Not changed.** Being cornered still has no way out, and two of the
+three blow deaths that remain are cornered fights. The other is a person
+who did not break off, for a reason the trace cannot show.
