@@ -31575,3 +31575,68 @@ breaking off did not pass the death on to the one they covered.
 **Not changed.** Being cornered still has no way out, and two of the
 three blow deaths that remain are cornered fights. The other is a person
 who did not break off, for a reason the trace cannot show.
+
+### 431. A cornered person beaten down covers up
+
+**Why.** After #429 and #430, two of the three blow deaths left were
+cornered fights. #429's break-off needs somewhere to run, so a person
+with nowhere to go fought on to the last blow.
+
+**Changed.** A person who is beaten down (`beaten_down`, as in #429) and
+cannot run now stops trading blows. They stay where they are
+(`Action::Freeze`), whether they came at the thing afraid or angry. This
+is branch "beaten down and cornered, covers up" in
+`what_this_threat_comes_to`. The thing can still strike them on its own,
+but a lost exchange no longer adds a blow of its own. Standing over one
+of their own is unchanged.
+
+Tests: `a_cornered_man_beaten_down_covers_up`,
+`an_angry_man_beaten_down_with_nowhere_to_go_covers_up` and
+`a_cornered_man_low_without_a_wound_still_fights`. The dice counts in
+repeatable_tests are unchanged.
+
+**Measured** against #429 + #430, on two draws of the same forty worlds.
+Both runs were traced. Seventy-nine of the eighty world-runs came out
+line for line the same. The one that differs is sm_s7, first draw.
+
+| | #429 + #430 | #431 |
+|---|---|---|
+| deaths over two draws | 11 | 12 |
+| from a blow | 3 | 4 |
+| in childbirth | 8 | 8 |
+
+**What happened in sm_s7.** Day 312 is the woolly mammoth afternoon
+found in #430.
+- The person it was meant for covered up at 33 health and died the same
+  way. Under #430 they fought on and took two more blows: 23 in an
+  exchange and 23 from the mammoth. Under #431 the mammoth charged them
+  twice on its own, at 23 each, and they died at the same moment.
+  Covering up removed the exchange, and the charges filled the gap.
+- A second person died that afternoon. Under #430 the mammoth never
+  struck them. Under #431 it charged them once at 99 health. They fought
+  once and then covered up at 32. Two more charges killed them.
+- The trace cannot say whether covering up caused the second death. A
+  fight rolls the dice and a freeze does not, so the run's dice went
+  their own way from the first cover-up on.
+
+**What covering up comes up against.**
+- **Every cornered person was out of legs, not out of ground.** That is
+  the two in sm_s7 (energy 0.0) and the one in sm_s23 (energy 0.6, a
+  polar bear, not yet beaten down, and dead as before). None was cornered
+  by the shape of the land.
+- **Nothing tells a mammoth to stop.** A beast that keeps its ground
+  charges anyone still inside it whom it has already warned off. It does
+  so one turn in four (`HOW_OFTEN_IT_CHARGES`), within two paces
+  (`A_BEASTS_GROUND`). It does not care whether they are fighting.
+  Someone too tired to run who covers up stays inside its ground and
+  keeps being charged.
+
+**Not changed.** The code stays in, as asked. Over these eighty
+world-runs it reached two people, did not save either, and cost one
+death more, possibly by chance. Two places could make covering up
+worth something:
+- a beast that keeps its ground lets up on someone who has covered up,
+  because it is driving them off, not hunting them;
+- people stop running themselves out of legs twenty to thirty tiles from
+  home.
+Neither is measured.
