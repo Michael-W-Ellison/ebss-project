@@ -31640,3 +31640,109 @@ worth something:
 - people stop running themselves out of legs twenty to thirty tiles from
   home.
 Neither is measured.
+
+### 432. A beast lets up on someone who has covered up
+
+**Why.** #431 found that a mammoth keeping its ground charges anyone
+inside it whom it has already warned off, whether or not they are
+fighting. A person who covered up stayed inside that ground and kept
+being charged.
+
+**Changed.** Covering up is now remembered on the person
+(`AgentState::covered_up_at`, set in `freezing()` when they are beaten
+down). A beast that drives people off its ground does not charge
+someone who covered up within the last turn (`MINUTES_PER_TURN`). A
+hungry hunter still hunts them, and a cover-up from longer ago does
+not count.
+
+Tests: `a_beast_lets_up_on_somebody_who_has_covered_up`,
+`a_cover_up_long_over_is_charged_again` and
+`freezing_beaten_down_is_what_covering_up_is`. The dice counts in
+repeatable_tests are unchanged.
+
+**Measured** against #431, on two draws of the same forty worlds.
+Seventy-nine of the eighty world-runs came out line for line the same.
+The one that differs is sm_s7, first draw again.
+
+| | #431 | #432 |
+|---|---|---|
+| deaths over two draws | 12 | 13 |
+| from a blow | 4 | 5 |
+| in childbirth | 8 | 8 |
+
+**What happened in sm_s7.** It turned a quick death into a slow one,
+three times.
+- The mammoth did stop charging. But each person who covered up had
+  no energy left (0.0), and covering up cost energy like any freeze
+  (`WHAT_FREEZING_COSTS`). They could never get the legs to run, so
+  they covered up again each minute.
+- Three people, on days 312, 320 and 325, all on the mammoth's tile
+  (402, 497), lay covered up for one to two days and died there. The
+  trace has 1,070 cover-ups in that world.
+- The blows still did most of the harm (40 to 67 of each person's
+  ledger). The wound took 23 to 26 and thirst 5 to 18. Their cause is
+  still recorded as a blow.
+- Under #431 two people died on day 312. Under #432 the first of them
+  died two days later instead. The second lived, but two others from
+  the same camp were caught on the same tile later and died the same
+  slow way.
+
+Leaving a covered-up person alone is not enough if they cannot get
+up. That is #433.
+
+### 433. Lying covered up is rest
+
+**Why.** #432 left people covered up at no energy, never charged and
+never able to leave.
+
+**Changed.** In `freezing()`, someone beaten down who covers up spends
+no energy. Lying still also gives back what a minute of sleep does
+(`A_TURN_OF_SLEEP_RESTORES` over `MINUTES_PER_TURN`, a sixth of a point
+a minute). From nothing, they have the legs to run again
+(`NOTHING_LEFT`, 1.0) within one turn. Freezing whole, out of fright,
+costs what it did.
+
+Tests: `covered_up_a_person_gets_the_legs_to_go` and
+`freezing_whole_is_not_rest`. The dice counts in repeatable_tests are
+unchanged.
+
+**Measured** against #432 and #431, on two draws of the same forty
+worlds. The second draw is line for line the same as #432's. Two
+first-draw worlds differ, sm_s7 and sm_s23.
+
+| | #431 | #432 | #433 |
+|---|---|---|---|
+| deaths over two draws | 12 | 13 | 10 |
+| from a blow | 4 | 5 | 1 |
+| in childbirth | 8 | 8 | 9 |
+| alive at day 720, both draws | 672 | | 673 |
+
+**What happened.**
+- **sm_s7, the mammoth.** The two people who died on day 312 under
+  #431 both lived.
+  - The first covered up seven times on day 312, from energy 0.0 to
+    1.0, and then stopped. The same person covered up again for a few
+    minutes on days 319 and 320, at 25 health, and lived through it.
+  - The second covered up eight times on days 320 and 321, from 0.0 to
+    1.0, and lived.
+  - The trace has 20 cover-ups in that world, against 1,070 under #432.
+    Nobody died on the mammoth's tile.
+  - The world's one death is in childbirth on day 515, of someone who
+    did not die under #431. The run's dice went their own way from the
+    first cover-up, so that birth cannot be laid to the change.
+- **sm_s23, the polar bear.** The person cornered on day 684 took the
+  same two blows as before, down to 31 health. Under #431 and #432 they
+  died the next day, of those blows and the wound (65.7 and 26.0 of the
+  ledger). Under #433 they lived. The trace prints no cover-up for them
+  from the threat branch, so they lay still another way (the plain
+  "freezes" branch, or choosing to). #433 changes nothing but a freeze
+  while beaten down, so that freeze is what saved them.
+- Nothing else moved. Field crop brought in and fallen, wasting and
+  hunger are unchanged within the two worlds' noise (t at most 1.4).
+  Break-offs (#429) are the same in every world.
+
+**The one blow death left** is in sc_s16, second draw, on day 468: a
+parent standing over one of their own against a lion. They took three
+blows of about 23 and died at 31 health without stepping back. #429's
+break-off reaches that branch only if they are beaten down and can run.
+Covering up does not reach it at all.
