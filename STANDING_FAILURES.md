@@ -28,10 +28,11 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #431, a cornered person beaten down covers
-up): `cargo test --lib` in one piece, 3,165 tests: 3,159 passed, 0 failed,
-6 ignored, in 22 minutes. The three new tests are the whole difference.
-Before it, #429 and #430: 3,162 tests, 3,156 passed, 0 failed.
+**Last full run** (ISSUES_FOUND #432 and #433, a beast lets up on someone
+who has covered up, and lying covered up is rest): `cargo test --lib` in
+one piece, 3,170 tests: 3,164 passed, 0 failed, 6 ignored, in 23 minutes.
+The five new tests are the whole difference. Before it, #431: 3,165 tests,
+3,159 passed, 0 failed.
 - The dice counts are 6,765 (seed 4242, 120 turns) and 944,097 (seed 0, a
   year).
 - #363 turned nineteen tests red that leaned on what it fixed. Most made a man
