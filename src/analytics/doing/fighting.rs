@@ -539,6 +539,23 @@ impl Simulation {
         let agent = &mut self.population.agents[agent_index];
         if Self::beaten_down(agent) {
             agent.state.covered_up_at = Some(now);
+
+            // **And lying still is rest.** Covered up, it gets its breath
+            // back a minute at a time, as a sleeper does, and once it has the
+            // legs to go it breaks off. Without this, somebody cornered for
+            // want of legs stayed cornered: freezing only ever cost stamina,
+            // so a person who covered up at nothing lay in a mammoth's ground
+            // for two days, unstruck, and died of the wound and of thirst -
+            // three in one world, on the same tile (#432, #433).
+            agent.state.energy = (agent.state.energy
+                + crate::agents::Agent::A_TURN_OF_SLEEP_RESTORES
+                    / crate::environment::seasons::MINUTES_PER_TURN as f32)
+                .min(100.0);
+            debug!("Agent {} covered up", agent.id);
+
+            return ActionResult::success()
+                .with_energy_cost(0.0)
+                .with_message("Covered up".to_string());
         }
         debug!("Agent {} froze", agent.id);
 

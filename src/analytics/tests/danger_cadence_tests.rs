@@ -576,3 +576,35 @@ fn freezing_beaten_down_is_what_covering_up_is() {
     simulation.execute_action(&crate::environment::Action::Freeze, 0);
     assert_eq!(simulation.population.agents[0].state.covered_up_at, None);
 }
+
+/// Covered up, a person gets their breath back, and with it the legs to
+/// break off (#433). Covering up at nothing used to be a corner nobody left:
+/// freezing cost stamina and gave none back.
+#[test]
+fn covered_up_a_person_gets_the_legs_to_go() {
+    let mut simulation = one_person_beside("mammoth", 30);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.population.agents[0].state.health = 30.0;
+    simulation.population.agents[0].state.an_open_wound = 0.6;
+    simulation.population.agents[0].state.energy = 0.0;
+    assert!(!simulation.population.agents[0].could_i_run_at_all(Simulation::NOTHING_LEFT));
+
+    let mut minutes = 0;
+    while !simulation.population.agents[0].could_i_run_at_all(Simulation::NOTHING_LEFT) {
+        let done = simulation.execute_action(&crate::environment::Action::Freeze, 0);
+        assert_eq!(done.energy_cost, 0.0, "lying still costs nothing");
+        minutes += 1;
+        assert!(minutes <= crate::environment::seasons::MINUTES_PER_TURN, "still no legs after half an hour");
+    }
+}
+
+/// Frozen with fright, whole, it is not resting: freezing costs what it did.
+#[test]
+fn freezing_whole_is_not_rest() {
+    let mut simulation = one_person_beside("mammoth", 30);
+    simulation.population.agents[0].state.an_open_wound = 0.0;
+    simulation.population.agents[0].state.energy = 0.0;
+    let done = simulation.execute_action(&crate::environment::Action::Freeze, 0);
+    assert!(done.energy_cost > 0.0);
+    assert_eq!(simulation.population.agents[0].state.energy, 0.0);
+}
