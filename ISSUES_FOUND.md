@@ -31741,8 +31741,61 @@ first-draw worlds differ, sm_s7 and sm_s23.
   hunger are unchanged within the two worlds' noise (t at most 1.4).
   Break-offs (#429) are the same in every world.
 
-**The one blow death left** is in sc_s16, second draw, on day 468: a
-parent standing over one of their own against a lion. They took three
-blows of about 23 and died at 31 health without stepping back. #429's
+**The one blow death left** is in sm_s16, second draw, on day 468: a
+parent standing over one of their own against a lion. They took four
+blows of about 23, from whole to nothing, without stepping back. #429's
 break-off reaches that branch only if they are beaten down and can run.
-Covering up does not reach it at all.
+Covering up does not reach it at all. (This entry first said sc_s16 and
+three blows; #434's trace corrected both.)
+
+### 434. A parent beaten down over their own covers up
+
+**Why.** After #433 the one death by a blow left was a parent standing
+over one of their own against a lion. A cornered person beaten down
+covers up (#431), but standing over one's own came first in the tree
+and had no such way out: beaten down with legs and somewhere to go, a
+parent broke off (#429); without, they fought on.
+
+**Changed.** A parent beaten down over their own who cannot break off
+(no legs left, or nowhere to go) now covers up (`Action::Freeze`),
+branch "beaten down over its own, covers up". Covering up there is what
+it is everywhere since #432 and #433: no energy spent, rest, and a beast
+keeping its ground lets up. A hunter does not.
+
+Tests: `a_parent_beaten_down_with_no_legs_covers_up_over_the_child` and
+`a_parent_with_no_legs_and_no_wound_still_stands_over_the_child`. The
+dice counts in repeatable_tests are unchanged.
+
+**Measured** against #433, on two draws of the same forty worlds, with
+every stand-over decision traced (health, energy, wound, and where this
+person breaks off). All eighty world-runs came out line for line the
+same. The new branch was never taken.
+
+| | #433 | #434 |
+|---|---|---|
+| deaths over two draws | 10 | 10 |
+| from a blow | 1 | 1 |
+| in childbirth | 9 | 9 |
+
+**Why it was never taken.**
+- **Parents who stood over their own had their legs.** Every
+  stand-over decision traced was at energy 74 to 99. A parent beaten
+  down with legs like that breaks off (#429); there is no one for
+  covering up to reach.
+- **The lion parent was never beaten down.** sm_s16, second draw, day
+  468. They break off at 0.30 of a whole body (`the_shape_this_one_breaks_off_at`,
+  a protector's line). They had 79.8 energy. The lion's blows came at
+  about 23 each: 100, 77.1, 54.0, 30.8. At 30.8 they were 0.308, eight
+  thousandths above their line, so they stood. The next blow killed
+  them.
+
+**What this shows.** The break-off line is read against what is left
+now, not against what the next blow will leave. Against a lion that
+takes 23 at a time, a line of 0.30 means breaking off only at 30 or
+below, one blow from death, and a person at 31 is not there yet. A line
+that counted the next blow, or a break-off when the next blow would take
+them past it, would have sent this parent away at 54. Neither is
+changed or measured.
+
+**Not changed.** The code stays in, as asked. Over these eighty
+world-runs it did nothing.

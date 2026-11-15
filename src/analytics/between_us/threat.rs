@@ -431,7 +431,7 @@ impl Simulation {
             // And beaten down with no legs left or nowhere to go, it stops
             // trading blows over them, as a cornered person does (#431): it
             // covers up where it stands. The one death by a blow left after
-            // #433 was a parent over their own against a lion, three blows
+            // #433 was a parent over their own against a lion, four blows
             // of twenty-three without a step back (#434).
             if Self::beaten_down(agent) {
                 return ("beaten down over its own, covers up", Some(Action::Freeze));
