@@ -31794,8 +31794,55 @@ now, not against what the next blow will leave. Against a lion that
 takes 23 at a time, a line of 0.30 means breaking off only at 30 or
 below, one blow from death, and a person at 31 is not there yet. A line
 that counted the next blow, or a break-off when the next blow would take
-them past it, would have sent this parent away at 54. Neither is
-changed or measured.
+them past it, would have sent this parent away at 30.8, before the
+blow that killed them. (At 54 the next blow leaves 30.8, still above
+0.30, so they would have stood there.) That is #435.
 
 **Not changed.** The code stays in, as asked. Over these eighty
 world-runs it did nothing.
+
+### 435. Beaten down reckoned by the next blow
+
+**Why.** The last death by a blow (#434, sm_s16, second draw, day 468)
+was a parent over their own against a lion, at 30.8 with a line of
+0.30. They stood because they were not yet at their line, and the next
+blow of about 23 killed them.
+
+**Changed.** Beaten down is now read against what the next blow will
+leave: health less the hardest blow in the open wound, against the
+same break-off line (`where_the_next_blow_leaves_me`). Someone with no
+open wound is not beaten down. The hardest blow is kept on the person
+(`the_hardest_blow_in_it`) and starts again when the wound is clean.
+Everything that reads beaten down (breaking off, covering up when
+cornered, covering up over one's own) now reads it this way.
+
+Tests: `a_protector_breaks_off_before_the_blow_that_would_finish_them`
+(a blow of 23 at 40), `a_protector_struck_lightly_at_forty_still_stands`
+(a blow of 5) and `the_hardest_blow_is_kept_with_its_wound`. The dice
+counts in repeatable_tests are unchanged.
+
+**Measured** against #434, on two draws of the same forty worlds.
+Seventy of eighty world-runs came out line for line the same; in the
+other ten people broke off sooner.
+
+| | #434 | #435 |
+|---|---|---|
+| deaths over two draws | 10 | 9 |
+| from a blow | 1 | 0 |
+| in childbirth | 9 | 9 |
+| people who broke off a fight | 8 | 13 |
+| blows taken from beasts | 79 | 74 |
+| alive at the end, per draw | 673 | 674 (t +1.00) |
+
+**The lion parent.** Same three blows as before: 100, 77.1, 54.0,
+30.8. At 54 the next blow would leave 30.8, above their line, so they
+stood. At 30.8 it would leave about 7.5, so they broke off, and lived.
+No one else in that world died.
+
+**Elsewhere.** Where people break off, they break off higher up: in
+the five first-draw worlds that changed, the first break-off came at
+53 to 84 health, against 37 to 68 under #434. Field crop brought in
+and fallen, hunger and wasting are all within noise (t under 1).
+
+**Not shown.** Whether anyone was still within a hunter's reach after
+breaking off. That is what #436 traces.
