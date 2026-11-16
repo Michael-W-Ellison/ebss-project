@@ -31846,3 +31846,60 @@ and fallen, hunger and wasting are all within noise (t under 1).
 
 **Not shown.** Whether anyone was still within a hunter's reach after
 breaking off. That is what #436 traces.
+
+### 436. Run down by a hunter, a person beaten down covers up
+
+**Why.** After #435 a person beaten down breaks off and runs. Nothing
+was there for someone who ran and was still within a hunter's strike
+range (3 paces) afterwards: they ran again, spending legs they no longer
+had to spare.
+
+**Changed.** A person beaten down who ran while beaten down within the
+last turn (`ran_beaten_down_at`, set in `fleeing_from`), with a hunter
+of people still within strike range, covers up where they are
+(`Action::Freeze`), branch "beaten down and run down, covers up". This
+comes first in the threat tree. Covering up costs no energy and is rest
+(#433). A hunter does not let up on someone covered up the way a beast
+keeping its ground does (#432). Once the run is more than a turn old,
+beaten down means breaking off and running again, as before.
+
+Tests: `a_parent_run_down_after_breaking_off_covers_up` and
+`a_run_long_over_is_not_being_run_down`. The dice counts in
+repeatable_tests are unchanged.
+
+**Measured** against #435, on two draws of the same forty worlds, with
+every run-down decision traced. Seventy-eight of eighty world-runs came
+out line for line the same. The branch was taken by two people, both in
+the first draw, 71 decisions in all.
+
+- **sc_s16, day 666, a polar bear.** A parent standing over their own
+  took two blows of about 19, broke off at 60.9 and ran. The bear was
+  still within three paces. They covered up (26 decisions), energy
+  86.8 to 82.4 with one more run in between. No blow landed after they
+  covered up.
+- **sm_s18, day 618, a lion.** A parent broke off from a lion at 53.1
+  on day 614. Four days later, still wounded and still beaten down by
+  #435's reckoning (59.6 health, hardest blow 15.8), they ran from a
+  lion again and it stayed within reach. They covered up (45
+  decisions), getting their breath back from 79.3 to 84.2, running
+  once more in between. No blow landed.
+
+| | #435 | #436 |
+|---|---|---|
+| deaths over two draws | 9 | 9 |
+| from a blow | 0 | 0 |
+| in childbirth | 9 | 9 |
+| people who broke off a fight | 13 | 13 |
+| blows taken from beasts | 74 | 74 |
+| alive at the end, per draw | 674 | 674 |
+
+The two worlds that changed drift apart afterwards (camp moves, later
+fights) and no one else in them died. Field crop, hunger and wasting
+are within noise.
+
+**What this shows.** Nothing makes a beast follow a person who runs; in
+both cases the beast was simply still near when the run ended. Covering
+up there did no harm and gave rest. Neither person was struck in either
+draw, run or covered, so these runs cannot say whether covering up
+beats running again once a hunter is hungry enough to strike.
+
