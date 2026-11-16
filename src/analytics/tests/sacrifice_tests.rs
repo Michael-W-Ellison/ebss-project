@@ -183,6 +183,48 @@ fn a_parent_with_no_legs_and_no_wound_still_stands_over_the_child() {
     assert_eq!(branch, "stands over one of its own");
 }
 
+/// The same protector, struck at forty by a blow of twenty-three, knows the
+/// next one would leave them at seventeen, past their three tenths, and
+/// breaks off before it lands rather than after (#435).
+#[test]
+fn a_protector_breaks_off_before_the_blow_that_would_finish_them() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    let mut traits = crate::core::TraitSet::new();
+    traits.add_trait(crate::core::Trait::Protector);
+    simulation.population.agents[0].traits = traits;
+    simulation.population.agents[0].state.the_hardest_blow_in_it = 23.0;
+    let (branch, answer) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down, breaks off");
+    assert!(matches!(answer, Some(Action::FleeFrom { .. })), "{answer:?}");
+}
+
+/// Struck by something light, the same protector at forty still stands:
+/// another blow of five would leave them at thirty-five (#435).
+#[test]
+fn a_protector_struck_lightly_at_forty_still_stands() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    let mut traits = crate::core::TraitSet::new();
+    traits.add_trait(crate::core::Trait::Protector);
+    simulation.population.agents[0].traits = traits;
+    simulation.population.agents[0].state.the_hardest_blow_in_it = 5.0;
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "stands over one of its own");
+}
+
+/// The hardest blow is kept with the wound it went into, and starts again
+/// once that wound has closed (#435).
+#[test]
+fn the_hardest_blow_is_kept_with_its_wound() {
+    let mut state = crate::agents::AgentState::new();
+    state.take_damage(10.0);
+    state.take_damage(23.0);
+    state.take_damage(5.0);
+    assert_eq!(state.the_hardest_blow_in_it, 23.0);
+    state.an_open_wound = 0.0;
+    state.take_damage(5.0);
+    assert_eq!(state.the_hardest_blow_in_it, 5.0);
+}
+
 /// The same parent, a protector, stands longer: forty is not yet down far
 /// enough for them.
 #[test]

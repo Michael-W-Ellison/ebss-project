@@ -1197,6 +1197,13 @@ pub struct AgentState {
     #[serde(default)]
     pub an_open_wound: f32,
 
+    /// The hardest blow that went into the wound that is open: what this
+    /// one knows the thing in front of them can do. Somebody judging whether
+    /// to stand again judges by where the next blow like it would leave them
+    /// (#435).
+    #[serde(default)]
+    pub the_hardest_blow_in_it: f32,
+
     /// The tick this one last covered up: beaten down, they stopped
     /// fighting and stayed where they were (#431). A beast that drives
     /// people off its ground lets up on somebody who has (#432).
@@ -1294,6 +1301,7 @@ impl AgentState {
             salt_in_me: 0.0,
             an_open_wound: 0.0,
             covered_up_at: None,
+            the_hardest_blow_in_it: 0.0,
             bleeding: 0.0,
             wound_dressed_until: 0,
             wound_cleaned: false,
@@ -1471,6 +1479,13 @@ impl AgentState {
             self.wound_stitched = false;
             self.wound_poulticed = false;
         }
+        // The blow is remembered with the wound it went into, and a wound
+        // that had closed starts the count again (#435)
+        self.the_hardest_blow_in_it = if self.an_open_wound <= 0.0 {
+            amount
+        } else {
+            self.the_hardest_blow_in_it.max(amount)
+        };
         self.an_open_wound = self.an_open_wound.max(opened);
         // And a hard enough blow breaks something (#402)
         self.a_blow_may_break_a_bone(amount);

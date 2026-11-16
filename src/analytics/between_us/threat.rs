@@ -560,9 +560,23 @@ impl Simulation {
     /// with no wound on them is not beaten down, and stands over their own
     /// as before; one a lion has opened up twice is. How far down that is
     /// depends on who they are (`the_shape_this_one_breaks_off_at`).
+    ///
+    /// And it is reckoned by where the next blow would leave them, not where
+    /// the last one did. A person who has been hit knows how hard (the
+    /// hardest blow in the wound). Read off what was left, a parent who
+    /// breaks off at three tenths stood over their own against a lion at
+    /// 30.8, eight thousandths above the line, and the fourth blow of 23
+    /// killed them: the line was only ever crossed one blow from death, and
+    /// it was the one death by a blow left (#434, #435).
     pub(in crate::analytics) fn beaten_down(agent: &crate::agents::Agent) -> bool {
         agent.state.an_open_wound > 0.0
-            && Self::what_shape_i_am_in(agent) <= Self::the_shape_this_one_breaks_off_at(agent)
+            && Self::where_the_next_blow_leaves_me(agent) <= Self::the_shape_this_one_breaks_off_at(agent)
+    }
+
+    /// The shape this one would be in after another blow like the hardest
+    /// already in their wound.
+    pub(in crate::analytics) fn where_the_next_blow_leaves_me(agent: &crate::agents::Agent) -> f32 {
+        (agent.state.health - agent.state.the_hardest_blow_in_it) / 100.0
     }
 
     /// How far down somebody is struck before they break off a fight: half
