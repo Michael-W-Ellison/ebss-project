@@ -598,8 +598,14 @@ impl Simulation {
                 .with_message("Nowhere to run, and stood".to_string());
         };
 
+        let now = self.current_turn;
         let agent = &mut self.population.agents[agent_index];
         agent.state.position = landed;
+        // Run beaten down, which is what a hunter that is still on them
+        // afterwards has run down (#436)
+        if Self::beaten_down(agent) {
+            agent.state.ran_beaten_down_at = Some(now);
+        }
 
         debug!("Agent {} bolted to {landed:?}", agent.id);
 

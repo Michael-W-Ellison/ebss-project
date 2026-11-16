@@ -424,6 +424,21 @@ impl Simulation {
             away_from: (where_it_is.0, where_it_is.1, agent_position.2),
         };
 
+        // Run down. Somebody beaten down who ran from a hunter and has it
+        // within a strike of them still has not got away, and a second run
+        // is a back to it: they cover up where they are instead. Whatever it
+        // does then, it does without a lost exchange of theirs adding a blow
+        // (#431), and they get their breath back (#433) (#436).
+        if a_hunter_of_people
+            && paces <= Self::PREDATOR_STRIKE_RANGE
+            && Self::beaten_down(agent)
+            && agent.state.ran_beaten_down_at.is_some_and(|at| {
+                self.current_turn.saturating_sub(at) <= crate::environment::seasons::MINUTES_PER_TURN
+            })
+        {
+            return ("beaten down and run down, covers up", Some(Action::Freeze));
+        }
+
         if could_fight && a_hunter_of_people && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
             if breaks_off() {
                 return ("beaten down, breaks off", Some(run()));

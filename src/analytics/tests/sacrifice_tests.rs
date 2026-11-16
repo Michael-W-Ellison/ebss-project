@@ -211,6 +211,33 @@ fn a_protector_struck_lightly_at_forty_still_stands() {
     assert_eq!(branch, "stands over one of its own");
 }
 
+/// A parent beaten down who broke off and still has the wolves within a
+/// strike has been run down, and covers up rather than turn their back
+/// again (#436).
+#[test]
+fn a_parent_run_down_after_breaking_off_covers_up() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    let now = simulation.current_turn;
+    simulation.population.agents[0].state.ran_beaten_down_at = Some(now);
+    let (branch, answer) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down and run down, covers up");
+    assert!(matches!(answer, Some(Action::Freeze)), "{answer:?}");
+}
+
+/// A run long over is not being run down: the same parent breaks off again
+/// (#436).
+#[test]
+fn a_run_long_over_is_not_being_run_down() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.current_turn += 10 * crate::environment::seasons::MINUTES_PER_TURN;
+    let long_ago = simulation.current_turn - 5 * crate::environment::seasons::MINUTES_PER_TURN;
+    simulation.population.agents[0].state.ran_beaten_down_at = Some(long_ago);
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down, breaks off");
+}
+
 /// The hardest blow is kept with the wound it went into, and starts again
 /// once that wound has closed (#435).
 #[test]

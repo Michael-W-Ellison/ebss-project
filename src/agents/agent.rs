@@ -1204,6 +1204,11 @@ pub struct AgentState {
     #[serde(default)]
     pub the_hardest_blow_in_it: f32,
 
+    /// The tick this one last ran beaten down. Still within reach of a
+    /// hunter after it, they have been run down (#436).
+    #[serde(default)]
+    pub ran_beaten_down_at: Option<u32>,
+
     /// The tick this one last covered up: beaten down, they stopped
     /// fighting and stayed where they were (#431). A beast that drives
     /// people off its ground lets up on somebody who has (#432).
@@ -1302,6 +1307,7 @@ impl AgentState {
             an_open_wound: 0.0,
             covered_up_at: None,
             the_hardest_blow_in_it: 0.0,
+            ran_beaten_down_at: None,
             bleeding: 0.0,
             wound_dressed_until: 0,
             wound_cleaned: false,
