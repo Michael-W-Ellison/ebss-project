@@ -1209,6 +1209,16 @@ pub struct AgentState {
     #[serde(default)]
     pub ran_beaten_down_at: Option<u32>,
 
+    /// Where the thing this one last ran from stood, and the tick they ran.
+    /// A hungry hunter that was standing there gives chase (#437).
+    #[serde(default)]
+    pub ran_from: Option<(i32, i32, u32)>,
+
+    /// The tick a hunter last ran this one down. One chase in a half hour:
+    /// a hunter that is shaken off a second time lets them go (#437).
+    #[serde(default)]
+    pub chased_at: Option<u32>,
+
     /// The tick this one last covered up: beaten down, they stopped
     /// fighting and stayed where they were (#431). A beast that drives
     /// people off its ground lets up on somebody who has (#432).
@@ -1308,6 +1318,8 @@ impl AgentState {
             covered_up_at: None,
             the_hardest_blow_in_it: 0.0,
             ran_beaten_down_at: None,
+            ran_from: None,
+            chased_at: None,
             bleeding: 0.0,
             wound_dressed_until: 0,
             wound_cleaned: false,

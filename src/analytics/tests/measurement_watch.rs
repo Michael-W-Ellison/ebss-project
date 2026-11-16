@@ -128,6 +128,7 @@ fn zz_discovery_watch() {
         ("beasts_the_thorns_turned", sim.world.beasts_the_thorns_turned),
         ("watches_kept", sim.world.watches_kept),
         ("woken_by_the_watch", sim.world.woken_by_the_watch),
+        ("people_run_down", sim.world.people_run_down),
         ("beasts_struck_by_night", sim.world.beasts_struck_by_night),
         ("beasts_struck_by_day", sim.world.beasts_struck_by_day),
         ("beasts_warned_by_night", sim.world.beasts_warned_by_night),

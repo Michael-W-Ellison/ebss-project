@@ -54,6 +54,7 @@ pub mod cornered_tests;
 pub mod mortality_tests;
 pub mod short_handed_tests;
 pub mod danger_cadence_tests;
+pub mod chase_tests;
 pub mod deposit_state_tests;
 pub mod tally_tests;
 pub mod danger_map_tests;

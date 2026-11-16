@@ -601,6 +601,9 @@ impl Simulation {
         let now = self.current_turn;
         let agent = &mut self.population.agents[agent_index];
         agent.state.position = landed;
+        // What it ran from and when, which a hungry hunter standing there
+        // follows (#437)
+        agent.state.ran_from = Some((away_from.0, away_from.1, now));
         // Run beaten down, which is what a hunter that is still on them
         // afterwards has run down (#436)
         if Self::beaten_down(agent) {

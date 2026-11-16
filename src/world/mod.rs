@@ -294,6 +294,10 @@ pub struct World {
     #[serde(default)]
     pub woken_by_the_watch: u64,
 
+    /// People a hungry hunter followed when they ran, and closed on (#437).
+    #[serde(default)]
+    pub people_run_down: u64,
+
     /// Blows and warnings from beasts, by night and by day (#379).
     #[serde(default)]
     pub beasts_struck_by_night: u64,
@@ -2144,6 +2148,7 @@ impl World {
             beasts_the_thorns_turned: 0,
             watches_kept: 0,
             woken_by_the_watch: 0,
+            people_run_down: 0,
             beasts_struck_by_night: 0,
             beasts_struck_by_day: 0,
             beasts_warned_by_night: 0,

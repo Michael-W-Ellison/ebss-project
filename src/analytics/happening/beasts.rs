@@ -252,6 +252,63 @@ impl Simulation {
 
     /// What a beast is worth in a fight, on the same scale everything else is
     /// reckoned on: how sound it is, and what it can do with that.
+    /// How far a hunter runs somebody down, in cells: as far as they ran,
+    /// at its pace against theirs.
+    ///
+    /// A person running is reckoned at a pace of one on the beasts' scale (a
+    /// sheep's), so a lion at 1.9 covers nearly twice a person's bolt while
+    /// they make it and a wolf at 1.7 a little less. An old or hurt one has
+    /// what it still has (`how_fast_it_still_is`).
+    pub(in crate::analytics) fn how_far_it_runs_somebody_down(
+        species: &crate::environment::fauna::AnimalSpecies,
+        animal: &crate::environment::fauna::Animal,
+    ) -> i32 {
+        const A_PERSON_RUNNING: f32 = 1.0;
+        (Self::HOW_FAR_A_FRIGHTENED_PERSON_GETS as f32 * species.speed * animal.how_fast_it_still_is()
+            / A_PERSON_RUNNING)
+            .round() as i32
+    }
+
+    /// Somebody this hunter runs down, and where it ends up beside them.
+    ///
+    /// Somebody who ran from where it stands, this minute or the last; whom
+    /// it can reach at its pace; and who has not been run down already this
+    /// half hour. One chase in a half hour, because a hunter's run is a
+    /// short one and somebody who shakes it off a second time has got away.
+    /// Whether it is hungry, and whether it could take them, is asked where
+    /// it strikes.
+    pub(in crate::analytics) fn who_it_runs_down(
+        &self,
+        animal: &crate::environment::fauna::Animal,
+        species: &crate::environment::fauna::AnimalSpecies,
+        standing_about: &[(usize, (i32, i32))],
+        now: u32,
+    ) -> Option<(usize, (i32, i32))> {
+        let reach = Self::how_far_it_runs_somebody_down(species, animal);
+        let half_an_hour = crate::environment::seasons::MINUTES_PER_TURN;
+        standing_about
+            .iter()
+            .filter(|(index, at)| {
+                let state = &self.population.agents[*index].state;
+                let ran_from_here = state.ran_from.is_some_and(|(x, y, when)| {
+                    now.saturating_sub(when) <= 1
+                        && (x - animal.position.0).abs().max((y - animal.position.1).abs()) <= 1
+                });
+                let chased_already = state.chased_at.is_some_and(|when| now.saturating_sub(when) < half_an_hour);
+                let off = (at.0 - animal.position.0).abs().max((at.1 - animal.position.1).abs());
+                ran_from_here && !chased_already && off <= reach + Self::PREDATOR_STRIKE_RANGE
+            })
+            .min_by_key(|(_, at)| (at.0 - animal.position.0).abs() + (at.1 - animal.position.1).abs())
+            .map(|(index, at)| {
+                // A stride behind them, on the way it came
+                let behind = ((animal.position.0 - at.0).signum(), (animal.position.1 - at.1).signum());
+                let beside = (at.0 + behind.0, at.1 + behind.1);
+                let level = self.population.agents[*index].state.position.2;
+                let beside = if self.world.is_terrain_passable((beside.0, beside.1, level)) { beside } else { *at };
+                (*index, beside)
+            })
+    }
+
     /// Whether a beast of this kind would ever strike a person of this age.
     ///
     /// It hunts, its blow does something, and it is not too small to take
@@ -436,6 +493,8 @@ impl Simulation {
         let mut strikes: Vec<(uuid::Uuid, String, usize, f32, f32)> = Vec::new();
         // Those a beast came at and stopped short of, what it was and where
         let mut warnings: Vec<(usize, String, String, (i32, i32))> = Vec::new();
+        // Who a hunter ran down, and where it ended up beside them (#437)
+        let mut chases: Vec<(uuid::Uuid, usize, (i32, i32))> = Vec::new();
 
         for animal in self.world.animals.get_all() {
             if !animal.is_alive() || animal.is_domesticated {
@@ -535,9 +594,24 @@ impl Simulation {
                         + (position.1 - animal.position.1).abs()
                 });
 
-            let (agent_index, _) = match target {
-                Some(target) => target,
-                None => continue,
+            // **Or somebody who ran from it.** Nothing within a strike, but
+            // a person who has just run from where this one stands is
+            // somebody it can follow, and a hunter that is hungry does:
+            // running is what sets it off. Without it a person a stride
+            // past a lion's strike was as safe as one a valley away, and in
+            // eighty world-runs no beast ever went after anybody who ran
+            // (#436) (#437).
+            let chased = match target {
+                Some(_) => None,
+                None => self.who_it_runs_down(animal, species, &agent_positions, current_turn),
+            };
+            let (agent_index, _) = match (target, &chased) {
+                (Some(target), _) => target,
+                (None, Some((index, _))) => agent_positions
+                    .iter()
+                    .find(|(at, _)| at == index)
+                    .expect("the one it ran down is one of those standing about"),
+                (None, None) => continue,
             };
 
             // Nothing strikes at a grown person several times its own
@@ -546,6 +620,12 @@ impl Simulation {
             // #274).
             if !Self::could_it_take(species, self.population.agents[*agent_index].state.years_old()) {
                 continue;
+            }
+
+            // It has closed on them, and whether it strikes is what it always
+            // was: how hungry it is.
+            if let Some((index, beside)) = chased {
+                chases.push((animal.id, index, beside));
             }
 
             // A full belly makes a cautious animal. Hunger is what changes
@@ -563,6 +643,16 @@ impl Simulation {
                     species.food_value * 0.25,
                 ));
             }
+        }
+
+        // The chase itself: it is beside them, and they know they have been
+        // run down, once in the half hour.
+        for (animal_id, agent_index, beside) in chases {
+            if let Some(hunter) = self.world.animals.get_mut(&animal_id) {
+                hunter.position = beside;
+            }
+            self.population.agents[agent_index].state.chased_at = Some(current_turn);
+            self.world.people_run_down += 1;
         }
 
         // Warned off: frightened, deciding again now, and remembering the
