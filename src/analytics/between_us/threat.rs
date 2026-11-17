@@ -279,9 +279,10 @@ impl Simulation {
     ///
     /// Nearest rather than worst, because what you run from is what is close.
     ///
-    /// Not from a hunter that has run this one down already (#437): within
-    /// its strike they cover up, and further off they run from it no more
-    /// and get nothing here (`walks_on_past_what_ran_me_down`).
+    /// Not from a hunter that has run this one down already (#437): while it
+    /// has them they cover up, and once it has let up, or further off, they
+    /// run from it no more and get nothing here
+    /// (`walks_on_past_what_ran_me_down`).
     pub(in crate::analytics) fn what_to_run_from(
         &self,
         agent: &crate::agents::Agent,
@@ -290,7 +291,7 @@ impl Simulation {
         let closest = self.the_beast_i_could_not_face(agent, agent_position)?;
 
         if self.run_down_by_it_already(agent, closest) {
-            return Self::within_its_strike(closest, agent_position).then_some(Action::Freeze);
+            return Self::it_still_has_me(closest, agent, agent_position).then_some(Action::Freeze);
         }
 
         Some(Action::FleeFrom {
@@ -299,18 +300,43 @@ impl Simulation {
     }
 
     /// Whether the nearest thing this one could not face is a hunter that
-    /// has run them down already and is not close enough to strike: then
-    /// they go about what they were doing at a walk. Kept covered up while
-    /// one was anywhere within its reach, a wounded person lay five days
-    /// with lions about and died of the wounds and thirst (#437).
+    /// has run them down already and has not got them: then they go about
+    /// what they were doing at a walk. Kept covered up while one was anywhere
+    /// within its reach, a wounded person lay five days with lions about and
+    /// died of the wounds and thirst (#437).
     pub(in crate::analytics) fn walks_on_past_what_ran_me_down(
         &self,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> bool {
         self.the_beast_i_could_not_face(agent, agent_position).is_some_and(|closest| {
-            self.run_down_by_it_already(agent, closest) && !Self::within_its_strike(closest, agent_position)
+            self.run_down_by_it_already(agent, closest) && !Self::it_still_has_me(closest, agent, agent_position)
         })
+    }
+
+    /// Whether a hunter that has run this one down still has them: near
+    /// enough to strike, and standing over them or hunting them.
+    ///
+    /// Near enough alone kept them down for as long as one stayed. Fed lions
+    /// that had let up lay idle or ranged about a pace off a wounded person,
+    /// who stayed covered up for four days and died of the wounds and thirst;
+    /// another lay three days a pace off a polar bear squared up to somebody
+    /// else, and died the same (#437). Once it has let up, or has somebody
+    /// else, they get up and walk away from it, which is not running and does
+    /// not set it off again.
+    pub(in crate::analytics) fn it_still_has_me(
+        animal: &crate::environment::fauna::Animal,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> bool {
+        use crate::environment::fauna::AnimalState;
+
+        let on_me = match animal.state {
+            AnimalState::Attacking { target_id } => target_id == agent.id,
+            AnimalState::Hunting { target_id } => target_id == Some(agent.id),
+            _ => false,
+        };
+        on_me && Self::within_its_strike(animal, agent_position)
     }
 
     /// Whether a beast is near enough to strike somebody standing here.
@@ -389,8 +415,9 @@ impl Simulation {
 
         // Every way of getting away from a hunter that has already run this
         // one down, and is still within reach of them, is the next chase.
-        // Within its strike they cover up where they are; further off they
-        // go about what they were doing at a walk (#437).
+        // While it has them they cover up where they are; once it has let up,
+        // or further off, they go about what they were doing at a walk
+        // (#437).
         if let (_, Some(Action::FleeFrom { away_from })) = answer {
             let the_one_that_ran_me_down = self.world.animals.get_all().iter().find(|animal| {
                 animal.is_alive()
@@ -398,7 +425,7 @@ impl Simulation {
                     && self.run_down_by_it_already(agent, animal)
             });
             if let Some(hunter) = the_one_that_ran_me_down {
-                if Self::within_its_strike(hunter, agent_position) {
+                if Self::it_still_has_me(hunter, agent, agent_position) {
                     return ("run down, covers up", Some(Action::Freeze));
                 }
                 return ("run down, walks on", None);

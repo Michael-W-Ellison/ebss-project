@@ -153,6 +153,10 @@ fn somebody_past_a_lions_reach_has_got_away() {
 fn run_down_by_a_lion() -> Simulation {
     let mut simulation = ran_from_a_lion(0.0);
     simulation.predators_try_their_luck_at(0);
+    // Standing over them, as it does once it has got there
+    let them = simulation.population.agents[0].id;
+    simulation.world.animals.get_all_mut()[0].state =
+        crate::environment::fauna::AnimalState::Attacking { target_id: them };
     let agent = &mut simulation.population.agents[0];
     agent.state.health = 100.0;
     agent.state.energy = 100.0;
@@ -235,7 +239,8 @@ fn somebody_run_down_by_a_polar_bear_still_runs_from_a_lion() {
 }
 
 /// Lions go about in twos. Run down by one, they do not run from the other
-/// when it comes up beside them: it would run them down the same (#437).
+/// when it comes up and stands over them: it would run them down the same
+/// (#437).
 #[test]
 fn somebody_run_down_by_one_lion_does_not_run_from_the_other() {
     let mut simulation = run_down_by_a_lion();
@@ -246,6 +251,9 @@ fn somebody_run_down_by_one_lion_does_not_run_from_the_other() {
         .world
         .spawn_animal("lion".to_string(), (at.0, at.1 - 1))
         .expect("a second lion should spawn");
+    let who = simulation.population.agents[0].id;
+    simulation.world.animals.get_all_mut()[1].state =
+        crate::environment::fauna::AnimalState::Attacking { target_id: who };
     let them = &simulation.population.agents[0];
 
     let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
@@ -351,7 +359,56 @@ fn a_lion_does_not_stand_its_ground_on_somebody_covered_up_for_it() {
 
     simulation.freezing(0);
     assert_eq!(simulation.population.agents[0].state.covered_up_at, Some(NOW));
+    // Its nerve run out, it looks again
+    simulation.world.animals.get_all_mut()[0].state = crate::environment::fauna::AnimalState::Idle;
     simulation.what_the_beasts_make_of_us();
 
     assert!(!stands_its_ground_on_them(&simulation), "{:?}", simulation.world.animals.get_all()[0].state);
+}
+
+/// A lion that has let up on somebody it ran down, and lies idle beside
+/// them, does not keep them covered up: they get up and walk away. Kept
+/// down a pace off lions that had let up, a wounded person lay four days and
+/// died of the wounds and thirst (#437).
+#[test]
+fn somebody_run_down_walks_away_from_a_lion_that_has_let_up() {
+    let mut simulation = run_down_by_a_lion();
+    let at = simulation.population.agents[0].state.position;
+    simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 1);
+    simulation.world.animals.get_all_mut()[0].state = crate::environment::fauna::AnimalState::Idle;
+
+    let them = &simulation.population.agents[0];
+    let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
+    assert_eq!(branch, "run down, walks on");
+    assert_eq!(answer, None);
+    assert!(simulation.walks_on_past_what_ran_me_down(them, them.state.position) || simulation.what_to_run_from(them, them.state.position).is_none());
+}
+
+/// Over whole half hours: covered up while the lion stands over them, and
+/// once it has let up they are no longer kept down beside it.
+#[test]
+fn somebody_run_down_is_not_kept_down_by_a_lion_lying_beside_them() {
+    let mut simulation = run_down_by_a_lion();
+    let at = simulation.population.agents[0].state.position;
+    simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 1);
+
+    simulation.take_a_turn();
+    simulation.take_a_turn();
+    assert!(simulation.population.agents[0].state.covered_up_at.is_some(), "covered up while it stands over them");
+
+    let mut last_covered = None;
+    for _ in 0..12 {
+        simulation.take_a_turn();
+        let them = &simulation.population.agents[0];
+        if them.state.covered_up_at == Some(simulation.current_turn) {
+            last_covered = Some(simulation.current_turn);
+        }
+    }
+    let lion = simulation.world.animals.get_all()[0].clone();
+    let them = &simulation.population.agents[0];
+    assert!(
+        last_covered.is_none_or(|t| t + 4 * crate::environment::seasons::MINUTES_PER_TURN < simulation.current_turn),
+        "still covered up at {last_covered:?} (now {}), lion {:?} at {:?}, them at {:?}",
+        simulation.current_turn, lion.state, lion.position, them.state.position
+    );
 }

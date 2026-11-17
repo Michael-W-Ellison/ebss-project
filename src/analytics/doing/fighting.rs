@@ -537,16 +537,16 @@ impl Simulation {
         // that is something a beast that only wants it gone can see (#432).
         let now = self.current_turn;
 
-        // So is keeping still with a hunter that has run it down within
-        // striking distance: it has stopped running and is not coming at
-        // anything (#437).
+        // So is keeping still under a hunter that has run it down and still
+        // has it: it has stopped running and is not coming at anything
+        // (#437).
         let for_what_ran_me_down = {
             let agent = &self.population.agents[agent_index];
             let at = agent.state.position;
             agent.state.chased_by.is_some()
                 && self.world.animals.get_all().iter().any(|animal| {
                     animal.is_alive()
-                        && Self::within_its_strike(animal, at)
+                        && Self::it_still_has_me(animal, agent, at)
                         && self.run_down_by_it_already(agent, animal)
                 })
         };
