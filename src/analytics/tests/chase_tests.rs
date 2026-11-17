@@ -4,7 +4,8 @@
 //! Until #437 nothing made a beast go after a person: hunters struck at
 //! whoever stood within three paces, and a run of nineteen took anybody out
 //! of it. A lion now runs down somebody who has just run from it, once in a
-//! half hour, if it is hungry and they are within its reach.
+//! half hour, hungry or fed, if they are within its reach, and strikes one
+//! time in ten when it gets there.
 
 use crate::agents::{AgentConfig, LifeStage, Population};
 use crate::analytics::Simulation;
@@ -59,13 +60,49 @@ fn a_starving_lion_runs_down_somebody_who_ran_from_it() {
 }
 
 #[test]
-fn a_fed_lion_lets_somebody_who_ran_go() {
+fn a_fed_lion_runs_down_somebody_who_ran_from_it_too() {
     let mut simulation = ran_from_a_lion(0.0);
 
     simulation.predators_try_their_luck_at(0);
 
-    assert_eq!(where_the_lion_is(&simulation), (30, 31), "a full lion does not give chase");
-    assert_eq!(simulation.world.people_run_down, 0);
+    let him = simulation.population.agents[0].state.position;
+    assert!(paces_between(where_the_lion_is(&simulation), him) <= 1, "running sets it off, fed or not");
+    assert_eq!(simulation.world.people_run_down, 1);
+}
+
+#[test]
+fn a_fed_lion_that_has_run_somebody_down_strikes_about_one_time_in_ten() {
+    let mut struck = 0;
+    let tries = 2000;
+    for _ in 0..tries {
+        let mut simulation = ran_from_a_lion(0.0);
+        simulation.population.agents[0].state.health = 100.0;
+        simulation.predators_try_their_luck_at(0);
+        if simulation.population.agents[0].state.health < 100.0 {
+            struck += 1;
+        }
+    }
+    let share = struck as f32 / tries as f32;
+    assert!(
+        (0.07..=0.13).contains(&share),
+        "struck {struck} times in {tries}, against {}",
+        Simulation::A_CAUGHT_RUNNER_IS_STRUCK
+    );
+}
+
+#[test]
+fn a_fed_lion_leaves_somebody_standing_near_it_who_did_not_run() {
+    let mut simulation = ran_from_a_lion(0.0);
+    simulation.population.agents[0].state.ran_from = None;
+    simulation.population.agents[0].state.position = (30, 33, 0);
+    simulation.population.agents[0].state.health = 100.0;
+
+    for _ in 0..200 {
+        simulation.predators_try_their_luck_at(0);
+    }
+
+    assert_eq!(simulation.population.agents[0].state.health, 100.0, "a fed lion does not come at anybody standing still");
+    assert_eq!(where_the_lion_is(&simulation), (30, 31));
 }
 
 #[test]

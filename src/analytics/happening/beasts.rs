@@ -252,6 +252,14 @@ impl Simulation {
 
     /// What a beast is worth in a fight, on the same scale everything else is
     /// reckoned on: how sound it is, and what it can do with that.
+    /// How often a hunter that has run somebody down strikes them, hungry
+    /// or fed: one time in ten.
+    ///
+    /// A figure chosen, not measured. Set off by the run rather than out to
+    /// eat, it mostly comes up on them and stops; a hungry one strikes at its
+    /// hunger's odds if those are higher (#437).
+    pub(in crate::analytics) const A_CAUGHT_RUNNER_IS_STRUCK: f32 = 0.1;
+
     /// How far a hunter runs somebody down, in cells: as far as they ran,
     /// at its pace against theirs.
     ///
@@ -275,8 +283,8 @@ impl Simulation {
     /// it can reach at its pace; and who has not been run down already this
     /// half hour. One chase in a half hour, because a hunter's run is a
     /// short one and somebody who shakes it off a second time has got away.
-    /// Whether it is hungry, and whether it could take them, is asked where
-    /// it strikes.
+    /// Hungry or fed: running is what sets it off. Whether it could take
+    /// them is asked where it strikes.
     pub(in crate::analytics) fn who_it_runs_down(
         &self,
         animal: &crate::environment::fauna::Animal,
@@ -574,17 +582,15 @@ impl Simulation {
                 }
             }
 
-            if !animal.is_hungry() {
-                continue;
-            }
-
             if species.prey_species.is_empty() || species.attack_damage <= 0.0 {
                 continue;
             }
 
-            // Nearest agent within striking distance
+            // Nearest agent within striking distance, for a hunter that is
+            // hungry. A fed one keeps away from people.
             let target = agent_positions
                 .iter()
+                .filter(|_| animal.is_hungry())
                 .filter(|(_, position)| {
                     (position.0 - animal.position.0).abs() <= Self::PREDATOR_STRIKE_RANGE
                         && (position.1 - animal.position.1).abs() <= Self::PREDATOR_STRIKE_RANGE
@@ -596,11 +602,13 @@ impl Simulation {
 
             // **Or somebody who ran from it.** Nothing within a strike, but
             // a person who has just run from where this one stands is
-            // somebody it can follow, and a hunter that is hungry does:
-            // running is what sets it off. Without it a person a stride
-            // past a lion's strike was as safe as one a valley away, and in
-            // eighty world-runs no beast ever went after anybody who ran
-            // (#436) (#437).
+            // somebody it follows, hungry or fed: running is what sets a
+            // hunter off. Without it a person a stride past a lion's strike
+            // was as safe as one a valley away, and in eighty world-runs no
+            // beast ever went after anybody who ran (#436). Asked only of a
+            // hungry one, it never went after anybody either: people ran from
+            // lions and polar bears 343 times in three worlds and the hunter
+            // was never more than 0.18 hungry, against 0.5 for hungry (#437).
             let chased = match target {
                 Some(_) => None,
                 None => self.who_it_runs_down(animal, species, &agent_positions, current_turn),
@@ -622,8 +630,8 @@ impl Simulation {
                 continue;
             }
 
-            // It has closed on them, and whether it strikes is what it always
-            // was: how hungry it is.
+            // It has closed on them.
+            let ran_down = chased.is_some();
             if let Some((index, beside)) = chased {
                 chases.push((animal.id, index, beside));
             }
@@ -633,6 +641,9 @@ impl Simulation {
             let pressure =
                 ((animal.hunger / animal.max_hunger.max(1.0)) - 0.5).clamp(0.0, 0.5) / 0.5;
             let odds = 0.01 + pressure * pressure * 0.14;
+            // Except at the end of a chase. Something that ran and has been
+            // caught is struck at whatever the hunter's belly says.
+            let odds = if ran_down { odds.max(Self::A_CAUGHT_RUNNER_IS_STRUCK) } else { odds };
 
             if rng.gen::<f32>() < odds {
                 strikes.push((
