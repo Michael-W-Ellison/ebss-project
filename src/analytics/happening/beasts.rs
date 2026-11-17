@@ -325,9 +325,16 @@ impl Simulation {
     /// pace off, every half hour, and were struck about one chase in ten:
     /// one person was run down fifty-four times in a day, and sixteen people
     /// died of it in thirty-two worlds that lost none to a hunter before
-    /// (#437). Run down by it once in the day, they stay where they are
-    /// while it is near, and a fed hunter leaves somebody who is not
-    /// running alone. The day is chosen, not measured.
+    /// (#437). Run down by it once, they stay where they are while one of
+    /// its kind is within reach, and a fed hunter leaves somebody who is
+    /// not running alone.
+    ///
+    /// For as long as one is within reach, not for a day: kept for a day,
+    /// people who stayed beside a polar bear or a pair of lions ran from it
+    /// again a pace off as the day ran out, and were run down and struck;
+    /// all five who died by a beast in thirty-six worlds died so, one of
+    /// them run down on seven days running (#437). The memory goes once no
+    /// hunter of the kind is within reach of them (`predators_try_their_luck`).
     ///
     /// Of its kind rather than the one beast: lions go about in twos, and
     /// with only the one that had run them down to stay for, people stayed
@@ -344,9 +351,6 @@ impl Simulation {
         let at = agent.state.position;
         let off = (at.0 - animal.position.0).abs().max((at.1 - animal.position.1).abs());
         agent.state.chased_by.as_deref() == Some(animal.species_id.as_str())
-            && agent.state.chased_at.is_some_and(|when| {
-                self.current_turn.saturating_sub(when) < crate::environment::seasons::ONCE_A_DAY
-            })
             && off <= Self::how_far_it_runs_somebody_down(species, animal) + Self::PREDATOR_STRIKE_RANGE
     }
 
@@ -698,6 +702,22 @@ impl Simulation {
             self.population.agents[agent_index].state.chased_at = Some(current_turn);
             self.population.agents[agent_index].state.chased_by = Some(kind);
             self.world.people_run_down += 1;
+        }
+
+        // Out of reach of every hunter of the kind that ran them down, they
+        // have got away from it, and run from the next one as from any (#437)
+        for (index, _) in &agent_positions {
+            let agent = &self.population.agents[*index];
+            let got_away = agent.state.chased_by.is_some()
+                && !self
+                    .world
+                    .animals
+                    .get_all()
+                    .iter()
+                    .any(|animal| animal.is_alive() && self.run_down_by_it_already(agent, animal));
+            if got_away {
+                self.population.agents[*index].state.chased_by = None;
+            }
         }
 
         // Warned off: frightened, deciding again now, and remembering the

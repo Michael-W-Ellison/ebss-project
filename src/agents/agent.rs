@@ -1221,7 +1221,7 @@ pub struct AgentState {
 
     /// The kind of hunter that last ran this one down. Run down once, they
     /// do not run from one of its kind again while it is within reach of
-    /// them (#437).
+    /// them; once none is, this is cleared (#437).
     #[serde(default)]
     pub chased_by: Option<String>,
 

@@ -13,7 +13,7 @@ use crate::world::{World, WorldConfig};
 
 const NOW: u32 = 600;
 
-/// A grown man who has just run nineteen paces from a lion.
+/// A grown person who has just run nineteen paces from a lion.
 fn ran_from_a_lion(how_hungry: f32) -> Simulation {
     let mut world = World::new(WorldConfig::default());
     world.animals.get_all_mut().clear();
@@ -49,10 +49,10 @@ fn a_starving_lion_runs_down_somebody_who_ran_from_it() {
 
     simulation.predators_try_their_luck_at(0);
 
-    let him = simulation.population.agents[0].state.position;
+    let them = simulation.population.agents[0].state.position;
     assert!(
-        paces_between(where_the_lion_is(&simulation), him) <= 1,
-        "the lion is at {:?} and he is at {him:?}",
+        paces_between(where_the_lion_is(&simulation), them) <= 1,
+        "the lion is at {:?} and they are at {them:?}",
         where_the_lion_is(&simulation)
     );
     assert_eq!(simulation.population.agents[0].state.chased_at, Some(NOW));
@@ -65,8 +65,8 @@ fn a_fed_lion_runs_down_somebody_who_ran_from_it_too() {
 
     simulation.predators_try_their_luck_at(0);
 
-    let him = simulation.population.agents[0].state.position;
-    assert!(paces_between(where_the_lion_is(&simulation), him) <= 1, "running sets it off, fed or not");
+    let them = simulation.population.agents[0].state.position;
+    assert!(paces_between(where_the_lion_is(&simulation), them) <= 1, "running sets it off, fed or not");
     assert_eq!(simulation.world.people_run_down, 1);
 }
 
@@ -148,8 +148,8 @@ fn somebody_past_a_lions_reach_has_got_away() {
     assert_eq!(where_the_lion_is(&simulation), (30, 31), "out of its reach at {reach}");
 }
 
-/// A grown man a lion has just run down, frightened of it, with the lion a
-/// pace off and his legs and health whole.
+/// A grown person a lion has just run down, frightened of it, with the lion
+/// a pace off and their legs and health whole.
 fn run_down_by_a_lion() -> Simulation {
     let mut simulation = ran_from_a_lion(0.0);
     simulation.predators_try_their_luck_at(0);
@@ -167,10 +167,10 @@ fn run_down_by_a_lion() -> Simulation {
 #[test]
 fn somebody_a_lion_has_run_down_does_not_run_from_it_again() {
     let simulation = run_down_by_a_lion();
-    assert_eq!(simulation.world.people_run_down, 1, "the lion should have run him down");
+    assert_eq!(simulation.world.people_run_down, 1, "the lion should have run them down");
 
-    let him = &simulation.population.agents[0];
-    let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
+    let them = &simulation.population.agents[0];
+    let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
 
     assert_eq!(branch, "run down, covers up");
     assert!(matches!(answer, Some(crate::environment::Action::Freeze)), "{answer:?}");
@@ -181,20 +181,42 @@ fn fear_alone_does_not_send_somebody_run_down_off_again() {
     let mut simulation = run_down_by_a_lion();
     // Somebody who could not face it, whom fear on its own sends running
     simulation.population.agents[0].state.life_stage = LifeStage::Child;
-    let him = &simulation.population.agents[0];
+    let them = &simulation.population.agents[0];
 
-    let answer = simulation.what_to_run_from(him, him.state.position);
+    let answer = simulation.what_to_run_from(them, them.state.position);
 
     assert!(matches!(answer, Some(crate::environment::Action::Freeze)), "{answer:?}");
 }
 
+/// Not for a day but for as long as a lion is near: a day on, with one
+/// still beside them, they stay where they are (#437).
 #[test]
-fn somebody_run_down_a_day_ago_runs_as_before() {
+fn somebody_run_down_a_day_ago_with_a_lion_still_near_stays() {
     let mut simulation = run_down_by_a_lion();
-    simulation.current_turn = NOW + crate::environment::seasons::ONCE_A_DAY;
-    let him = &simulation.population.agents[0];
+    simulation.current_turn = NOW + 2 * crate::environment::seasons::ONCE_A_DAY;
+    simulation.predators_try_their_luck_at(0);
+    let them = &simulation.population.agents[0];
 
-    let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
+    let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
+
+    assert_eq!(branch, "run down, covers up");
+    assert!(matches!(answer, Some(crate::environment::Action::Freeze)), "{answer:?}");
+}
+
+/// Once no lion is within reach of them they have got away, and run from
+/// the next one that comes up as from any.
+#[test]
+fn somebody_who_got_out_of_a_lions_reach_runs_from_the_next_as_before() {
+    let mut simulation = run_down_by_a_lion();
+    let at = simulation.population.agents[0].state.position;
+    simulation.world.animals.get_all_mut()[0].position = (at.0 + 200, at.1);
+    simulation.current_turn = NOW + 1;
+    simulation.predators_try_their_luck_at(0);
+    assert_eq!(simulation.population.agents[0].state.chased_by, None, "out of reach, the memory goes");
+
+    simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 1);
+    let them = &simulation.population.agents[0];
+    let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
 
     assert_ne!(branch, "run down, covers up");
     assert!(matches!(answer, Some(crate::environment::Action::FleeFrom { .. })), "{branch}: {answer:?}");
@@ -204,38 +226,38 @@ fn somebody_run_down_a_day_ago_runs_as_before() {
 fn somebody_run_down_by_a_polar_bear_still_runs_from_a_lion() {
     let mut simulation = run_down_by_a_lion();
     simulation.population.agents[0].state.chased_by = Some("polar_bear".to_string());
-    let him = &simulation.population.agents[0];
+    let them = &simulation.population.agents[0];
 
-    let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
+    let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
 
     assert_ne!(branch, "run down, covers up");
     assert!(matches!(answer, Some(crate::environment::Action::FleeFrom { .. })), "{branch}: {answer:?}");
 }
 
-/// Lions go about in twos. Run down by one, he does not run from the other
-/// when it comes up beside him: it would run him down the same (#437).
+/// Lions go about in twos. Run down by one, they do not run from the other
+/// when it comes up beside them: it would run them down the same (#437).
 #[test]
 fn somebody_run_down_by_one_lion_does_not_run_from_the_other() {
     let mut simulation = run_down_by_a_lion();
     let at = simulation.population.agents[0].state.position;
-    // The one that ran him down has gone off, and its mate is beside him
+    // The one that ran them down has gone off, and its mate is beside them
     simulation.world.animals.get_all_mut()[0].position = (at.0 + 60, at.1);
     simulation
         .world
         .spawn_animal("lion".to_string(), (at.0, at.1 - 1))
         .expect("a second lion should spawn");
-    let him = &simulation.population.agents[0];
+    let them = &simulation.population.agents[0];
 
-    let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
+    let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
 
     assert_eq!(branch, "run down, covers up");
     assert!(matches!(answer, Some(crate::environment::Action::Freeze)), "{answer:?}");
 }
 
 /// The whole of it, minute by minute, with the lion keeping two paces off
-/// him: somebody who covers up is not run down again, and a fed lion
-/// beside him leaves him be. Without the cover-up he runs every minute and
-/// is run down again every half hour.
+/// them: somebody who covers up is not run down again, and a fed lion
+/// beside them leaves them be. Without the cover-up they run every minute
+/// and are run down again every half hour.
 #[test]
 fn a_fed_lion_runs_somebody_down_once_and_no_more() {
     let mut simulation = run_down_by_a_lion();
@@ -244,9 +266,9 @@ fn a_fed_lion_runs_somebody_down_once_and_no_more() {
         simulation.current_turn = NOW + minute;
         let at = simulation.population.agents[0].state.position;
         simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 2);
-        let him = &simulation.population.agents[0];
+        let them = &simulation.population.agents[0];
         if let (_, Some(crate::environment::Action::FleeFrom { away_from })) =
-            simulation.what_this_threat_comes_to(him, him.state.position)
+            simulation.what_this_threat_comes_to(them, them.state.position)
         {
             simulation.fleeing_from(&away_from, 0);
         }
