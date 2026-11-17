@@ -278,3 +278,45 @@ fn a_fed_lion_runs_somebody_down_once_and_no_more() {
     assert_eq!(simulation.world.people_run_down, 1);
     assert_eq!(simulation.population.agents[0].state.health, health, "a fed lion strikes nobody standing");
 }
+
+/// Out of its strike but within its reach, they neither run nor cover up:
+/// they go about what they were doing (#437).
+#[test]
+fn somebody_run_down_walks_on_past_a_lion_out_of_its_strike() {
+    let mut simulation = run_down_by_a_lion();
+    let at = simulation.population.agents[0].state.position;
+    simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 8);
+    let them = &simulation.population.agents[0];
+
+    let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
+
+    assert_eq!(branch, "run down, walks on");
+    assert!(answer.is_none(), "{answer:?}");
+}
+
+/// The fear drive asks only about what they could not face: a child here.
+#[test]
+fn fear_alone_does_not_hold_somebody_run_down_still_past_a_lions_strike() {
+    let mut simulation = run_down_by_a_lion();
+    simulation.population.agents[0].state.life_stage = LifeStage::Child;
+    let at = simulation.population.agents[0].state.position;
+    simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 8);
+    let them = &simulation.population.agents[0];
+
+    assert!(simulation.what_to_run_from(them, them.state.position).is_none());
+    assert!(simulation.walks_on_past_what_ran_me_down(them, them.state.position));
+}
+
+#[test]
+fn somebody_never_run_down_runs_from_a_lion_out_of_its_strike() {
+    let mut simulation = run_down_by_a_lion();
+    simulation.population.agents[0].state.chased_by = None;
+    let at = simulation.population.agents[0].state.position;
+    simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 8);
+    let them = &simulation.population.agents[0];
+
+    let (branch, answer) = simulation.what_this_threat_comes_to(them, them.state.position);
+
+    assert!(matches!(answer, Some(crate::environment::Action::FleeFrom { .. })), "{branch}: {answer:?}");
+    assert!(!simulation.walks_on_past_what_ran_me_down(them, them.state.position));
+}

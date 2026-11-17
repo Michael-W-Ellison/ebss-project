@@ -278,14 +278,62 @@ impl Simulation {
     /// from and offered `SeekShelter` or nothing at all.
     ///
     /// Nearest rather than worst, because what you run from is what is close.
+    ///
+    /// Not from a hunter that has run this one down already (#437): within
+    /// its strike they cover up, and further off they run from it no more
+    /// and get nothing here (`walks_on_past_what_ran_me_down`).
     pub(in crate::analytics) fn what_to_run_from(
         &self,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
+        let closest = self.the_beast_i_could_not_face(agent, agent_position)?;
+
+        if self.run_down_by_it_already(agent, closest) {
+            return Self::within_its_strike(closest, agent_position).then_some(Action::Freeze);
+        }
+
+        Some(Action::FleeFrom {
+            away_from: (closest.position.0, closest.position.1, agent_position.2),
+        })
+    }
+
+    /// Whether the nearest thing this one could not face is a hunter that
+    /// has run them down already and is not close enough to strike: then
+    /// they go about what they were doing at a walk. Kept covered up while
+    /// one was anywhere within its reach, a wounded person lay five days
+    /// with lions about and died of the wounds and thirst (#437).
+    pub(in crate::analytics) fn walks_on_past_what_ran_me_down(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> bool {
+        self.the_beast_i_could_not_face(agent, agent_position).is_some_and(|closest| {
+            self.run_down_by_it_already(agent, closest) && !Self::within_its_strike(closest, agent_position)
+        })
+    }
+
+    /// Whether a beast is near enough to strike somebody standing here.
+    fn within_its_strike(
+        animal: &crate::environment::fauna::Animal,
+        agent_position: (i32, i32, i32),
+    ) -> bool {
+        (animal.position.0 - agent_position.0)
+            .abs()
+            .max((animal.position.1 - agent_position.1).abs())
+            <= Self::PREDATOR_STRIKE_RANGE
+    }
+
+    /// The nearest living wild thing, within a fright's carry, that this
+    /// one could not face.
+    fn the_beast_i_could_not_face(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<&crate::environment::fauna::Animal> {
         let here = (agent_position.0, agent_position.1);
 
-        let closest = self
+        self
             .world
             .animals
             .get_in_radius(here, Self::HOW_FAR_A_FRIGHT_CARRIES)
@@ -305,16 +353,7 @@ impl Simulation {
             })
             .min_by_key(|animal| {
                 (animal.position.0 - here.0).abs() + (animal.position.1 - here.1).abs()
-            })?;
-
-        // Not from a hunter that has run this one down already (#437)
-        if self.run_down_by_it_already(agent, closest) {
-            return Some(Action::Freeze);
-        }
-
-        Some(Action::FleeFrom {
-            away_from: (closest.position.0, closest.position.1, agent_position.2),
-        })
+            })
     }
 
     /// How far off something has to be before it stops being worth running
@@ -349,16 +388,20 @@ impl Simulation {
         let answer = self.what_this_threat_comes_to_at_first(agent, agent_position);
 
         // Every way of getting away from a hunter that has already run this
-        // one down, and is still within reach of them, is the next chase:
-        // they cover up where they are instead (#437).
+        // one down, and is still within reach of them, is the next chase.
+        // Within its strike they cover up where they are; further off they
+        // go about what they were doing at a walk (#437).
         if let (_, Some(Action::FleeFrom { away_from })) = answer {
             let the_one_that_ran_me_down = self.world.animals.get_all().iter().find(|animal| {
                 animal.is_alive()
                     && (animal.position.0 - away_from.0).abs().max((animal.position.1 - away_from.1).abs()) <= 1
                     && self.run_down_by_it_already(agent, animal)
             });
-            if the_one_that_ran_me_down.is_some() {
-                return ("run down, covers up", Some(Action::Freeze));
+            if let Some(hunter) = the_one_that_ran_me_down {
+                if Self::within_its_strike(hunter, agent_position) {
+                    return ("run down, covers up", Some(Action::Freeze));
+                }
+                return ("run down, walks on", None);
             }
         }
         answer

@@ -325,9 +325,10 @@ impl Simulation {
     /// pace off, every half hour, and were struck about one chase in ten:
     /// one person was run down fifty-four times in a day, and sixteen people
     /// died of it in thirty-two worlds that lost none to a hunter before
-    /// (#437). Run down by it once, they stay where they are while one of
-    /// its kind is within reach, and a fed hunter leaves somebody who is
-    /// not running alone.
+    /// (#437). Run down by it once, they do not run from one of its kind
+    /// while one is within reach: they cover up if it is close enough to
+    /// strike and walk on if it is not, and a fed hunter leaves somebody
+    /// who is not running alone.
     ///
     /// For as long as one is within reach, not for a day: kept for a day,
     /// people who stayed beside a polar bear or a pair of lions ran from it

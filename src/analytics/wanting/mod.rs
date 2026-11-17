@@ -1153,7 +1153,12 @@ impl Simulation {
                     >= Self::A_FRIGHT_WORTH_THE_NAME
                     && !agent.surroundings.could_face_it;
 
-                if !worth_running_from && !agent.surroundings.recently_hurt {
+                // Past a hunter that has run them down, not close enough
+                // to strike, they run no more: they go about what they
+                // were doing (#437).
+                let walking_on = self.walks_on_past_what_ran_me_down(agent, agent_position);
+
+                if walking_on || (!worth_running_from && !agent.surroundings.recently_hurt) {
                     // Nothing in the field. But this drive also rises on the
                     // fear with no adversary in it - being a week off
                     // starving - and a drive that rises has to end in an
