@@ -1197,6 +1197,34 @@ pub struct AgentState {
     #[serde(default)]
     pub an_open_wound: f32,
 
+    /// The hardest blow that went into the wound that is open: what this
+    /// one knows the thing in front of them can do. Somebody judging whether
+    /// to stand again judges by where the next blow like it would leave them
+    /// (#435).
+    #[serde(default)]
+    pub the_hardest_blow_in_it: f32,
+
+    /// The tick this one last ran beaten down. Still within reach of a
+    /// hunter after it, they have been run down (#436).
+    #[serde(default)]
+    pub ran_beaten_down_at: Option<u32>,
+
+    /// Where the thing this one last ran from stood, and the tick they ran.
+    /// A hungry hunter that was standing there gives chase (#437).
+    #[serde(default)]
+    pub ran_from: Option<(i32, i32, u32)>,
+
+    /// The tick a hunter last ran this one down. One chase in a half hour:
+    /// a hunter that is shaken off a second time lets them go (#437).
+    #[serde(default)]
+    pub chased_at: Option<u32>,
+
+    /// The tick this one last covered up: beaten down, they stopped
+    /// fighting and stayed where they were (#431). A beast that drives
+    /// people off its ground lets up on somebody who has (#432).
+    #[serde(default)]
+    pub covered_up_at: Option<u32>,
+
     /// How much health an open wound is losing a half hour (#351).
     ///
     /// Opened with the wound by a blow and slowing as the blood clots
@@ -1287,6 +1315,11 @@ impl AgentState {
             what_has_taken_health: Vec::new(),
             salt_in_me: 0.0,
             an_open_wound: 0.0,
+            covered_up_at: None,
+            the_hardest_blow_in_it: 0.0,
+            ran_beaten_down_at: None,
+            ran_from: None,
+            chased_at: None,
             bleeding: 0.0,
             wound_dressed_until: 0,
             wound_cleaned: false,
@@ -1464,6 +1497,13 @@ impl AgentState {
             self.wound_stitched = false;
             self.wound_poulticed = false;
         }
+        // The blow is remembered with the wound it went into, and a wound
+        // that had closed starts the count again (#435)
+        self.the_hardest_blow_in_it = if self.an_open_wound <= 0.0 {
+            amount
+        } else {
+            self.the_hardest_blow_in_it.max(amount)
+        };
         self.an_open_wound = self.an_open_wound.max(opened);
         // And a hard enough blow breaks something (#402)
         self.a_blow_may_break_a_bone(amount);
@@ -2077,6 +2117,15 @@ pub struct Agent {
     /// better.
     #[serde(default)]
     pub field_pests: std::collections::BTreeMap<String, (f64, f64)>,
+    /// What this one's crops have come to, by what was sown (#421): energy
+    /// put in, energy taken off, and how many crops. What lets somebody who
+    /// has grown two kinds see which pays.
+    #[serde(default)]
+    pub crop_returns: std::collections::BTreeMap<String, (f64, f64, u32)>,
+    /// Whether each of this one's last few crops paid, the latest last
+    /// (#417): what says whether another field would be worth breaking.
+    #[serde(default)]
+    pub crops_lately: Vec<bool>,
     /// Every swap this one has tried, by `what_that_swap_is_called`.
     ///
     /// Kept apart from `lessons` for the same reason as `times_laid_up`. A
@@ -2347,6 +2396,8 @@ impl Agent {
             store_losses: std::collections::BTreeMap::new(),
             seed_line: 0.0,
             field_pests: std::collections::BTreeMap::new(),
+            crop_returns: std::collections::BTreeMap::new(),
+            crops_lately: Vec::new(),
             swaps_tried: std::collections::BTreeSet::new(),
             what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
@@ -3885,6 +3936,11 @@ impl Agent {
     pub const A_LINED_STORE_GNAWED: &'static str = "a lined store gnawed";
     pub const LINED_STORES_GNAWED_BEFORE_SEALING: u32 = 3;
 
+    /// And what it calls one opened by somebody who grows a harvest, and how
+    /// many before the store goes up off the ground: a granary (#420).
+    pub const A_LINED_STORE_GNAWED_BY_A_FARMER: &'static str = "a lined store gnawed by a farmer";
+    pub const LINED_STORES_GNAWED_BEFORE_A_GRANARY: u32 = 6;
+
     /// What being laid up by filth teaches (#357): enough of it, and a
     /// midden; with a midden and a people settled, a latrine.
     pub fn what_filth_teaches(&mut self) {
@@ -3922,6 +3978,161 @@ impl Agent {
     /// health came back at a flat rate and that was the end of it. A wound
     /// that turns is why a man with aloe is better off than a man without.
     pub const OFF_A_WOUND_THAT_TURNED: &'static str = "a wound that turned";
+
+    /// What a crop came to, against what this one put into it (#416).
+    ///
+    /// Planting is food safety bought with time and energy: a turn breaking
+    /// ground, the seed that was not eaten, turns weeding, all laid down
+    /// against a crop that should give back more than went into it. A crop
+    /// that does is a quiet satisfaction. One that does not - fell in the
+    /// field, came up thin, was taken by the weeds and the vermin - is the
+    /// work and the seed thrown away, and it weighs on the people who put
+    /// them in, as much as a temperament lets it: grief comes harder to the
+    /// empathic and slides off the cold-hearted. It is also a try that did
+    /// not work, both at farming and at that crop, which is what the next
+    /// choice of whether to farm, and what to sow, is made from.
+    pub fn what_my_crop_came_to(&mut self, put_in: f32, came_back: f32, called: Option<&str>) {
+        use super::EmotionSource;
+        use crate::agents::practices::Practice;
+
+        if put_in <= 0.0 {
+            return;
+        }
+        self.what_i_have_seen_crops_come_to(put_in, came_back, called);
+        if came_back < put_in {
+            // How much of what was put in is gone: all of it for a crop that
+            // fell with nobody's hand on it
+            let lost = 1.0 - came_back / put_in;
+            self.emotions.add_sadness_with_traits(
+                EmotionSource::Event(Self::A_CROP_THAT_FAILED.to_string()),
+                Self::WHAT_A_FAILED_CROP_WEIGHS * lost,
+                &self.traits,
+            );
+            self.practices.record_outcome(Practice::Farming, false);
+            if let Some(called) = called {
+                self.lessons.record_particular(&format!("sow:{called}"), false);
+            }
+        } else {
+            let gained = (came_back / put_in - 1.0).min(1.0);
+            self.emotions.add_happiness_with_traits(
+                EmotionSource::Event(Self::A_CROP_THAT_PAID.to_string()),
+                Self::WHAT_A_CROP_THAT_PAID_CHEERS * gained,
+                &self.traits,
+            );
+        }
+    }
+
+    /// Keep the account of a crop of this one's (#417, #421): what it came
+    /// to against its kind, and whether it paid among the last few. A
+    /// farmer who has lost crops of their own enough times thinks to keep
+    /// the fields they have rather than break more; one who has grown two
+    /// kinds long enough to see one plainly outpay the other settles on it.
+    fn what_i_have_seen_crops_come_to(&mut self, put_in: f32, came_back: f32, called: Option<&str>) {
+        self.crops_lately.push(came_back >= put_in);
+        if self.crops_lately.len() > Self::CROPS_REMEMBERED {
+            self.crops_lately.remove(0);
+        }
+        if let Some(called) = called {
+            let account = self.crop_returns.entry(called.to_string()).or_insert((0.0, 0.0, 0));
+            account.0 += f64::from(put_in);
+            account.1 += f64::from(came_back);
+            account.2 += 1;
+        }
+        if came_back < put_in {
+            self.skills.made_one(Self::A_CROP_OF_MINE_LOST);
+            if self.skills.times_made(Self::A_CROP_OF_MINE_LOST) >= Self::CROPS_LOST_BEFORE_KEEPING_FIELDS {
+                self.it_comes_to_me("know:keep_fields", Self::CROPS_LOST_BEFORE_KEEPING_FIELDS);
+            }
+        }
+        if self.my_staple_crop().is_some() && !self.knows_the_way("staple") {
+            self.came_to_it_myself("know:staple");
+        }
+    }
+
+    /// What the practice record calls a crop of this one's that ripened
+    /// short of its full stand, and how many before somebody who keeps the
+    /// seasons thinks to sow ahead of them (#418).
+    pub const A_CROP_OF_MINE_SHORT: &'static str = "acropofmineshort";
+    pub const SHORT_CROPS_BEFORE_A_CALENDAR: u32 = 3;
+
+    /// What the practice record calls an armful taken off a field worn below
+    /// what its ground was, and how many before somebody who knows muck does
+    /// a field good carries it to the worn ones on purpose (#419): about a
+    /// season's gathering off them.
+    pub const A_CROP_OFF_WORN_GROUND: &'static str = "acropoffwornground";
+    pub const CROPS_OFF_WORN_GROUND_BEFORE_MANURING: u32 = 20;
+
+    /// How many of their last crops somebody keeps in mind (#417).
+    pub const CROPS_REMEMBERED: usize = 6;
+
+    /// What the practice record calls a crop of this one's that came back
+    /// less than went into it, and how many before keeping the fields one
+    /// has comes to mind (#417): a season or two of them.
+    pub const A_CROP_OF_MINE_LOST: &'static str = "acropofminelost";
+    pub const CROPS_LOST_BEFORE_KEEPING_FIELDS: u32 = 3;
+
+    /// Whether this one's crops lately have been paying (#417): no more of
+    /// the last few lost than paid. Somebody who has not had three yet
+    /// gives a field the benefit of the doubt.
+    pub fn are_my_crops_paying(&self) -> bool {
+        Self::do_these_crops_pay(&self.crops_lately)
+    }
+
+    /// Whether these crops, paid or lost, have been paying: no more lost
+    /// than paid, and fewer than three gets the benefit of the doubt (#417,
+    /// #423).
+    pub fn do_these_crops_pay(crops: &[bool]) -> bool {
+        if crops.len() < 3 {
+            return true;
+        }
+        let paid = crops.iter().filter(|paid| **paid).count();
+        paid * 2 >= crops.len()
+    }
+
+    /// What a crop of this kind has given back for each unit put into it,
+    /// in this one's experience, and how many crops that is (#421).
+    pub fn what_this_crop_pays_me(&self, called: &str) -> Option<(f64, u32)> {
+        let (put_in, came_back, crops) = *self.crop_returns.get(called)?;
+        (put_in > 0.0).then(|| (came_back / put_in, crops))
+    }
+
+    /// The crop this one has settled on as their staple, if they have grown
+    /// enough of two kinds to tell (#421): the best paying of the kinds
+    /// with `CROPS_BEFORE_A_STAPLE` crops behind them, if it paid
+    /// `PLAINLY_WORSE` times the worst of them.
+    pub fn my_staple_crop(&self) -> Option<String> {
+        let known: Vec<(&String, f64)> = self
+            .crop_returns
+            .iter()
+            .filter(|(_, (put_in, _, crops))| *crops >= Self::CROPS_BEFORE_A_STAPLE && *put_in > 0.0)
+            .map(|(called, (put_in, came_back, _))| (called, came_back / put_in))
+            .collect();
+        if known.len() < 2 {
+            return None;
+        }
+        let (best, pays) = known
+            .iter()
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| b.0.cmp(a.0)))?;
+        let worst = known.iter().map(|(_, pays)| *pays).fold(f64::INFINITY, f64::min);
+        (*pays > 0.0 && *pays >= worst * Self::PLAINLY_WORSE).then(|| (*best).clone())
+    }
+
+    /// How many crops of a kind before somebody would say what it pays
+    /// (#421): a few seasons of it.
+    pub const CROPS_BEFORE_A_STAPLE: u32 = 4;
+
+    /// What the sadness and happiness of a crop are laid to (#416).
+    pub const A_CROP_THAT_FAILED: &'static str = "a crop that failed";
+    pub const A_CROP_THAT_PAID: &'static str = "a crop that paid";
+
+    /// The sadness of a crop that came to nothing at all, less as more of it
+    /// came back: more than food gone off in the hand, which is worry over a
+    /// meal, and well short of a child lost.
+    pub const WHAT_A_FAILED_CROP_WEIGHS: f32 = 0.3;
+
+    /// And the happiness of a crop that gave back twice what went in, or
+    /// more.
+    pub const WHAT_A_CROP_THAT_PAID_CHEERS: f32 = 0.1;
 
     /// Food went off in this agent's own hands.
     ///
@@ -4332,7 +4543,7 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 14] = [
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 19] = [
         "selective_harvest",
         "coppice",
         "clean_water",
@@ -4348,6 +4559,12 @@ impl Agent {
         "division_of_labour",
         "tally",
         "measured_sowing",
+        // The fourth stage of the agricultural path (#417 to #421)
+        "keep_fields",
+        "planting_calendar",
+        "manure_fields",
+        "granary",
+        "staple",
     ];
 
     /// What the practice record calls a gather from a wild stand within a
@@ -8948,6 +9165,7 @@ impl Agent {
             Action::DigOutMidden => "digoutmidden".to_string(),
             Action::LineStore => "linestore".to_string(),
             Action::HedgeAField => "hedgeafield".to_string(),
+            Action::RaiseGranary => "raisegranary".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),

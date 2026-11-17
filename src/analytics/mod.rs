@@ -219,6 +219,21 @@ pub struct Simulation {
     pub(crate) ways_weighed_by_the_hand: std::cell::Cell<u64>,
     /// And how many times a store was reckoned off a tally (#408).
     pub(crate) stores_reckoned_by_tally: std::cell::Cell<u64>,
+    /// How many times a farmer who keeps the fields they have left ground
+    /// unbroken because their crops lately had not paid (#417).
+    pub(crate) ground_left_unbroken: std::cell::Cell<u64>,
+    /// And by somebody who does not keep fields, going along with a camp
+    /// that does (#423).
+    pub(crate) ground_left_by_the_camps_way: std::cell::Cell<u64>,
+    /// Times somebody would have broken ground more than two walks from
+    /// home and did not (#425).
+    pub(crate) ground_left_too_far_out: std::cell::Cell<u64>,
+    /// Person-nights a crop standing by the camp kept it from drifting
+    /// off its fields (#427).
+    pub(crate) nights_a_crop_held_the_camp: std::cell::Cell<u64>,
+    /// And how many times somebody who keeps a planting calendar put a crop
+    /// by for its time rather than sow it late (#418).
+    pub(crate) sowings_put_off: std::cell::Cell<u64>,
     /// The route search's bookkeeping, kept between searches; see
     /// `the_way_there` (#315).
     pub(crate) route_scratch: std::cell::RefCell<RouteScratch>,
@@ -443,6 +458,11 @@ impl Simulation {
             camp_move_proposed: Default::default(),
             ways_weighed_by_the_hand: Default::default(),
             stores_reckoned_by_tally: Default::default(),
+            ground_left_unbroken: Default::default(),
+            ground_left_by_the_camps_way: Default::default(),
+            ground_left_too_far_out: Default::default(),
+            nights_a_crop_held_the_camp: Default::default(),
+            sowings_put_off: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),
             minute_of_the_half_hour: 0,
@@ -519,6 +539,7 @@ impl Simulation {
                 Some(ActionType::Farming)
             }
             Action::LineStore => Some(ActionType::Building),
+            Action::RaiseGranary => Some(ActionType::Building),
             Action::HedgeAField => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
             Action::TakeFrom { .. } | Action::RobFishTrap { .. } => Some(ActionType::Social),
@@ -2086,6 +2107,11 @@ impl Simulation {
             camp_move_proposed: Default::default(),
             ways_weighed_by_the_hand: Default::default(),
             stores_reckoned_by_tally: Default::default(),
+            ground_left_unbroken: Default::default(),
+            ground_left_by_the_camps_way: Default::default(),
+            ground_left_too_far_out: Default::default(),
+            nights_a_crop_held_the_camp: Default::default(),
+            sowings_put_off: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),
             minute_of_the_half_hour: 0,

@@ -294,6 +294,10 @@ pub struct World {
     #[serde(default)]
     pub woken_by_the_watch: u64,
 
+    /// People a hungry hunter followed when they ran, and closed on (#437).
+    #[serde(default)]
+    pub people_run_down: u64,
+
     /// Blows and warnings from beasts, by night and by day (#379).
     #[serde(default)]
     pub beasts_struck_by_night: u64,
@@ -348,6 +352,48 @@ pub struct World {
     /// Units of field crop that went into somebody's pack (#395).
     #[serde(default)]
     pub field_crop_brought_in: u64,
+    /// Field crops that gave back less than was put into them, and crops
+    /// that gave back more (#416).
+    #[serde(default)]
+    pub crops_that_failed: u64,
+    #[serde(default)]
+    pub crops_that_paid: u64,
+    /// Who put work into a crop that ripened short today, one entry each
+    /// (#418): what they see of it.
+    #[serde(default)]
+    pub crops_ripened_short_for: Vec<uuid::Uuid>,
+    /// Muck carried to a worn field and spread on it, by somebody who
+    /// manures fields (#419); granaries put up (#420); and fields sown with
+    /// somebody's staple (#421).
+    #[serde(default)]
+    pub worn_fields_mucked: u64,
+    #[serde(default)]
+    pub granaries_built: u64,
+    #[serde(default)]
+    pub staple_fields_sown: u64,
+    /// New ground broken, by who broke it (#423): somebody who keeps the
+    /// fields they have and whose crops are paying, one who keeps them but
+    /// has not had enough crops yet to say, one who keeps them though their
+    /// crops are not paying, and one who does not keep them at all.
+    #[serde(default)]
+    pub new_ground_broken_by: [u64; 4],
+    /// New ground broken more than a walk to a field from the breaker's
+    /// home (#423).
+    #[serde(default)]
+    pub new_ground_broken_away_from_home: u64,
+    /// Field crop fallen, by how far the field was from the nearest home
+    /// when it fell (#424): within a walk to a field
+    /// (`FIELD_WALK_RADIUS`), within two walks, and farther or with
+    /// nobody living anywhere.
+    #[serde(default)]
+    pub field_crop_fallen_by_distance: [u64; 3],
+    /// Field crop brought in, the same way (#424).
+    #[serde(default)]
+    pub field_crop_brought_in_by_distance: [u64; 3],
+    /// Where field crop fell today and how much, for the people's side to
+    /// sort by how far it was from home (#424). Not kept: it is a day long.
+    #[serde(skip)]
+    pub field_crop_fallen_where: Vec<(Position, u32)>,
     /// Field crops that ripened at their full stand, and that ripened short
     /// on the last day of their season (#395).
     #[serde(default)]
@@ -417,6 +463,11 @@ pub struct World {
     /// over, since the people about were last told (#395).
     #[serde(default)]
     pub crops_lost_to_the_season: Vec<Position>,
+    /// Field crops that have come in or been lost since the people who put
+    /// work into them were last told (#416): what the crop was, and who put
+    /// how much into it, against how many units came off it.
+    #[serde(default)]
+    pub crops_settled: Vec<(ResourceType, Vec<(uuid::Uuid, f32)>, u32)>,
     /// Things a child was taught that a grown person of their camp knew
     /// (#388).
     #[serde(default)]
@@ -774,6 +825,8 @@ impl Pit {
     pub fn how_it_is_shut(&self) -> &'static str {
         if !self.covered {
             "open"
+        } else if self.is_a_granary() {
+            "raised"
         } else if self.holds.iter().any(|item| item.item_id == "stoneware" || item.item_id == "sealedbasket") {
             "sealed"
         } else if self.is_lined() {
@@ -787,6 +840,8 @@ impl Pit {
     pub fn what_vermin_get_at(&self) -> f32 {
         if !self.covered {
             Self::VERMIN_IN_AN_OPEN_HOLE
+        } else if self.is_a_granary() {
+            Self::VERMIN_PAST_A_POT
         } else if self.holds.iter().any(|item| item.item_id == "stoneware" || item.item_id == "sealedbasket") {
             Self::VERMIN_PAST_A_POT
         } else if self.is_lined() {
@@ -832,7 +887,36 @@ impl Pit {
 
     /// Whether there is room for more.
     pub fn has_room(&self) -> bool {
-        self.how_much_is_in_it() < Self::WHAT_A_PIT_TAKES
+        self.how_much_is_in_it() < self.what_it_takes()
+    }
+
+    /// How much this store holds: a pit's worth, or a granary's.
+    pub fn what_it_takes(&self) -> u32 {
+        if self.is_a_granary() {
+            Self::WHAT_A_GRANARY_TAKES
+        } else {
+            Self::WHAT_A_PIT_TAKES
+        }
+    }
+
+    /// And how much more it would take.
+    pub fn how_much_room_is_left(&self) -> u32 {
+        self.what_it_takes().saturating_sub(self.how_much_is_in_it())
+    }
+
+    /// What the floor of poles a granary stands on is called among what a
+    /// store holds (#420): kept with it, as a lining is, and not food.
+    pub const GRANARY: &'static str = "granary";
+
+    /// A store raised on a floor of poles under a thatch, for a harvest
+    /// (#420): four pits' worth.
+    pub const WHAT_A_GRANARY_TAKES: u32 = 4 * Self::WHAT_A_PIT_TAKES;
+
+    /// Whether this store is a granary (#420): up off the ground where the
+    /// burrowers cannot get in and the damp does not come up, so vermin take
+    /// next to nothing, as from a pot, and it keeps as a lined store does.
+    pub fn is_a_granary(&self) -> bool {
+        self.holds.iter().any(|item| item.item_id == Self::GRANARY)
     }
 
     /// Whether there is anything in it worth walking to.
@@ -988,8 +1072,18 @@ impl Pit {
     /// bury is made on cannot drift apart - two spellings of that, and the
     /// second would be the one the decision was made on.
     pub fn with_the_lid_on(&self) -> f32 {
-        Self::BARE_EARTH * self.what_it_is_lined_with()
+        let lined_with = self.what_it_is_lined_with();
+        // Up off the ground and out of the wet, a granary keeps at least as a
+        // lined store does (#420)
+        if self.is_a_granary() {
+            return Self::BARE_EARTH * lined_with.min(Self::WHAT_A_GRANARY_KEEPS);
+        }
+        Self::BARE_EARTH * lined_with
     }
+
+    /// What a granary's floor and thatch are worth to keeping, as a lining
+    /// is: a basket's half (#420).
+    const WHAT_A_GRANARY_KEEPS: f32 = 0.5;
 
     /// What the best thing in here is worth as a lining.
     ///
@@ -2054,6 +2148,7 @@ impl World {
             beasts_the_thorns_turned: 0,
             watches_kept: 0,
             woken_by_the_watch: 0,
+            people_run_down: 0,
             beasts_struck_by_night: 0,
             beasts_struck_by_day: 0,
             beasts_warned_by_night: 0,
@@ -2071,6 +2166,17 @@ impl World {
             stores_sealed: 0,
             field_crop_fallen: 0,
             field_crop_brought_in: 0,
+            crops_that_failed: 0,
+            crops_that_paid: 0,
+            crops_ripened_short_for: Vec::new(),
+            worn_fields_mucked: 0,
+            granaries_built: 0,
+            staple_fields_sown: 0,
+            new_ground_broken_by: [0; 4],
+            new_ground_broken_away_from_home: 0,
+            field_crop_fallen_by_distance: [0; 3],
+            field_crop_brought_in_by_distance: [0; 3],
+            field_crop_fallen_where: Vec::new(),
             crops_ripened_full: 0,
             crops_ripened_short: 0,
             fields_hedged: 0,
@@ -2097,6 +2203,7 @@ impl World {
             fields_sown_measured: 0,
             beasts_lately_seen: Vec::new(),
             crops_lost_to_the_season: Vec::new(),
+            crops_settled: Vec::new(),
             lessons_taught: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
@@ -4048,16 +4155,36 @@ impl World {
             if taken > 0 {
                 self.grid.a_crop_came_off(&at, now);
             }
+            // What the work put into it has brought back so far (#416)
+            resource.taken_off_this_crop = resource.taken_off_this_crop.saturating_add(taken);
 
-            if resource.the_harvest_is_in() {
+            let came_to_an_end = if resource.the_harvest_is_in() {
                 // Three quarters of the ripe crop has come off by hand
                 self.grid
                     .the_harvest_is_in(&at, resource.resource_type.feeds_the_ground(), now);
                 resource.it_is_growing_again();
+                true
             } else if resource.ripe_stand > 0 && resource.what_can_be_taken() == 0 {
                 // Or it fell, or was eaten off, before anybody brought it in.
                 // Nobody's hand took it, so it wears nothing.
                 resource.it_is_growing_again();
+                true
+            } else {
+                false
+            };
+
+            // Either way the crop is over, and what was put into it is set
+            // against what came off it, for the people who put it in (#416).
+            // What grows on afterwards had nothing put into it, and is
+            // nobody's loss.
+            if came_to_an_end && !resource.put_into_this_crop.is_empty() {
+                self.crops_settled.push((
+                    resource.resource_type,
+                    std::mem::take(&mut resource.put_into_this_crop),
+                    std::mem::take(&mut resource.taken_off_this_crop),
+                ));
+            } else if came_to_an_end {
+                resource.taken_off_this_crop = 0;
             }
         }
     }
@@ -4532,7 +4659,11 @@ impl World {
             let a_growing_day =
                 Self::a_day_for_a_node(resource, terrain_type, what_the_ground_yields, kept, &day);
             if ripe_before && !resource.resource_type.is_it_bearing(day.today) {
-                self.field_crop_fallen += u64::from(standing_before.saturating_sub(resource.amount));
+                let fell = standing_before.saturating_sub(resource.amount);
+                self.field_crop_fallen += u64::from(fell);
+                if fell > 0 {
+                    self.field_crop_fallen_where.push((resource.position, fell));
+                }
                 // The first day of it, which the people about see (#395)
                 let yesterday = (day.today + crate::environment::seasons::DAYS_PER_YEAR - 1)
                     % crate::environment::seasons::DAYS_PER_YEAR;
@@ -4557,6 +4688,9 @@ impl World {
                         self.crops_ripened_full += 1;
                     } else {
                         self.crops_ripened_short += 1;
+                        // Seen by whoever put work into it (#418)
+                        self.crops_ripened_short_for
+                            .extend(resource.put_into_this_crop.iter().map(|(who, _)| *who));
                     }
                     resource.it_has_ripened();
                     if resource.resource_type.feeds_the_ground() {

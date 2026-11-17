@@ -184,9 +184,34 @@ impl Simulation {
             ));
         }
 
+        // Nothing broken for a crop out of its time, by somebody who keeps a
+        // planting calendar (#418). Asked before the ground is broken, since
+        // a calendar says nothing about the ground.
+        let today = self.world.climate.calendar.day_of_year;
+        if Self::what_this_one_would_sow_on(&self.population.agents[agent_index], 1.0, Some(today)).is_none() {
+            return ActionResult::failure("Nothing to sow that is in its time".to_string());
+        }
+
         // Broken, and on the record as a field from today: what kind of ground
         // it is and what grade it was, which a rest brings it back to.
         let now = self.world.turn;
+        if !crate::world::Terrain::new(ground).is_cultivated() {
+            let agent = &self.population.agents[agent_index];
+            let who = if !agent.knows_the_way("keep_fields") {
+                3
+            } else if agent.crops_lately.len() < 3 {
+                1
+            } else if agent.are_my_crops_paying() {
+                0
+            } else {
+                2
+            };
+            self.world.new_ground_broken_by[who] += 1;
+            let home = Self::where_this_one_lives(agent);
+            if !Self::within((tile_position.x, tile_position.y), home, Self::FIELD_WALK_RADIUS as i32) {
+                self.world.new_ground_broken_away_from_home += 1;
+            }
+        }
         self.world.grid.break_ground(&tile_position, now);
 
         // What goes in the ground is what the agent has to put in it,
@@ -209,10 +234,25 @@ impl Simulation {
             self.world.grid.how_good_the_ground_is(&tile_position)
         };
 
-        let sown = Self::what_this_one_would_sow(
+        // By a planting calendar, only what is in its time (#418)
+        let Some(sown) = Self::what_this_one_would_sow_on(
             &self.population.agents[agent_index],
             how_good_the_ground_is,
-        );
+            Some(today),
+        ) else {
+            return ActionResult::failure("Nothing to sow that is in its time".to_string());
+        };
+
+        // A field of the crop somebody has settled on (#421)
+        {
+            let agent = &self.population.agents[agent_index];
+            let staple = agent.knows_the_way("staple").then(|| agent.my_staple_crop()).flatten();
+            if staple.is_some_and(|called| {
+                Self::what_can_be_sown().into_iter().any(|(name, crop, _)| name == called && crop == sown)
+            }) {
+                self.world.staple_fields_sown += 1;
+            }
+        }
 
         // The seed itself goes in the ground. Sowing was free before
         // this, which made a field a thing you got for a day's digging
@@ -266,6 +306,13 @@ impl Simulation {
         if sown_of == Some(crate::agents::Agent::SEED) {
             field.bred = self.population.agents[agent_index].seed_line;
         }
+        // What this crop has cost already: the turn of hard work, and the
+        // handful that went in the ground instead of into the sower (#416)
+        let seed_cost = if sown_of.is_some() { self.what_an_item_of_this_crop_is_worth(sown) } else { 0.0 };
+        field.somebody_put_into_the_crop(
+            self.population.agents[agent_index].id,
+            Self::what_a_turn_of_this_work_costs(Self::BREAKING_GROUND_COSTS) + seed_cost,
+        );
         self.world.put_a_node_down(field);
 
         let agent = &mut self.population.agents[agent_index];
@@ -288,8 +335,30 @@ impl Simulation {
 
         ActionResult::success()
             .with_drive_change(DriveType::Sustenance, -0.4)
-            .with_energy_cost(12.0)
+            .with_energy_cost(Self::BREAKING_GROUND_COSTS)
             .with_message("Broke ground and sowed a field".to_string())
+    }
+
+    /// What a turn breaking ground and sowing it costs, and a turn weeding.
+    pub(in crate::analytics) const BREAKING_GROUND_COSTS: f32 = 12.0;
+    pub(in crate::analytics) const WEEDING_COSTS: f32 = 7.0;
+
+    /// What a turn of work at this cost takes out of a body, in the energy
+    /// food is reckoned in (#416): a turn's worth of minutes, burned at the
+    /// rate the work burns.
+    pub(in crate::analytics) fn what_a_turn_of_this_work_costs(energy_cost: f32) -> f32 {
+        crate::environment::seasons::MINUTES_PER_TURN as f32
+            * crate::agents::physiology::what_the_work_costs(energy_cost)
+    }
+
+    /// What one handful of this crop is worth to eat, in energy (#416).
+    pub(in crate::analytics) fn what_an_item_of_this_crop_is_worth(&self, crop: crate::world::ResourceType) -> f32 {
+        use crate::agents::physiology::{what_a_unit_of_this_is_worth, ENERGY_OF_ORDINARY_FOOD, UNITS_IN_ONE_ITEM};
+        let energy = Self::edible_item_for(crop)
+            .and_then(|item| self.food_database.get(&item))
+            .map(|template| template.base_nutrition.energy)
+            .unwrap_or(ENERGY_OF_ORDINARY_FOOD);
+        UNITS_IN_ONE_ITEM * what_a_unit_of_this_is_worth(energy)
     }
 
     /// How often seed thrown by the eye goes in too thin for the ground, and
@@ -550,6 +619,10 @@ impl Simulation {
             .copied();
         if let Some(index) = standing_at {
             self.looking_at_the_crop(agent_index, index);
+            // And a turn's work into the crop (#416)
+            let who = self.population.agents[agent_index].id;
+            self.world.resources[index]
+                .somebody_put_into_the_crop(who, Self::what_a_turn_of_this_work_costs(Self::WEEDING_COSTS));
         }
         let standing = standing_at.map(|index| {
             let resource = &self.world.resources[index];
@@ -618,7 +691,7 @@ impl Simulation {
 
         ActionResult::success()
             .with_drive_change(DriveType::Sustenance, -0.2)
-            .with_energy_cost(7.0)
+            .with_energy_cost(Self::WEEDING_COSTS)
             .with_message(format!("Worked the field, clearing {cleared:.2}"))
     }
 
@@ -689,7 +762,12 @@ impl Simulation {
         // itself: muck tipped on a field that can still take it is muck that
         // will tell, and muck tipped anywhere else never will.
         let now = self.world.turn;
+        let worn = self.world.grid.field_at(&tile_position).is_some_and(|field| field.grade < field.natural);
         let worked = self.world.grid.somebody_mucked(&tile_position, worth, now);
+        // Carried to a worn field on purpose (#419)
+        if worked && worn && self.population.agents[agent_index].knows_the_way("manure_fields") {
+            self.world.worn_fields_mucked += 1;
+        }
 
         let agent = &mut self.population.agents[agent_index];
         agent.practices.record_outcome(Practice::SpreadingMuck, worked);

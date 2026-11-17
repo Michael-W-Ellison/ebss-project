@@ -297,7 +297,8 @@ fn a_starving_predator_takes_what_it_can_get() {
 /// starve in the middle of a village.
 #[test]
 fn a_hungry_predator_turns_on_the_settlement() {
-    fn maulings(hungry: bool) -> usize {
+    /// Maulings, and those of them that did not end a chase.
+    fn maulings(hungry: bool) -> (usize, usize) {
         let mut world = World::new(WorldConfig::default());
         world.animals.get_all_mut().clear();
 
@@ -330,6 +331,7 @@ fn a_hungry_predator_turns_on_the_settlement() {
         }
 
         let mut attacked = 0;
+        let mut where_nobody_ran = 0;
         for _ in 0..300 {
             // Keep everyone in the same place so this measures the decision,
             // not who happened to wander off
@@ -347,9 +349,10 @@ fn a_hungry_predator_turns_on_the_settlement() {
                 }
             }
 
+            let this_turn = simulation.current_turn;
             simulation.take_a_turn();
 
-            attacked += simulation
+            let struck: Vec<&crate::agents::Agent> = simulation
                 .population
                 .agents
                 .iter()
@@ -365,22 +368,36 @@ fn a_hungry_predator_turns_on_the_settlement() {
                         Some(crate::agents::EmotionSource::Creature(ref what)) if what == "wolf"
                     )
                 })
+                .collect();
+            attacked += struck.len();
+            // Struck this half hour where they stood, not at the end of a
+            // chase (#437)
+            where_nobody_ran += struck
+                .iter()
+                .filter(|agent| agent.emotions.last_attack_turn >= this_turn)
+                .filter(|agent| agent.state.chased_at != Some(agent.emotions.last_attack_turn))
                 .count();
         }
 
-        attacked
+        (attacked, where_nobody_ran)
     }
 
-    let starving = maulings(true);
-    let well_fed = maulings(false);
+    let (starving, starving_where_nobody_ran) = maulings(true);
+    let (well_fed, well_fed_where_nobody_ran) = maulings(false);
 
     assert!(
         starving > 0,
         "starving wolves standing among people should attack them"
     );
+    // Hunger is what changes a wolf's mind about somebody standing there. A
+    // fed one still runs down somebody who runs from it, and strikes one
+    // time in ten when it gets there (#437), and here people ran from eight
+    // of them at their elbow every half hour for six days: 35 maulings by
+    // fed wolves, against none before, all but two of them at the end of a
+    // chase. So the comparison is of blows that did not end a chase.
     assert!(
-        starving > well_fed,
-        "hunger is what changes a wolf's mind: {starving} against {well_fed}"
+        starving_where_nobody_ran > well_fed_where_nobody_ran,
+        "hunger is what changes a wolf's mind: {starving_where_nobody_ran} against {well_fed_where_nobody_ran}"
     );
 }
 

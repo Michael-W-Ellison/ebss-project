@@ -489,18 +489,37 @@ impl Simulation {
             }
             result
         } else {
-            // It got the better of the exchange
+            // It got the better of the exchange.
+            //
+            // And what gets through is what gets through the shaft in the
+            // way of it, as when a beast tries its luck (`predators_try_their_luck`) or a
+            // hunt turns (#327). The whole blow landed here instead, while
+            // the decision to stand had reckoned it through the spear
+            // (`could_i_fight_at_all` asks `what_a_blow_costs_me`): people
+            // with a spear stood over their own against a lion at sixteen
+            // health, sure they could take a blow of under sixteen, and took
+            // twenty-eight (#428, #430).
             let damage = species.attack_damage.max(1.0);
             let agent = &mut self.population.agents[agent_index];
-            let came_off_well = damage < agent.state.health * Self::A_SCRATCH;
-            agent.take_damage(damage);
+            let landed = agent.what_a_blow_costs_me(damage);
+            // And putting a shaft in the way of something is hard on the
+            // shaft
+            if damage - landed > 0.0 {
+                if let Some(broke) =
+                    agent.wear_what_i_worked_with(crate::agents::SkillType::MeleeCombat)
+                {
+                    debug!("Agent {} broke a {broke} keeping it off", agent.id);
+                }
+            }
+            let came_off_well = landed < agent.state.health * Self::A_SCRATCH;
+            agent.take_damage(landed);
             agent
                 .lessons
                 .record(crate::agents::practices::Undertaking::Fighting, came_off_well);
 
             ActionResult::failure(format!(
-                "{} got the better of it ({:.0} damage)",
-                species.name, damage
+                "{} got the better of it ({:.0} of {:.0} damage got through)",
+                species.name, landed, damage
             ))
             .with_energy_cost(12.0)
         }
@@ -513,7 +532,31 @@ impl Simulation {
         // raise a hand. Nothing happens. The agent stays exactly where
         // it is, which is the whole of what freezing costs - whatever
         // was coming is still coming, and is now a turn closer.
-        let agent = &self.population.agents[agent_index];
+        //
+        // Beaten down, it is covering up rather than frozen with fright, and
+        // that is something a beast that only wants it gone can see (#432).
+        let now = self.current_turn;
+        let agent = &mut self.population.agents[agent_index];
+        if Self::beaten_down(agent) {
+            agent.state.covered_up_at = Some(now);
+
+            // **And lying still is rest.** Covered up, it gets its breath
+            // back a minute at a time, as a sleeper does, and once it has the
+            // legs to go it breaks off. Without this, somebody cornered for
+            // want of legs stayed cornered: freezing only ever cost stamina,
+            // so a person who covered up at nothing lay in a mammoth's ground
+            // for two days, unstruck, and died of the wound and of thirst -
+            // three in one world, on the same tile (#432, #433).
+            agent.state.energy = (agent.state.energy
+                + crate::agents::Agent::A_TURN_OF_SLEEP_RESTORES
+                    / crate::environment::seasons::MINUTES_PER_TURN as f32)
+                .min(100.0);
+            debug!("Agent {} covered up", agent.id);
+
+            return ActionResult::success()
+                .with_energy_cost(0.0)
+                .with_message("Covered up".to_string());
+        }
         debug!("Agent {} froze", agent.id);
 
         ActionResult::success()
@@ -555,8 +598,17 @@ impl Simulation {
                 .with_message("Nowhere to run, and stood".to_string());
         };
 
+        let now = self.current_turn;
         let agent = &mut self.population.agents[agent_index];
         agent.state.position = landed;
+        // What it ran from and when, which a hungry hunter standing there
+        // follows (#437)
+        agent.state.ran_from = Some((away_from.0, away_from.1, now));
+        // Run beaten down, which is what a hunter that is still on them
+        // afterwards has run down (#436)
+        if Self::beaten_down(agent) {
+            agent.state.ran_beaten_down_at = Some(now);
+        }
 
         debug!("Agent {} bolted to {landed:?}", agent.id);
 

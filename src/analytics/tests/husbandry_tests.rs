@@ -231,6 +231,75 @@ fn nobody_farms_on_an_empty_stomach() {
     );
 }
 
+/// Ground broken with nothing to sow is broken about home, not wherever one
+/// happens to be standing (#414). A farmer a day's walk out with empty hands
+/// breaks no ground there: three in four such fields went in out of reach of
+/// any hearth and ripened with nobody to bring them in. With grain in hand he
+/// still sows where he stands, because whoever passes picks a grain field.
+#[test]
+fn fields_without_seed_are_broken_about_home() {
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+
+    let home = (25, 25);
+    {
+        let agent = &mut simulation.population.agents[0];
+        agent.hearth = Some(home);
+        if let Some(drive) = agent.drives.get_mut(DriveType::Sustenance) {
+            drive.value = 1.0;
+        }
+        if let Some(drive) = agent.drives.get_mut(DriveType::Hunger) {
+            drive.value = 0.0;
+        }
+        agent.practices.saw_it_work(crate::agents::practices::Practice::Farming);
+        agent.practices.saw_it_work(crate::agents::practices::Practice::Farming);
+        agent.found_out_how_to("do:ScatterSeed");
+        agent.found_out_how_to("do:TillSoil");
+    }
+
+    let away = (25, 45, 0);
+    simulation.population.agents[0].state.position = away;
+    assert_eq!(
+        simulation.farming_action(&simulation.population.agents[0], away),
+        None,
+        "twenty paces from home with nothing to sow he breaks no ground"
+    );
+
+    simulation.population.agents[0]
+        .inventory
+        .add_item(crate::agents::InventoryItem::new_with_weight("grain".to_string(), 3, 0.2));
+    let with_grain = simulation.farming_action(&simulation.population.agents[0], away);
+    let at = match with_grain {
+        Some(Action::Move { target }) => (target.0, target.1),
+        Some(_) => (away.0, away.1),
+        None => panic!("with grain in hand he goes to break ground"),
+    };
+    assert!(
+        (at.0 - away.0).abs().max((at.1 - away.1).abs()) <= Simulation::FIELD_WALK_RADIUS as i32,
+        "with grain in hand he sows about where he stands, not at {at:?}"
+    );
+    simulation.population.agents[0].inventory.remove_item("grain", 3);
+
+    let about_home = |action: Option<Action>, standing: (i32, i32, i32)| -> (i32, i32) {
+        match action {
+            Some(Action::Move { target }) => (target.0, target.1),
+            Some(_) => (standing.0, standing.1),
+            None => panic!("within a walk of home he goes to work"),
+        }
+    };
+    for standing in [(25, 25, 0), (33, 25, 0)] {
+        simulation.population.agents[0].state.position = standing;
+        let action = simulation.farming_action(&simulation.population.agents[0], standing);
+        let at = about_home(action, standing);
+        assert!(
+            (at.0 - home.0).abs().max((at.1 - home.1).abs()) <= Simulation::FIELD_WALK_RADIUS as i32,
+            "standing at {standing:?} he works ground at {at:?}, out of a walk of home"
+        );
+    }
+}
+
 /// A parent goes after a child that has wandered off.
 #[test]
 fn a_parent_goes_after_a_straying_child() {

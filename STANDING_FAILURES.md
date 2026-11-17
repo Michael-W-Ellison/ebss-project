@@ -28,10 +28,14 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #412, a trap at hand and a basket kept):
-`cargo test --lib` in one piece, 3,132 tests: 3,126 passed, 0 failed, 6
-ignored, in 26 minutes.
-- The dice counts are 6,765 (seed 4242, 120 turns) and 908,858 (seed 0, a
+**Last full run** (ISSUES_FOUND #435 and #436, beaten down reckoned by
+the next blow, and covering up when run down by a hunter): `cargo test
+--lib` in one piece, 3,177 tests: 3,171 passed, 0 failed, 6 ignored, in
+17 minutes. The five new tests are the whole difference. Before it, #434:
+3,172 tests, 3,166 passed, 0 failed. (`cargo test` without `--lib` stops
+at two examples, `debug_survival` and `world_integration_demo`, that do
+not set `WorldConfig::terrain`.)
+- The dice counts are 6,765 (seed 4242, 120 turns) and 944,097 (seed 0, a
   year).
 - #363 turned nineteen tests red that leaned on what it fixed. Most made a man
   starving by setting his stamina to five, which read as starving only

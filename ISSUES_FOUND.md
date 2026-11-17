@@ -28089,6 +28089,18 @@ later entry. These were not. Each line names the entry that left it.
   take food out of a store; spares now make room (#411). The last two who
   starved had walked between a full trap and the day's better ground, or
   set their only basket down; nobody starves in forty worlds now (#412).
+  Ground broken with nothing to sow is broken about home, where the
+  harvest looks for it; two fifths more field crop comes in, and two
+  fifths less falls (#414). The worlds that bring in none break ground in
+  their second summer or never, a year too late for a two-year run
+  (#415). A crop is an investment now: the work and seed put into it are
+  set against what comes off it, and a crop that gives back less than it
+  took saddens the people who put work in and shakes their belief in
+  farming and in that crop (#416). Stage 4 of the agricultural path:
+  farmers keep the fields they have while their crops are not paying,
+  sow by a calendar, carry muck to worn fields, raise granaries over the
+  camp's stores and settle on the crop that pays them best; irrigation is
+  left out, since no field is on ground that dries (#417 to #422).
 - Discovery runs at one pace (#389): a run of the model at a people's pace,
   thirty thousand times slower than the development pace the suite and the
   measurements use. A people's pace cannot be run long enough to be watched;
@@ -30615,7 +30627,1279 @@ crop fallen to the season is six to seven times crop brought in: 456,907
 against 68,631 in r424. Many worlds break and sow a few hundred fields
 without kept seed and bring none of it in. That is the same in every run,
 so it is not what moved here, but it is the waste the farming is meant to
-avoid, and it has not been looked into.
+avoid. See #414.
 
 **Tests**: none. The watch is an ignored test, and with `REDRAW` unset it
 draws the dice it always did. The dice counts are unchanged.
+
+### 414. Fields broken with nothing to sow went in a day's walk from home
+
+#413 left most ripe field crop fallen to the season, six to seven times
+what was brought in, and many worlds breaking a few hundred fields without
+kept seed and bringing in none of it.
+
+**What was found.** People broke ground wherever they stood, and the
+harvest looks for fields only about home.
+
+- **Fields without seed are not the trouble in themselves.** Somebody with
+  nothing sowable in the pack sows what they have been eating, as a Food
+  field. A Food field grows as well as a seeded one: in smooth world 10 of
+  r424, 189 of 228 Food fields ripened, at about 141 a field.
+- **They went in out of reach.** Farming counted, tended and broke fields
+  about wherever one stood, so somebody a day's walk out with the
+  Sustenance drive on them broke ground there. Bringing a harvest in,
+  hedging, and a camp staying for its crop all look only within a walk
+  (twelve paces) of the hearth. In smooth world 10, 72 of 291 sowings were
+  within twelve of the sower's hearth: 93 were 13 to 30 away, 83 were 31 to
+  60, and 43 further. About 29,000 units stood ripe on day 600, and 1,116
+  units of Food came in off fields. Ripe unit-days within twelve of any
+  hearth were 864,700, and beyond thirty 2,505,080.
+- **Late as well, in some worlds.** In scattered world 11, 249 of 251
+  sowings were Food and all came after day 600, because breaking ground was
+  found out on day 485. Those were sown too late to bear inside the run, and
+  only 28 were within twelve of home.
+- **Seeded fields far out are not wasted.** Every unit gathered off a field
+  was logged with its crop and how far it stood from the gatherer's hearth,
+  in smooth worlds 3, 6 and 10 of r424. Food came in only within twelve of
+  home: 857 and 1,116 units, and none at all from further out. Grain, pods
+  and roots came in from everywhere, because foraging takes the nearest
+  food and does not ask whose field it is. Of 8,225 units brought in off
+  fields in smooth world 10, 3,674 came from fields more than twelve paces
+  from the gatherer's hearth; in smooth world 3, 4,194 of 9,296; in smooth
+  world 6, 2,818 of 5,068.
+
+**What changed.** A first fix reckoned all field work about home and did
+it only within a walk of it. Over two draws of each code (paired by
+world), against r424's code:
+
+| | r424 | r424, redrawn | home only | home only, redrawn | seedless home only | seedless home only, redrawn |
+|---|---|---|---|---|---|---|
+| field crop brought in | 68,631 | 80,504 | 48,426 | 50,426 | 99,144 | 112,111 |
+| field crop fallen | 456,907 | 442,906 | 152,381 | 147,601 | 255,022 | 269,726 |
+| Food fields sown | 6,197 | 5,075 | 1,998 | 1,572 | 1,519 | 2,309 |
+| grain fields sown | 204 | 193 | 76 | 70 | 337 | 457 |
+| pod fields sown | 191 | 189 | 92 | 112 | 347 | 383 |
+| root fields sown | 388 | 352 | 150 | 159 | 895 | 637 |
+| fish caught | 89,127 | 94,348 | 99,373 | 101,035 | 96,009 | 97,489 |
+| cooked | 84,905 | 83,069 | 90,172 | 89,203 | 86,963 | 87,291 |
+| person-days wasting | 118 | 234 | 112 | 174 | 143 | 172 |
+| hunger deaths | 0 | 0 | 0 | 0 | 0 | 0 |
+| alive at two years | 671 | 670 | 669 | 679 | 671 | 675 |
+
+Home only cut crop fallen to a third (t -6.55) and crop brought in by a
+third (74,568 to 49,426 a draw, t -3.52). It held seeded sowing to home as
+well, and seeded fields a walk out were half of what came in. So that was
+taken back: farming counts, tends and sows about where one stands, as
+before, and only somebody with nothing to sow but what they have been
+eating breaks ground about home, and only within a walk of it
+(`Simulation::carrying_seed_to_sow`). Kept seed, grain, pods or roots in
+the pack sow where one stands.
+
+Over both draws, against r424's code: crop brought in 74,568 to 105,628 a
+draw (t 3.50), crop fallen 449,906 to 262,374 (t -6.26), Food fields sown
+5,636 to 1,914 (t -6.31). Seeded fields about doubled: grain 198 to 397
+(t 1.78), pods 190 to 365 (t 2.83), roots 370 to 766 (t 4.05). That is
+probably because a stand of seedless fields about somebody counted toward
+the six they want and stopped them sowing seed there. Fish caught 91,738
+to 96,749 (t 4.52) and cooked 83,987 to 87,127 (t 2.10) rose; person-days
+wasting (176 to 158, t -0.52) and alive at two years (670 to 673, t 0.66)
+did not change, and nobody starved in any run.
+
+In r424 and its redraw, eleven world-runs sowed a hundred Food fields or
+more and brought in nothing; with the fix, none did. Twelve worlds in each
+draw still bring in no field crop, mostly ones that find out breaking
+ground late or not at all. Crop fallen is still two and a half times crop
+brought in. One world (smooth 20, redrawn) sowed 735 Food fields, over
+and over on the few about its hearths, and brought in 5,140.
+
+**Tests**: `husbandry_tests::fields_without_seed_are_broken_about_home`.
+Twenty paces from home with nothing to sow, a farmer breaks no ground.
+With grain in hand at the same spot, they still sow about where they
+stand. About home, they work ground within a walk of it. Without the fix
+the first assertion fails: it walked to (25, 46).
+
+The full suite, in one piece: 3,133 tests, 3,127 passed, 0 failed, 6
+ignored, in 24 minutes. The dice counts are unchanged, at 6,765 and
+908,858: neither the 120 turns of seed 4242 nor seed 0's year gets as far
+as anybody breaking ground.
+
+### 415. The worlds that bring in no field crop break ground a year late, or never
+
+#414 left twelve worlds in each forty-world draw bringing in no field crop
+at all: 24 of 80 world-runs in r426 and its redraw.
+
+**What was found.** A harvest is the last of four steps, and each waits
+on the one before. Seed is scattered about camp (`do:ScatterSeed`); ground
+is broken for it (`do:TillSoil`); a ripe crop is seen to fall in a field
+near home twice, and the seasons come to mind (`know:seasons`); only then
+does anybody bring a harvest in (`a_harvest_to_bring_in` asks for the
+seasons). The year is 360 days and crops bear once in it (berries days 120
+to 269), so a step missed one autumn waits for the next.
+
+- **All 24 never come to the seasons.** Every one of them, and no world
+  that comes to the seasons brings in nothing. The seasons come on only six
+  days: 256, 271 or 286, the days a crop goes over, or the same a year
+  later. A world needs a crop of its own fields to fall before it can bring
+  one in.
+- **They break ground late, or never.** By when ground breaking is found
+  out, over r426 and its redraw:
+
+| ground broken | world-runs | bring in nothing | crop brought in, mean |
+|---|---|---|---|
+| in the first year | 30 | 1 | 5,283 |
+| in the second year | 29 | 11 | 1,693 |
+| never | 21 | 12 | 175 |
+
+  r424 is the same, run for run, because nothing before ground is broken
+  changed in #414. A world that breaks ground in its second summer sows
+  then, sees the crop fall that autumn at the earliest, and could bring
+  one in in the third summer. The run ends at day 720.
+- **The second year is the one way it is meant to come.** Ground breaking
+  comes to somebody who has gathered twelve times off stands they
+  scattered themselves (`GATHERED_FROM_SOWN_BEFORE_GARDENS`). Second-year
+  worlds come to it on days 394 to 600, 17 of 29 between 477 and 515: the
+  opening of the second year's bearing, when somebody's twelfth gathering
+  comes. A probe of five worlds counted every gathering off a scattered
+  stand. Almost all were by somebody other than the sower, which does not
+  count: 3 own against 97 in scattered world 3, 9 against 367 in smooth 1,
+  53 against 300 in smooth 4, 116 against 1,153 in smooth 11. The stands
+  are on the camp's ground, and whoever passes takes the nearest food.
+  Few are scattered, too: a camp keeps no more than twelve
+  (`STANDS_A_CAMP_SOWS`), smooth 1 had none until day 330 and scattered 3
+  none until day 510, and in both two years brought only 12 and 2.
+- **The first year comes by accident.** The curiosity verb `dig` is done as
+  `Action::TillSoil`, by anybody, whether or not they know how to break
+  ground for a crop. It makes a field and sows what the digger carries.
+  Smooth world 10 had three fields on day 60 and nine on day 150, and
+  nobody alive knew how to break ground until day 173. Ground breaking
+  spreads by watching (`observation_processing`: somebody who knows how to
+  scatter seed sees it done), so smooth 10 had it twelve days after it
+  scattered seed. Of 30 first-year worlds, 7 came to it within 15 days of
+  scattering seed. Smooth 1, scattered 3 and smooth 11 had no field at
+  all before they came to it the slow way, or never. Smooth 4 had two,
+  dug on day 300, but nobody there scattered seed until day 318, so
+  nobody watching could take it up from them.
+- **And once ground breaking is known, the drive has to be on.** A probe
+  of what stops somebody who knows how, turn by turn: in smooth 11, from
+  day 498, when it came, to day 630, the Sustenance drive was off for
+  about 95% of their turns. It came on in the winter, and the first
+  fields went in on day 660, too late to bear. Smooth 10's people had the
+  drive off most turns too, but had a year of it.
+
+**What changed.** Nothing. The worlds that bring in nothing are those that
+come to farming late, and late at the development pace is a year: the
+four steps take three bearing seasons at the least, and a two-year run has
+two. Breaking ground for one's own crop is the step that sets the pace,
+and what sets it is mostly luck: whether somebody digs out of curiosity
+near a camp that scatters seed, or whether one sower gets to their own
+stands twelve times before the rest of the camp does.
+
+**Open.** Whether gatherings off a stand by somebody other than the sower
+should teach the sower anything (they see their seed come up as food, and
+this would make ground breaking come much sooner), and whether a scattered
+stand falling unharvested should teach the seasons as a field does.
+Either would change the pace of the agricultural path, and is left as a
+choice.
+
+**Tests**: none. Nothing changed. The probes were scratch builds.
+
+### 416. A crop that fails is the work and seed thrown away, and weighs on whoever put them in
+
+**Asked.** Planting is a form of food safety: time and energy put in, in
+the hope of getting more energy back. A farmer who spends the time and
+energy and then sees the crop fail should feel it.
+
+**What it was.** Nothing kept track of what went into a crop. A field fell
+or was harvested, `it_is_growing_again` started it over, and nobody who
+had worked it heard anything about it. Belief in farming moved only on
+how a sowing or harvest turn went, not on what the crop came to.
+
+**What changed.**
+- **What is put in.** Each field (`ResourceNode`) keeps an account,
+  `put_into_this_crop`, of who put how much energy into it:
+  - breaking ground and sowing (`tilling_soil`): a turn of the work at
+    `BREAKING_GROUND_COSTS`, plus the worth of the item of seed sown;
+  - each turn weeding it (`tending_a_field`): a turn at `WEEDING_COSTS`.
+
+  A turn is costed in the body's own units (`MINUTES_PER_TURN` times
+  `physiology::what_the_work_costs`). Walking to the field, mucking it and
+  hedging it are not counted.
+- **What comes back.** Everything anybody takes off the field by hand is
+  counted (`taken_off_this_crop`). It is valued at the item's food energy.
+- **When it is settled.** When the crop ends, `what_came_off_the_fields`
+  sets it aside in `World::crops_settled`. A crop ends when the harvest is
+  in, or when it falls or is eaten off. A crop nobody put work into
+  (what grows on after) settles nothing. `what_the_crops_came_to` runs
+  each turn after `what_the_fields_lost`. It shares what came back among
+  the investors in proportion to what each put in, and tells each living
+  one through `Agent::what_my_crop_came_to`.
+- **What a farmer feels.**
+  - If less came back than went in: sadness from the event "a crop that
+    failed". The amount is `WHAT_A_FAILED_CROP_WEIGHS` (0.3) times the
+    share lost. Traits scale it as they do other sadness: twice for the
+    empathic, half for the cold-hearted. Their belief in farming falls,
+    as for a failed attempt, and so does the lesson for that crop
+    (`sow:<crop>`).
+  - If as much or more came back: happiness from "a crop that paid", up to
+    `WHAT_A_CROP_THAT_PAID_CHEERS` (0.1) for a crop that returns double.
+    This was not asked for. It is there so that a crop is weighed both
+    ways, and it is kept small.
+- Mood on its own steers nothing in this model; `well_being` is read only
+  by the metrics. What a failed crop changes in what people do comes
+  through the belief and the lesson. A farmer who has sown a few times and
+  lost every crop gives farming up, as `would_try` already decides.
+- `World::crops_that_failed` and `crops_that_paid` count the crops settled
+  each way. The measurement watch stores them.
+
+**Measured.** Forty worlds, 720 days, two draws each, against the code
+before the change (r426 and r426b against r427 and r427b):
+
+| | before | after | t |
+|---|---:|---:|---:|
+| field crop brought in | 105,628 | 110,190 | +0.62 |
+| field crop fallen | 262,374 | 254,520 | −0.90 |
+| fields sown | 3,442 | 3,398 | −0.52 |
+| fish caught | 96,749 | 96,222 | −1.14 |
+| cooked | 87,127 | 86,630 | −0.90 |
+| wasting person-days | 158 | 135 | −1.09 |
+| hunger deaths | 0 | 0 | |
+| alive on day 720 | 673 | 674 | +0.27 |
+
+Nothing moved beyond the noise between draws. Of the crops that had work
+in them, about half failed: 1,224 failed and 1,313 paid in the first draw,
+1,209 and 1,068 in the second. Crops failed in 34 and 31 worlds. Five and
+nine worlds settled none, the worlds of #415 that come to farming late.
+Belief does not give way: those who farm see enough crops pay to keep at
+it, and a failure costs half what a success earns
+(`record_outcome`: +0.2, −0.1).
+
+**Tests**: `crop_investment_tests` (6):
+- sowing and weeding are put into the crop;
+- a crop that falls unharvested weighs on its farmer: sadness, belief in
+  farming and in grain, and the count;
+- a crop brought in pays its farmer;
+- a crop nobody worked is nobody's loss;
+- a failed crop weighs as much as was lost, shared between two who put in
+  different amounts;
+- a temperament sets how hard a failed crop lands.
+
+Full suite: `cargo test --lib`, 3,133 passed, 0 failed, 6 ignored, in 51
+minutes (sharing the machine with the two draws). The dice counts are
+unchanged.
+
+### 417. Stage 4 of the agricultural path: what a farming world wastes
+
+The user asked: "Implement Agricultural stage 4." Settled field
+agriculture: permanent fields, simple irrigation, manuring, granaries,
+planting calendars, dedicated staple crops; and for products, cereal
+fields, pulse plots, managed orchards and a larger surplus.
+
+**Measuring it at all.** A two-year run from foraging reaches stage 3 late
+or never (#415), so stage 4 would show in few worlds. The measurement
+watch takes `FARMING=1` now: the twelve founders start knowing how to
+scatter seed and break ground, keep the seasons in mind and save seed,
+and the run goes on from there. It prints a line on the fields once a
+month (`FARMX`): how many, how worn, what is in crop, what has come in and
+fallen, what is put by. `run.sh` passes `DAYS` through.
+
+**What a farming world is short of.** A probe of six such worlds over
+three years, before any of stage 4:
+
+- **Not food.** Stores held 15,000 to 43,000 units at the turn of each year
+  for twelve to eighteen people, and nobody spent a day wasting.
+- **The harvest.** Field crop that fell unharvested came to 1.3 to 4.7 times
+  what was brought in by the third year, and the gap widened every year.
+  A third of all crops with work in them failed (#416).
+- **Worn ground.** 10% to 25% of fields were exhausted.
+- **Vermin.** 4,000 to 17,000 units out of the stores.
+- **Fields already stand.** What is sown grows on after each harvest; a
+  field wears a rung a crop and is brought back by muck, a bean crop or a
+  year's rest; a farmer already stays by a standing crop. What stage 4
+  names as permanent fields is mostly there.
+
+So stage 4 here is about what is wasted: work put into fields that fall,
+ground worn out, food lost from stores.
+
+**What changed**, each found out by something that happens to somebody,
+and acted on as their temperament and their reckoning say:
+
+| | what it does | found out by |
+|---|---|---|
+| keeping fields (#417) | no new ground broken while one's last crops were lost more often than paid | three crops of one's own lost |
+| planting calendar (#418) | only what has most of its season ahead is sown | three crops one worked ripening short, keeping the seasons |
+| manuring (#419) | muck carried to the most worn field about home | twenty armfuls off worn fields, knowing muck |
+| granary (#420) | the fullest store at home raised on poles: four pits' worth, vermin as past a pot | six lined stores opened gnawed, by somebody who breaks ground |
+| staple crop (#421) | the kind that has plainly paid best goes in first | four crops each of two kinds, one paying half again the other |
+
+### 418. Keeping the fields one has
+
+**What changed.** Every crop a farmer worked is kept in mind as paid or
+lost, the last six (`Agent::crops_lately`). A farmer who has lost three
+crops of their own (`CROPS_LOST_BEFORE_KEEPING_FIELDS`) is apt to keep the
+fields they have (`know:keep_fields`). Somebody who keeps them breaks no
+new ground while more of their last crops were lost than paid
+(`are_my_crops_paying`); they tend and bring in what they have. Asked
+after a pod row has been turned under, which is working a field one has.
+
+The catalogue's "permanent or semi-permanent fields": a field already
+stood as long as anybody worked it. What was missing was the farmer who
+stops breaking more when the ones there go to waste.
+
+### 419. A planting calendar
+
+**What changed.** A crop grows only in its season, so one sown with less
+than half of its season left ripens short (`is_it_the_time_to_sow`).
+Whoever put work into a crop that ripens short sees it
+(`World::crops_ripened_short_for`, `what_ripened_short`); three of them,
+to somebody who keeps the seasons, bring the calendar to mind
+(`know:planting_calendar`). Somebody who keeps one sows only what is in
+its time, and breaks no ground while nothing they carry is: the choice of
+what to sow takes the day (`what_this_one_would_sow_on`).
+
+It came late and to few: short crops are one in six, and a calendar was
+kept in five of six worlds in the probe, by one to seven people.
+
+### 420. Manuring the worn fields
+
+**What changed.** Muck was tipped on whatever field somebody happened to
+stand on, when they were in the mood to try it. Somebody who knows muck
+does a field good and takes crop off fields worn below what their ground
+was, twenty times (`CROPS_OFF_WORN_GROUND_BEFORE_MANURING`), is apt to
+manure them (`know:manure_fields`). Carrying muck - fold dung, compost,
+what went off - they walk it to the field about home worn furthest below
+its ground (`the_most_worn_field_about_home`) and spread it, whatever
+their mood (`World::worn_fields_mucked`).
+
+### 421. Granaries
+
+**What changed.** A store can be raised into a granary
+(`Action::RaiseGranary`): the fullest covered store at home, on a floor of
+poles under a thatch, of ten wood (`WOOD_A_GRANARY_TAKES`). The floor is
+kept with the store as a lining is (`Pit::GRANARY`). A granary holds four
+pits' worth (`WHAT_A_GRANARY_TAKES`, 1,200), vermin take from it as from a
+fired pot, and it keeps at least as a lined store does.
+
+A farmer who lines stores and opens six lined ones gnawed is apt to think
+of it (`know:granary`). They raise one where what the camp has put by
+about home, up to what a granary holds, would save over a season more
+than the granary costs (`WHAT_RAISING_A_GRANARY_COSTS`, forty units), by
+what they reckon a lined store loses and how much waste bothers them
+(`a_store_to_raise`): the frugal raise one over three pits' worth, the
+lazy do not. Not while home has a granary with room.
+
+The catalogue's "larger surplus" is what a granary holds.
+
+### 422. Staple crops, and what is not modelled
+
+**Staple crops.** Each farmer keeps an account, by kind, of what their
+crops took and gave back (`Agent::crop_returns`, from #416). Somebody who
+has grown two kinds four times each (`CROPS_BEFORE_A_STAPLE`) and seen one
+pay half again what the other does (`PLAINLY_WORSE`) settles on it
+(`know:staple`, `my_staple_crop`): a comparison of what was seen, at no
+pace. It goes in first whenever they carry it, ahead of the pod row on
+tired ground (`WHAT_A_STAPLE_IS_WORTH`). Cereal fields and pulse plots are
+staples of grain and of pods.
+
+**Managed orchards** are the fruit fields of slips moved in beside the
+camp (#384) and the trees about home cut to the stool (#382); grafting and
+pruning for fruit are not modelled apart from these.
+
+**Irrigation is not modelled.** Fields go only on plains and meadow, and
+that ground holds what a plant does best on whatever the sky does
+(`Soil::humidity`); water led to a field would change nothing. The ditch
+of stage 1 waters stands on hills, which cannot be broken (#383). It wants
+ground that dries out in a dry spell, and the ground holds no memory of
+the weather.
+
+**Probe**, the six farming worlds over three years, against the same
+worlds before stage 4:
+
+| world | fields | exhausted | brought in | fallen | put by | granaries |
+|---|---|---|---|---|---|---|
+| scattered 1 | 186 → 193 | 21 → 7 | 25,941 → 21,225 | 33,162 → 33,304 | 34,087 → 40,031 | 1 |
+| scattered 2 | 245 → 232 | 24 → 0 | 22,317 → 17,584 | 52,246 → 50,394 | 33,953 → 40,876 | 5 |
+| smooth 1 | 92 → 66 | 4 → 1 | 3,252 → 2,501 | 21,789 → 18,493 | 15,237 → 20,282 | 4 |
+| smooth 2 | 141 → 110 | 18 → 5 | 22,656 → 24,435 | 29,519 → 20,009 | 23,502 → 30,876 | 2 |
+| smooth 3 | 183 → 149 | 16 → 4 | 20,762 → 24,606 | 42,233 → 45,987 | 16,210 → 17,981 | 2 |
+| smooth 4 | 111 → 104 | 5 → 2 | 4,960 → 14,984 | 23,247 → 12,419 | 24,763 → 27,483 | 1 |
+
+Keeping fields, manuring and staples came to every world, between days
+115 and 640; granaries between days 140 and 560. Fewer fields were broken
+in five worlds of six, and exhausted ground fell in all six. More was put
+by at the end in all six. What was brought in went both ways.
+
+**Measured**, forty farming worlds (`FARMING=1`) over two years, two draws
+of the dice each, before stage 4 against after; totals per draw, paired t
+over the forty worlds:
+
+| | before | after | t | worlds down / up |
+|---|---|---|---|---|
+| exhausted fields at the end | 570 | 312 | −8.3 | 38 / 2 |
+| fields worn below their natural grade | 1,132 | 776 | −7.2 | 34 / 5 |
+| fields at the end | 5,953 | 5,834 | −1.0 | 18 / 22 |
+| field crop brought in | 459,564 | 450,328 | −0.9 | |
+| field crop fallen | 769,398 | 766,494 | −0.2 | |
+| crops that paid / failed | 6,064 / 3,738 | 6,067 / 3,682 | 0.0 / −0.7 | |
+| put by at the end | 824,321 | 849,621 | +1.4 | 15 / 25 |
+| lost to vermin | 329,601 | 329,367 | 0.0 | |
+| rotted | 50,533 | 50,014 | −0.7 | |
+| alive at the end | 679 | 672 | −1.2 | |
+
+What people did with it, per draw: ground left unbroken 46,448 times,
+worn fields mucked 3,354, staples sown first 324, sowings put off 414,
+granaries raised 64, holding 30,662 at the end.
+
+Who found it out, across the eighty runs:
+
+| | runs | first / median / last day | holders at the end |
+|---|---|---|---|
+| manuring | 80 | 94 / 120 / 638 | 56% |
+| granary | 79 | 109 / 235 / 704 | 61% |
+| keeping fields | 80 | 261 / 276 / 291 | 68% |
+| staple | 80 | 136 / 276 / 636 | 52% |
+| planting calendar | 51 | 255 / 615 / 645 | 13% |
+
+So stage 4 does what manuring and keeping fields are for: the ground is
+kept, and exhausted fields fall by almost half in 38 worlds of 40. It does
+not yet change what comes in, what is lost or what is put by; the probe's
+"more put by in all six" did not hold at forty.
+
+- **Keeping fields stops the farmer, not the camp.** A keeper holds back
+  forty-six thousand times a draw and the camp breaks as many fields as
+  before. Most likely the ones whose crops are failing stop and whoever's crops are
+  paying breaks the ground instead; this is not yet traced. (Traced in
+  #423: the new ground was broken by people who did not keep fields.)
+- **The granary is a pit's size to a camp's store.** A camp puts by about
+  21,000; one or two granaries hold 1,200 each, under 4% of it, so what
+  vermin take does not move.
+- **The calendar comes late and to few.** It wants three short crops to
+  somebody keeping the seasons, and most crops do not ripen short.
+- **Deaths**, 2 before and 11 after over the two draws: five mothers in
+  childbirth, five by a blow, one of hunger. Hard births came to 47 on
+  each side; a hard birth takes the mother one time in ten, nothing in
+  stage 4 touches it, and about five were to be expected on each side, so
+  the 0 before is the luck. The hunger death (smooth 12, day 670) was a
+  person who starved with 22,674 put by in the world, which is a matter of
+  where the food was and is left for its own entry.
+
+**Tests** (`settled_fields_tests`, 13): losing crops is how keeping
+fields comes to mind; a keeper breaks no more ground while the crops do
+not pay; a crop is in its time before its season and early in it; a
+calendar keeper sows only what is in its time; short crops are how the
+calendar comes to mind; a manurer carries muck to the most worn field;
+crop off worn ground is how manuring comes to mind; a granary holds a
+harvest and keeps the vermin off; the frugal raise a granary the lazy
+would not; a store of the camp's is raised into a granary; lined stores
+gnawed are how a farmer thinks of a granary; a crop that plainly pays
+best becomes a staple; a staple goes in first.
+
+**Full suite**: `cargo test --lib`, 3,152 tests: 3,146 passed, 0 failed, 6
+ignored, in 39 minutes (sharing the machine with two measurement draws).
+The dice counts are unchanged.
+
+### 423. Keeping fields holds for the whole camp
+
+**Why.** #422 found that keeping fields stops the farmer and not the camp:
+a keeper held back forty-six thousand times a draw and the camp broke as
+many fields as before. A probe of six farming worlds, counting who broke
+each piece of new ground, found 117 broken by keepers whose crops paid,
+571 by people who did not keep fields, and none by keepers whose crops
+were failing or untried. 438 of the 688 (64%) went in more than a walk
+from home. Fields jump in the second spring, a season after keeping
+fields first comes to anybody (days 261 to 291).
+
+**What changed.** `Simulation::how_this_one_keeps_the_fields`:
+
+- A keeper holds off while their own crops lately, **or their camp's**,
+  have been lost more often than paid (`Agent::do_these_crops_pay` over
+  everybody grown about their home).
+- Where anybody grown about the home keeps their fields, it is the
+  camp's way. While the camp's crops are not paying, somebody who does
+  not keep fields goes along with it and breaks no ground either
+  (`ground_left_by_the_camps_way`), unless they are a rebel or stubborn,
+  who go their own way.
+- While the camp's crops pay, ground is broken as before, and seed is
+  sown where it is carried.
+
+**One keeper, not half the camp.** The first version made it the camp's
+way when half the grown people kept fields. It barely fired: in smooth 1
+the same fields went in and the same people broke them. A trace showed
+two keepers in a camp of twelve after day 298, the camp's crops paying
+22 of 37, and the new ground going in on days 364 to 377, 20 to 40 tiles
+from home. One keeper is enough now. That is a strong social rule, and
+can be raised.
+
+**About home, tried and taken out.** The second version also had a camp
+with a keeper break ground only within a walk of home and only up to
+`FIELDS_WANTED` there, seed or no seed, since two thirds of new ground
+went in a day out. Forty farming worlds, two draws, against stage 4
+alone:
+
+| | stage 4 | camp-wide, about home | t |
+|---|---|---|---|
+| fields at the end | 5,834 | 3,916 | −11.9 (40 / 0 down) |
+| field crop fallen | 766,494 | 541,054 | −9.1 |
+| exhausted fields | 312 | 200 | −5.2 |
+| field crop brought in | 450,328 | 383,570 | −5.9 |
+| put by at the end | 849,621 | 811,290 | −2.4 (29 down) |
+
+Less waste and less ground worn out, but a seventh less brought in. The
+loss was not the camp holding back: the worlds where it held back most
+(smooth 1, 4, 12, 17, 19) lost little or gained. A trace of scattered 9,
+the worst world (fields 213 → 115, brought in 14,184 → 9,410), showed
+seed carriers more than a walk from home turned back 1,295 times against
+86 at the six-field cap and 87 breaking ground about home. The fields
+sown where seed is carried are the ones #414 found bring in half the
+field crop, picked by whoever passes. So where the ground goes is left as
+it was.
+
+**Measured**, forty farming worlds (`FARMING=1`) over two years, two
+draws of the dice each, stage 4 against stage 4 with this; totals per
+draw, paired t over the forty worlds:
+
+| | stage 4 | camp-wide | t | worlds down / up |
+|---|---|---|---|---|
+| fields at the end | 5,834 | 5,520 | −4.5 | 33 / 3 |
+| crops that failed | 3,682 | 3,528 | −3.1 | |
+| crops that paid | 6,067 | 6,004 | −2.0 | |
+| field crop fallen | 766,494 | 740,337 | −2.4 | |
+| field crop brought in | 450,328 | 447,896 | −0.7 | |
+| exhausted fields at the end | 312 | 302 | −1.0 | 10 / 6 |
+| worn below their natural grade | 776 | 755 | −1.4 | 10 / 7 |
+| put by at the end | 849,621 | 845,965 | −0.4 | 15 / 21 |
+| lost to vermin | 329,367 | 327,404 | −0.9 | |
+| alive at the end | 672 | 674 | +0.4 | |
+
+Keepers held off 68,265 times a draw (46,448 before), the rest of a
+keeping camp 14,861. New ground: 4,360 by people who do not keep fields,
+1,130 by keepers whose crops paid, none by keepers whose crops did not;
+3,564 of the 5,490 (65%) more than a walk from home.
+
+So the camp now holds back with its keepers, and the fields that go to
+waste fall by about a twentieth at no cost to what comes in or is put
+by. It is a small effect. Holding back is a decision put off, not
+ground given up: once the camp's crops pay again the ground goes in.
+What falls unharvested is still 1.65 times what is brought in, and where
+it falls (about home or a day out) is not yet counted.
+
+**Deaths**: 11 before, 10 after over the two draws (7 in childbirth, 2
+by a blow, 1 of hunger). The hunger death is the one #422 left for its
+own entry, the same person on the same day (smooth 12, day 670).
+Births 396 and 397.
+
+**Tests** (`settled_fields_tests`, 16): a keeper holds off while the
+camp's crops are lost, though their own pay; where the camp keeps its
+fields the rest go along, rebels and the stubborn excepted, and nobody
+does while the crops pay; a camp that keeps its fields still sows seed
+where it is carried, keeper or not.
+
+**Full suite**: `cargo test --lib`, 3,155 tests: 3,149 passed, 0 failed,
+6 ignored, in 49 minutes (sharing the machine with two measurement
+draws). The dice counts are unchanged.
+
+### 424. Where the field crop falls
+
+**Why.** #423 left field crop fallen at 1.65 times what is brought in,
+and did not know where it fell.
+
+**What is counted.** Each unit of field crop that falls, and each unit
+brought in, by how far its field was from the nearest home of anybody
+alive at the time: within a walk to a field (`FIELD_WALK_RADIUS`, 12),
+within two walks, and farther (or nobody living anywhere). The world
+queues each day's fallen crop with its place (`field_crop_fallen_where`)
+and `Simulation::where_the_field_crop_fell` sorts it; brought-in is sorted
+where it goes into the pack. No behaviour changes: the forty worlds came
+out identical to #423's first draw in every counter.
+
+**Measured**, forty farming worlds over two years, one draw:
+
+| | within a walk | within two walks | farther | all |
+|---|---|---|---|---|
+| fallen | 166,695 (22%) | 199,821 (26%) | 407,401 (53%) | 773,917 |
+| brought in | 256,983 (58%) | 157,210 (36%) | 28,079 (6%) | 442,272 |
+| fallen per unit brought in | 0.65 | 1.27 | 14.5 | 1.75 |
+
+Smooth and scattered worlds split alike (farther: 53% and 52% of what
+fell, 6% and 6% of what came in). In only four worlds of forty did more
+than half the fallen crop fall within a walk.
+
+- **More than two walks out, almost nothing is brought in.** Half of all
+  the crop that falls falls there, and for every unit brought in off
+  those fields, fourteen and a half fall.
+- **Within two walks the fields earn their keep.** 94% of what is brought
+  in comes off fields within two walks of a home, and the band between
+  one and two walks brings in a third of it. That is the band #423's
+  about-home rule cut, which is why it cost a seventh of the crop.
+- **Not mainly fields left behind by a camp that moved.** In the
+  fourteen worlds where no camp moved, 44% of the fallen crop still fell
+  more than two walks from any home; in the ten that moved 6 to 15
+  times, 58%. Moves add to it; most of it was sown out there.
+
+So the waste is ground broken a long way out, by seed carriers breaking
+ground where they stand (#414). A field sown out there is not picked by
+whoever passes, as #414 supposed of fields beyond a walk: that holds to
+two walks and stops past it.
+
+**Test** (`seed_and_field_tests`): fallen crop is counted by how far it
+was from home, within a walk, within two and farther.
+
+### 425. Nobody breaks ground more than two walks from home
+
+**Why.** #424 found half of all fallen field crop falling more than two
+walks from any home, at fourteen and a half units fallen for every unit
+brought in, and traced it to seed carriers breaking ground where they
+stand.
+
+**What changed.** Nobody breaks new ground more than two walks
+(`FIELDS_ARE_BROKEN_WITHIN`, 24 tiles) from their own home. It holds both
+ways ground gets broken: a seed carrier's plan (`farming_action`) and
+trying the action out of curiosity (`an_action_for`). A seed carrier past
+that line keeps the seed rather than sowing it on the spot; each time is
+counted (`ground_left_too_far_out`). Fields within a walk of home are
+unchanged.
+
+**Measured**, forty farming worlds over two years, two draws each,
+against #423's final version (r432/r432b):
+
+| per draw | #423 | #425 | t |
+|---|---|---|---|
+| field crop fallen | 740,337 | 522,646 (-29%) | -5.82 |
+| field crop brought in | 447,896 | 420,780 (-6%) | -1.53 |
+| food put by at the end | 845,965 | 817,175 (-3%) | -1.10 |
+| fallen per unit brought in | 1.65 | 1.24 | |
+| crops that paid | 6,004 | 5,134 | -6.20 |
+| crops that failed | 3,528 | 2,621 | -7.86 |
+| new ground broken away from home | 3,564 | 1,900 | -10.40 |
+| fields at the end | 5,520 | 4,242 (down in 36 worlds) | -7.82 |
+| farmers at the end | 294 | 446 (up in 35 worlds) | +7.60 |
+| seed carriers who held back | 0 | 16,295 | |
+
+By distance from home, against #424's draw (identical to r432):
+
+| per draw | within a walk | within two walks | farther |
+|---|---|---|---|
+| fallen, #424 | 166,695 | 199,821 | 407,401 |
+| fallen, #425 | 161,560 | 176,442 | 184,644 (-55%, t -3.79) |
+| brought in, #424 | 256,983 | 157,210 | 28,079 |
+| brought in, #425 | 253,776 | 150,548 | 16,456 (-41%, t -3.30) |
+
+- **The far-out waste more than halved, and the fields close in held.**
+  Fallen crop beyond two walks fell by 222,757 per draw; brought in off
+  those fields fell by 11,623, 2.6% of all crop brought in.
+- **Crop brought in and food put by did not fall measurably.** Both are
+  down (6% and 3%), but neither is outside the noise: the two #425 draws
+  alone differ by 15% in crop brought in.
+- **A third of the fallen crop still falls beyond two walks.** No new
+  ground is broken out there, so those fields were within two walks of
+  their breaker's home when broken, and that home has since moved or
+  emptied. Which of the two has not been traced.
+- **Half again as many people were farming at the end.** Not traced.
+- **Deaths**, over both draws: 10 under #423 (childbirth 7, a blow 2,
+  hunger 1), 6 under #425 (childbirth 3, a blow 3). Births 397 and 397.
+  Too few to read either way.
+
+**Tests** (`settled_fields_tests`): seed is not sown past two walks from
+home. With the hearth 24 tiles away both ways of breaking ground give
+TillSoil; at 25 both give nothing and the counter reads one. The year's
+dice count for seed 0 rose 3.5% to 940,724, recorded in
+`repeatable_tests.rs`. Full suite: 3,157 tests, 3,151 passed, 0 failed,
+6 ignored.
+
+### 426. Where the far-out fallen crop still comes from
+
+**Why.** After #425 nobody breaks ground more than two walks from home,
+yet a third of the fallen field crop (185,000 a draw) still fell more than
+two walks from every home.
+
+**How it was traced.** A measurement build only
+(`tools/measure/trace_fallen_crop.py`, read by
+`fallen_crop_sources.py`). It records, for every field, who broke it and
+who last sowed it, with where their hearths were at the time. For every
+fall of crop it records who worked this season's crop and where each of
+those people's hearths is now. One draw of the forty farming worlds; it
+came out identical to #425's first draw in every counter.
+
+**Found**, crop fallen beyond two walks, 202,967 in the draw:
+
+| | fallen | share |
+|---|---|---|
+| sown or tended this season; the workers' hearths have since gone more than two walks away | 171,759 | 84.6% |
+| grew back unsown on a field sown in an earlier season; the last sower's hearth has gone away | 30,389 | 15.0% |
+| the workers or last sower are dead | 819 | 0.4% |
+
+- **The rule holds.** Every one of these fields was sown within two
+  walks of the sower's hearth at the time. None was broken by somebody with
+  no hearth, and 86 units came off ground ploughed in.
+- **The hearths drifted; the camps did not move.** For 98% of it the
+  sower's hearth had not moved since the sowing, by the reckoning of
+  `hearth_moved_at`, which records camp moves. 96.5% fell with no camp move
+  anywhere in that world between sowing and falling, and the fifteen
+  worlds with no camp moves at all shed a third of it. The hearth is
+  reset every night to the middle of where the camp's people are
+  (`where_this_one_sleeps`, #314), "so that a camp drifts towards the
+  ground it is foraging", and `settle_the_hearth` does not count this as
+  a move. A field does not hold the camp: only a roof does.
+- **Over one growing season.** Three quarters of it fell six to twelve
+  months after the sowing. By then the sower's hearth was 24 to 47 tiles
+  from the field for 65% of it, and 48 or more for 34%.
+- **A fifth more grows back on fields nobody sowed again.** A field crop
+  grows on after it falls ("is nobody's loss"), so a field the camp
+  drifted away from sheds again the next season.
+
+So the waste is a camp that drifts after its forage and leaves its fields
+behind. Nobody's choice to sow in the wrong place causes it. A standing
+crop ties a camp only when somebody would otherwise move off alone
+(`tied_to_this_ground`), never against the nightly drift.
+
+**Not changed.** This is a trace only. The obvious remedy is for a
+standing crop to hold the camp's drift as a roof does (the camp's
+sleeping place does not drift more than a walk from fields with a crop
+standing on them). It would trade forage ground for crop, so it needs
+measuring before it is taken.
+
+### 427. A crop standing by the camp holds its drift
+
+**Why.** #426 found that 85% of the field crop falling more than two walks
+from any home had been sown that season within two walks of the sower's
+hearth. The camp then drifted off its fields without ever moving.
+
+**What changed.** Each night a camp drifts to the middle of where its
+people are (`where_this_one_sleeps`, #314). It now drifts only as far as
+keeps the nearest field with a crop standing on it within a walk
+(`a_crop_holds_the_camp`). Otherwise it sleeps where it slept. A camp with no
+crop standing within a walk drifts as before, and a camp move still goes
+where it goes. Each person-night held is counted
+(`nights_a_crop_held_the_camp`).
+
+**Measured**, forty farming worlds over two years, two draws each,
+against #425 (r434/r434b):
+
+| per draw | #425 | #427 | t |
+|---|---|---|---|
+| field crop fallen | 522,646 | 412,706 (-21%) | -6.43 |
+| fallen more than two walks out | 184,644 | 95,983 (-48%) | -6.21 |
+| fallen within one to two walks | 176,442 | 157,562 (-11%) | -2.49 |
+| fallen within a walk | 161,560 | 159,161 | -0.31 |
+| field crop brought in | 420,780 | 427,220 (+1.5%) | +0.36 |
+| fallen per unit brought in | 1.24 | 0.97 | |
+| crops that failed | 2,621 | 1,974 (-25%) | -7.57 |
+| vermin | 309,184 | 276,272 (-11%) | -2.83 |
+| food put by at the end | 817,175 | 770,875 (-5.7%) | -1.64 |
+| fields at the end | 4,242 | 3,829 (down in 30 worlds) | -3.91 |
+| alive at the end | 676 | 668 (down in 21, up in 10) | -1.42 |
+| person-nights a crop held the camp | 0 | 81,310 | |
+
+Camp moves were 185 over the two draws and are 194.
+
+- **The far-out waste halved again.** Less now falls than is brought
+  in, for the first time since fields were kept (#417).
+- **Crop brought in held.** It was neither lost nor gained beyond the
+  noise.
+- **Food put by is down 5.7%, short of the noise.** Not traced. The
+  worry at the outset was a camp held on stripped forage.
+- **Deaths rose from 6 to 17 over the two draws**: a blow 3 to 9,
+  childbirth 3 to 8, no hunger or thirst. They fell in fifteen
+  different worlds, and both draws rose (8 and 9 against 3 and 3). The
+  last four draws of earlier builds had 3 to 6 deaths each. Earlier farming
+  builds ran 1 to 16 a draw, with a blow up to 7, so the rise may be chance.
+  It is not traced.
+
+**Tests** (`camp_tests`): a crop standing holds the camp's drift. With no
+field the camp sleeps where its people are, twenty paces out. With a crop
+three paces from home it stays home, and with its people eight paces out
+it drifts to them. The year's dice count for seed 0 rose 0.4% to 944,097,
+recorded in `repeatable_tests.rs`. Full suite: 3,158 tests, 3,152
+passed, 0 failed, 6 ignored.
+
+### 428. Trace the extra deaths under #427
+
+**Why.** Under #427, deaths over two draws rose from 6 to 17: a blow
+3 to 9, childbirth 3 to 8.
+
+**Childbirth is chance.** A birth goes hard one time in eight
+(`A_BIRTH_GOES_HARD`), and a hard birth takes the mother one time in ten,
+or half that with a midwife. Nothing the camp eats or where it sleeps
+enters into it. Over two draws of the same forty worlds:
+
+| | #423 | #425 | #427 |
+|---|---|---|---|
+| hard births | 51 | 44 | 50 |
+| with a midwife | 4 | 0 | 5 |
+| mothers lost | 7 | 3 | 8 |
+
+About five mothers lost is what the dice give for fifty hard births.
+#425's three was the low one.
+
+**A blow is a person who fights a lion or polar bear and keeps at it.**
+The first draw was rerun with every injury and every fight with a beast
+logged. The rerun matched the original draw in all forty worlds, under
+both #425 and #427.
+
+- **Every blow death in this draw is one fight.** That is 2 under #425
+  and 5 under #427. The person goes at a lion or polar bear with full
+  health. Each blow that lands takes 28 (lion) or 35 (polar bear). They
+  go again and again the same day until they fall, or fall the day after
+  of the wound.
+- **They fought to cover one of their own.** Six of the seven came from
+  the threat tree's "stands over one of its own" branch
+  (`what_this_threat_comes_to`). That branch fights a hunter of people
+  when someone of theirs is in its way. The seventh was cornered by a
+  polar bear.
+- **Blows between people did not kill.** They are about 0.2 health each.
+
+**#427 did not bring more of these fights.** Fights with a beast in the
+first draw of all forty worlds:
+
+| | #425 | #427 |
+|---|---|---|
+| exchanges | 172 | 130 |
+| person-days fighting | 57 | 37 |
+| covering one of their own (exchanges) | 29 | 31 |
+| with a lion | 15 | 28 |
+| with a polar bear | 21 | 7 |
+| more than 24 tiles from home | 19 | 21 |
+| worlds that fought more / less | | 12 / 16 |
+
+| person-days covering one of their own | #425 | #427 |
+|---|---|---|
+| against a lion | 4, none died | 5, three died |
+| against a polar bear | 3, two died | 1, one died |
+
+The fights are as rare as before, and as near home. What changed is how
+many of them ended in a death: two of seven before and four of six now.
+Taken together, six of thirteen people who stood over one of their own
+against a lion or polar bear died of it. The rise from 3 to 9 is that
+lethal chance falling on a handful of fights.
+
+**Not changed.** This is a trace only. Nothing in the fight makes a
+person stop once they have been struck down to a third of their health.
+They re-decide each time, and covering one of their own outweighs it. A
+person who has lost every exchange of the day breaking off, or the one
+they cover getting away first, would be the place to look. It would need
+measuring against how many of those covered then die instead.
+
+### 429. Someone beaten down breaks off the fight
+
+### 430. A spear turns the blow in a fight too
+
+**Why.** #428 found that every blow death came from a person who kept
+fighting a lion or polar bear until they fell. Nothing let them stop, and
+the threat tree reckoned the blow through their spear while the fight
+landed it whole (`fighting_a_beast` took the full `attack_damage`).
+
+**Changed.**
+- #429: a person with an open wound whose shape has fallen to
+  `the_shape_this_one_breaks_off_at` runs, if they can run and there is
+  somewhere to run to (`beaten_down`, branch "beaten down, breaks off" in
+  `what_this_threat_comes_to`). This applies both when they are standing
+  over one of their own and when they are standing their ground. The line
+  is half their shape, moved by traits: Protector 0.6, Brave 0.7, Stubborn
+  0.8, Anxious 1.2, Coward 1.4. It is clamped to 0.15–0.85. With no wound
+  they still stand.
+- #430: a blow lost in `fighting_a_beast` lands through
+  `what_a_blow_costs_me`, as it already does when a beast strikes on its
+  own (`predators_try_their_luck`) or a hunt turns (#327). A spear that
+  takes some of it wears.
+- Tests: `a_parent_beaten_down_breaks_off`,
+  `a_protector_at_forty_still_stands_over_the_child`,
+  `a_parent_low_without_a_wound_still_stands_over_the_child`,
+  `a_spear_turns_the_blow_in_a_fight_too`. The dice counts in
+  repeatable_tests are unchanged.
+
+**Measured together** against #427, two draws of the same forty worlds.
+The first draw was traced: every injury, every fight with a beast and
+every break-off was logged.
+
+| | #427 | #429 + #430 |
+|---|---|---|
+| deaths over two draws | 17 | 11 |
+| from a blow | 9 | 3 |
+| in childbirth | 8 | 8 |
+| alive at day 720, per draw | 668 | 672 (t +1.86) |
+| field crop brought in, per draw | 427,220 | 423,457 (t −1.13) |
+| wasting person-days, per draw | 92 | 98 (t +1.57) |
+
+The same eight mothers died on the same days. Nobody starved.
+
+**The spear.** 75 of the 80 exchanges a person lost to a beast were
+turned in part. About three-fifths of the blow got through.
+
+**Fights in the first draw** (fights by branch, as in #428):
+
+| | #427 | #429 + #430 |
+|---|---|---|
+| exchanges | 130 | 109 |
+| person-days fighting | 37 | 33 |
+| covering one of their own (exchanges) | 31 | 20 |
+| with a lion | 28 | 16 |
+| with a polar bear | 7 | 8 |
+| with a woolly mammoth | 0 | 2 |
+
+**Blow deaths in the first draw, 5 to 2.**
+- **Three people lived through the same fight.** It was the same person
+  on the same day: sc_s6 and sm_s18 against a lion, sc_s16 against a
+  polar bear, each covering one of their own. Each blow took 15–20
+  instead of 28 or 35. They broke off at 68, 37 and 41 health. The trace
+  cannot split the two changes, because in each case the spear eased
+  every blow and then the person broke off.
+- **One fight never came.** In sc_s10, the day-716 lion fight did not
+  happen: the world went another way from day 640, when a boar fight took
+  one exchange instead of two.
+- **One death was the same.** In sm_s23 a person cornered by a polar bear
+  died as before. Cornered means there is nowhere to run. The first blow
+  was turned to 31 of 35; the second landed whole.
+- **One death was new.** In sm_s7 a person was cornered by a woolly
+  mammoth on day 312, 33 tiles from home. The world had gone another way
+  from day 254. The mammoth landed five blows of 22–23 (of 40): two in
+  the fight and three on its own.
+
+**Blow deaths in the second draw, 4 to 1.** Only the new run was traced.
+- **One person broke off and lived.** In sm_s9 the person who died under
+  #427 covered one of their own against a polar bear on the same day.
+  Each blow took 25 of 35, and they broke off at 50 health.
+- **One person did not break off and died as before.** In sm_s16 the
+  person held a spear (23 of 28 per blow) against a lion, fought on at 31
+  health, and fell to the fourth blow. The trace does not log traits, so
+  whether one held them there is not measured.
+- **Two fights did not come.** The #427 deaths in sm_s7 (day 435) and
+  sm_s17 (day 588) had no fight on those days in this run.
+
+**Who broke off.** Eight people over the two draws:
+- five were covering one of their own against a lion or polar bear;
+- two were standing their ground against a boar;
+- one broke off from a threat on a day they did not fight.
+
+None of the eight died. Nobody else died in their worlds in that draw, so
+breaking off did not pass the death on to the one they covered.
+
+**Not changed.** Being cornered still has no way out, and two of the
+three blow deaths that remain are cornered fights. The other is a person
+who did not break off, for a reason the trace cannot show.
+
+### 431. A cornered person beaten down covers up
+
+**Why.** After #429 and #430, two of the three blow deaths left were
+cornered fights. #429's break-off needs somewhere to run, so a person
+with nowhere to go fought on to the last blow.
+
+**Changed.** A person who is beaten down (`beaten_down`, as in #429) and
+cannot run now stops trading blows. They stay where they are
+(`Action::Freeze`), whether they came at the thing afraid or angry. This
+is branch "beaten down and cornered, covers up" in
+`what_this_threat_comes_to`. The thing can still strike them on its own,
+but a lost exchange no longer adds a blow of its own. Standing over one
+of their own is unchanged.
+
+Tests: `a_cornered_man_beaten_down_covers_up`,
+`an_angry_man_beaten_down_with_nowhere_to_go_covers_up` and
+`a_cornered_man_low_without_a_wound_still_fights`. The dice counts in
+repeatable_tests are unchanged.
+
+**Measured** against #429 + #430, on two draws of the same forty worlds.
+Both runs were traced. Seventy-nine of the eighty world-runs came out
+line for line the same. The one that differs is sm_s7, first draw.
+
+| | #429 + #430 | #431 |
+|---|---|---|
+| deaths over two draws | 11 | 12 |
+| from a blow | 3 | 4 |
+| in childbirth | 8 | 8 |
+
+**What happened in sm_s7.** Day 312 is the woolly mammoth afternoon
+found in #430.
+- The person it was meant for covered up at 33 health and died the same
+  way. Under #430 they fought on and took two more blows: 23 in an
+  exchange and 23 from the mammoth. Under #431 the mammoth charged them
+  twice on its own, at 23 each, and they died at the same moment.
+  Covering up removed the exchange, and the charges filled the gap.
+- A second person died that afternoon. Under #430 the mammoth never
+  struck them. Under #431 it charged them once at 99 health. They fought
+  once and then covered up at 32. Two more charges killed them.
+- The trace cannot say whether covering up caused the second death. A
+  fight rolls the dice and a freeze does not, so the run's dice went
+  their own way from the first cover-up on.
+
+**What covering up comes up against.**
+- **Every cornered person was out of legs, not out of ground.** That is
+  the two in sm_s7 (energy 0.0) and the one in sm_s23 (energy 0.6, a
+  polar bear, not yet beaten down, and dead as before). None was cornered
+  by the shape of the land.
+- **Nothing tells a mammoth to stop.** A beast that keeps its ground
+  charges anyone still inside it whom it has already warned off. It does
+  so one turn in four (`HOW_OFTEN_IT_CHARGES`), within two paces
+  (`A_BEASTS_GROUND`). It does not care whether they are fighting.
+  Someone too tired to run who covers up stays inside its ground and
+  keeps being charged.
+
+**Not changed.** The code stays in, as asked. Over these eighty
+world-runs it reached two people, did not save either, and cost one
+death more, possibly by chance. Two places could make covering up
+worth something:
+- a beast that keeps its ground lets up on someone who has covered up,
+  because it is driving them off, not hunting them;
+- people stop running themselves out of legs twenty to thirty tiles from
+  home.
+Neither is measured.
+
+### 432. A beast lets up on someone who has covered up
+
+**Why.** #431 found that a mammoth keeping its ground charges anyone
+inside it whom it has already warned off, whether or not they are
+fighting. A person who covered up stayed inside that ground and kept
+being charged.
+
+**Changed.** Covering up is now remembered on the person
+(`AgentState::covered_up_at`, set in `freezing()` when they are beaten
+down). A beast that drives people off its ground does not charge
+someone who covered up within the last turn (`MINUTES_PER_TURN`). A
+hungry hunter still hunts them, and a cover-up from longer ago does
+not count.
+
+Tests: `a_beast_lets_up_on_somebody_who_has_covered_up`,
+`a_cover_up_long_over_is_charged_again` and
+`freezing_beaten_down_is_what_covering_up_is`. The dice counts in
+repeatable_tests are unchanged.
+
+**Measured** against #431, on two draws of the same forty worlds.
+Seventy-nine of the eighty world-runs came out line for line the same.
+The one that differs is sm_s7, first draw again.
+
+| | #431 | #432 |
+|---|---|---|
+| deaths over two draws | 12 | 13 |
+| from a blow | 4 | 5 |
+| in childbirth | 8 | 8 |
+
+**What happened in sm_s7.** It turned a quick death into a slow one,
+three times.
+- The mammoth did stop charging. But each person who covered up had
+  no energy left (0.0), and covering up cost energy like any freeze
+  (`WHAT_FREEZING_COSTS`). They could never get the legs to run, so
+  they covered up again each minute.
+- Three people, on days 312, 320 and 325, all on the mammoth's tile
+  (402, 497), lay covered up for one to two days and died there. The
+  trace has 1,070 cover-ups in that world.
+- The blows still did most of the harm (40 to 67 of each person's
+  ledger). The wound took 23 to 26 and thirst 5 to 18. Their cause is
+  still recorded as a blow.
+- Under #431 two people died on day 312. Under #432 the first of them
+  died two days later instead. The second lived, but two others from
+  the same camp were caught on the same tile later and died the same
+  slow way.
+
+Leaving a covered-up person alone is not enough if they cannot get
+up. That is #433.
+
+### 433. Lying covered up is rest
+
+**Why.** #432 left people covered up at no energy, never charged and
+never able to leave.
+
+**Changed.** In `freezing()`, someone beaten down who covers up spends
+no energy. Lying still also gives back what a minute of sleep does
+(`A_TURN_OF_SLEEP_RESTORES` over `MINUTES_PER_TURN`, a sixth of a point
+a minute). From nothing, they have the legs to run again
+(`NOTHING_LEFT`, 1.0) within one turn. Freezing whole, out of fright,
+costs what it did.
+
+Tests: `covered_up_a_person_gets_the_legs_to_go` and
+`freezing_whole_is_not_rest`. The dice counts in repeatable_tests are
+unchanged.
+
+**Measured** against #432 and #431, on two draws of the same forty
+worlds. The second draw is line for line the same as #432's. Two
+first-draw worlds differ, sm_s7 and sm_s23.
+
+| | #431 | #432 | #433 |
+|---|---|---|---|
+| deaths over two draws | 12 | 13 | 10 |
+| from a blow | 4 | 5 | 1 |
+| in childbirth | 8 | 8 | 9 |
+| alive at day 720, both draws | 672 | | 673 |
+
+**What happened.**
+- **sm_s7, the mammoth.** The two people who died on day 312 under
+  #431 both lived.
+  - The first covered up seven times on day 312, from energy 0.0 to
+    1.0, and then stopped. The same person covered up again for a few
+    minutes on days 319 and 320, at 25 health, and lived through it.
+  - The second covered up eight times on days 320 and 321, from 0.0 to
+    1.0, and lived.
+  - The trace has 20 cover-ups in that world, against 1,070 under #432.
+    Nobody died on the mammoth's tile.
+  - The world's one death is in childbirth on day 515, of someone who
+    did not die under #431. The run's dice went their own way from the
+    first cover-up, so that birth cannot be laid to the change.
+- **sm_s23, the polar bear.** The person cornered on day 684 took the
+  same two blows as before, down to 31 health. Under #431 and #432 they
+  died the next day, of those blows and the wound (65.7 and 26.0 of the
+  ledger). Under #433 they lived. The trace prints no cover-up for them
+  from the threat branch, so they lay still another way (the plain
+  "freezes" branch, or choosing to). #433 changes nothing but a freeze
+  while beaten down, so that freeze is what saved them.
+- Nothing else moved. Field crop brought in and fallen, wasting and
+  hunger are unchanged within the two worlds' noise (t at most 1.4).
+  Break-offs (#429) are the same in every world.
+
+**The one blow death left** is in sm_s16, second draw, on day 468: a
+parent standing over one of their own against a lion. They took four
+blows of about 23, from whole to nothing, without stepping back. #429's
+break-off reaches that branch only if they are beaten down and can run.
+Covering up does not reach it at all. (This entry first said sc_s16 and
+three blows; #434's trace corrected both.)
+
+### 434. A parent beaten down over their own covers up
+
+**Why.** After #433 the one death by a blow left was a parent standing
+over one of their own against a lion. A cornered person beaten down
+covers up (#431), but standing over one's own came first in the tree
+and had no such way out: beaten down with legs and somewhere to go, a
+parent broke off (#429); without, they fought on.
+
+**Changed.** A parent beaten down over their own who cannot break off
+(no legs left, or nowhere to go) now covers up (`Action::Freeze`),
+branch "beaten down over its own, covers up". Covering up there is what
+it is everywhere since #432 and #433: no energy spent, rest, and a beast
+keeping its ground lets up. A hunter does not.
+
+Tests: `a_parent_beaten_down_with_no_legs_covers_up_over_the_child` and
+`a_parent_with_no_legs_and_no_wound_still_stands_over_the_child`. The
+dice counts in repeatable_tests are unchanged.
+
+**Measured** against #433, on two draws of the same forty worlds, with
+every stand-over decision traced (health, energy, wound, and where this
+person breaks off). All eighty world-runs came out line for line the
+same. The new branch was never taken.
+
+| | #433 | #434 |
+|---|---|---|
+| deaths over two draws | 10 | 10 |
+| from a blow | 1 | 1 |
+| in childbirth | 9 | 9 |
+
+**Why it was never taken.**
+- **Parents who stood over their own had their legs.** Every
+  stand-over decision traced was at energy 74 to 99. A parent beaten
+  down with legs like that breaks off (#429); there is no one for
+  covering up to reach.
+- **The lion parent was never beaten down.** sm_s16, second draw, day
+  468. They break off at 0.30 of a whole body (`the_shape_this_one_breaks_off_at`,
+  a protector's line). They had 79.8 energy. The lion's blows came at
+  about 23 each: 100, 77.1, 54.0, 30.8. At 30.8 they were 0.308, eight
+  thousandths above their line, so they stood. The next blow killed
+  them.
+
+**What this shows.** The break-off line is read against what is left
+now, not against what the next blow will leave. Against a lion that
+takes 23 at a time, a line of 0.30 means breaking off only at 30 or
+below, one blow from death, and a person at 31 is not there yet. A line
+that counted the next blow, or a break-off when the next blow would take
+them past it, would have sent this parent away at 30.8, before the
+blow that killed them. (At 54 the next blow leaves 30.8, still above
+0.30, so they would have stood there.) That is #435.
+
+**Not changed.** The code stays in, as asked. Over these eighty
+world-runs it did nothing.
+
+### 435. Beaten down reckoned by the next blow
+
+**Why.** The last death by a blow (#434, sm_s16, second draw, day 468)
+was a parent over their own against a lion, at 30.8 with a line of
+0.30. They stood because they were not yet at their line, and the next
+blow of about 23 killed them.
+
+**Changed.** Beaten down is now read against what the next blow will
+leave: health less the hardest blow in the open wound, against the
+same break-off line (`where_the_next_blow_leaves_me`). Someone with no
+open wound is not beaten down. The hardest blow is kept on the person
+(`the_hardest_blow_in_it`) and starts again when the wound is clean.
+Everything that reads beaten down (breaking off, covering up when
+cornered, covering up over one's own) now reads it this way.
+
+Tests: `a_protector_breaks_off_before_the_blow_that_would_finish_them`
+(a blow of 23 at 40), `a_protector_struck_lightly_at_forty_still_stands`
+(a blow of 5) and `the_hardest_blow_is_kept_with_its_wound`. The dice
+counts in repeatable_tests are unchanged.
+
+**Measured** against #434, on two draws of the same forty worlds.
+Seventy of eighty world-runs came out line for line the same; in the
+other ten people broke off sooner.
+
+| | #434 | #435 |
+|---|---|---|
+| deaths over two draws | 10 | 9 |
+| from a blow | 1 | 0 |
+| in childbirth | 9 | 9 |
+| people who broke off a fight | 8 | 13 |
+| blows taken from beasts | 79 | 74 |
+| alive at the end, per draw | 673 | 674 (t +1.00) |
+
+**The lion parent.** Same three blows as before: 100, 77.1, 54.0,
+30.8. At 54 the next blow would leave 30.8, above their line, so they
+stood. At 30.8 it would leave about 7.5, so they broke off, and lived.
+No one else in that world died.
+
+**Elsewhere.** Where people break off, they break off higher up: in
+the five first-draw worlds that changed, the first break-off came at
+53 to 84 health, against 37 to 68 under #434. Field crop brought in
+and fallen, hunger and wasting are all within noise (t under 1).
+
+**Not shown.** Whether anyone was still within a hunter's reach after
+breaking off. That is what #436 traces.
+
+### 436. Run down by a hunter, a person beaten down covers up
+
+**Why.** After #435 a person beaten down breaks off and runs. Nothing
+was there for someone who ran and was still within a hunter's strike
+range (3 paces) afterwards: they ran again, spending legs they no longer
+had to spare.
+
+**Changed.** A person beaten down who ran while beaten down within the
+last turn (`ran_beaten_down_at`, set in `fleeing_from`), with a hunter
+of people still within strike range, covers up where they are
+(`Action::Freeze`), branch "beaten down and run down, covers up". This
+comes first in the threat tree. Covering up costs no energy and is rest
+(#433). A hunter does not let up on someone covered up the way a beast
+keeping its ground does (#432). Once the run is more than a turn old,
+beaten down means breaking off and running again, as before.
+
+Tests: `a_parent_run_down_after_breaking_off_covers_up` and
+`a_run_long_over_is_not_being_run_down`. The dice counts in
+repeatable_tests are unchanged.
+
+**Measured** against #435, on two draws of the same forty worlds, with
+every run-down decision traced. Seventy-eight of eighty world-runs came
+out line for line the same. The branch was taken by two people, both in
+the first draw, 71 decisions in all.
+
+- **sc_s16, day 666, a polar bear.** A parent standing over their own
+  took two blows of about 19, broke off at 60.9 and ran. The bear was
+  still within three paces. They covered up (26 decisions), energy
+  86.8 to 82.4 with one more run in between. No blow landed after they
+  covered up.
+- **sm_s18, day 618, a lion.** A parent broke off from a lion at 53.1
+  on day 614. Four days later, still wounded and still beaten down by
+  #435's reckoning (59.6 health, hardest blow 15.8), they ran from a
+  lion again and it stayed within reach. They covered up (45
+  decisions), getting their breath back from 79.3 to 84.2, running
+  once more in between. No blow landed.
+
+| | #435 | #436 |
+|---|---|---|
+| deaths over two draws | 9 | 9 |
+| from a blow | 0 | 0 |
+| in childbirth | 9 | 9 |
+| people who broke off a fight | 13 | 13 |
+| blows taken from beasts | 74 | 74 |
+| alive at the end, per draw | 674 | 674 |
+
+The two worlds that changed drift apart afterwards (camp moves, later
+fights) and no one else in them died. Field crop, hunger and wasting
+are within noise.
+
+**What this shows.** Nothing makes a beast follow a person who runs; in
+both cases the beast was simply still near when the run ended. Covering
+up there did no harm and gave rest. Neither person was struck in either
+draw, run or covered, so these runs cannot say whether covering up
+beats running again once a hunter is hungry enough to strike.
+

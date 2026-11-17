@@ -435,6 +435,65 @@ impl Simulation {
     /// breaks down, so this is a pressure to move rather than a sentence.
     pub(in crate::analytics) const HOW_OFTEN_FOUL_GROUND_TELLS: f64 = 0.05;
 
+    /// What each crop that has come in or been lost came to, for the people
+    /// who put work into it (#416).
+    ///
+    /// Planting is a store against hunger, laid down in time and food: a turn
+    /// breaking ground, a handful of seed that was not eaten, turns weeding.
+    /// What comes back is what is taken off the crop. Each of them is paid out
+    /// of it as they paid in, and sets their share against their outlay - see
+    /// `Agent::what_my_crop_came_to`.
+    pub(in crate::analytics) fn what_the_crops_came_to(&mut self) {
+        let settled = std::mem::take(&mut self.world.crops_settled);
+        for (crop, put_in, taken) in settled {
+            let all_put_in: f32 = put_in.iter().map(|(_, theirs)| theirs).sum();
+            if all_put_in <= 0.0 {
+                continue;
+            }
+            let came_back = taken as f32 * self.what_an_item_of_this_crop_is_worth(crop);
+            if came_back < all_put_in {
+                self.world.crops_that_failed += 1;
+            } else {
+                self.world.crops_that_paid += 1;
+            }
+            let called = Self::what_can_be_sown()
+                .into_iter()
+                .find(|(_, sowable, _)| *sowable == crop)
+                .map(|(called, _, _)| called);
+            for (who, theirs) in put_in {
+                let Some(agent) = self
+                    .population
+                    .agents
+                    .iter_mut()
+                    .find(|agent| agent.id == who && agent.state.is_alive)
+                else {
+                    continue;
+                };
+                agent.what_my_crop_came_to(theirs, came_back * theirs / all_put_in, called);
+            }
+        }
+    }
+
+    /// Somebody who put work into a crop sees it ripen short (#418). Seen
+    /// often enough by somebody who keeps the seasons in mind, it comes to
+    /// them that a crop wants sowing ahead of its season, not in it.
+    pub(in crate::analytics) fn what_ripened_short(&mut self) {
+        use crate::agents::Agent;
+        let saw = std::mem::take(&mut self.world.crops_ripened_short_for);
+        for who in saw {
+            let Some(agent) = self.population.agents.iter_mut().find(|agent| agent.id == who && agent.state.is_alive)
+            else {
+                continue;
+            };
+            agent.skills.made_one(Agent::A_CROP_OF_MINE_SHORT);
+            if agent.knows_the_way("seasons")
+                && agent.skills.times_made(Agent::A_CROP_OF_MINE_SHORT) >= Agent::SHORT_CROPS_BEFORE_A_CALENDAR
+            {
+                agent.it_comes_to_me("know:planting_calendar", Agent::SHORT_CROPS_BEFORE_A_CALENDAR);
+            }
+        }
+    }
+
     /// The people of a camp see a ripe crop of theirs fall in the field, its
     /// season over and nobody having brought it in (#395): everybody grown
     /// whose home is within a walk of the field. Seen often enough, it comes
@@ -460,6 +519,37 @@ impl Simulation {
                     agent.it_comes_to_me("know:seasons", Agent::CROPS_LOST_BEFORE_THE_SEASONS);
                 }
             }
+        }
+    }
+
+    /// How far a field is from the nearest home of anybody alive, as a
+    /// band (#424): 0 within a walk to a field, 1 within two, 2 farther or
+    /// nobody living anywhere.
+    pub(in crate::analytics) fn how_far_from_home(&self, field: (i32, i32)) -> usize {
+        let walk = Self::FIELD_WALK_RADIUS as i32;
+        let nearest = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| {
+                let home = Self::where_this_one_lives(agent);
+                (home.0 - field.0).abs().max((home.1 - field.1).abs())
+            })
+            .min();
+        match nearest {
+            Some(paces) if paces <= walk => 0,
+            Some(paces) if paces <= 2 * walk => 1,
+            _ => 2,
+        }
+    }
+
+    /// Where today's fallen field crop fell, by how far from home (#424).
+    pub(in crate::analytics) fn where_the_field_crop_fell(&mut self) {
+        let fallen = std::mem::take(&mut self.world.field_crop_fallen_where);
+        for (field, amount) in fallen {
+            let band = self.how_far_from_home((field.x, field.y));
+            self.world.field_crop_fallen_by_distance[band] += u64::from(amount);
         }
     }
 }

@@ -201,3 +201,51 @@ fn a_flint_spear_puts_it_down_in_fewer_blows_than_a_sharpened_stick() {
     assert!(flint < stick * 0.85, "flint {flint:.1} against a sharpened stick {stick:.1}");
     assert!(stick < bare * 0.5, "a sharpened stick {stick:.1} against bare hands {bare:.1}");
 }
+
+/// And when the wolf gets the better of an exchange, the spear turns the
+/// blow as it does when the wolf comes at him unasked. The whole blow landed
+/// in a fight, while the decision to stand had reckoned it through the spear,
+/// so people stood over their own at sixteen health against a lion sure of a
+/// blow of under sixteen and took twenty-eight (#430).
+#[test]
+fn a_spear_turns_the_blow_in_a_fight_too() {
+    let what_got_through = |armed: bool| -> (f32, f32) {
+        for seed in 0..200u64 {
+            crate::core::dice::seed(7_000 + seed);
+            let (mut simulation, which) = a_man_and_a_wolf();
+            if armed {
+                give_him_a_spear(&mut simulation);
+            }
+            let coming = {
+                let wolf = simulation.world.animals.get(&which).expect("the wolf");
+                simulation
+                    .world
+                    .animals
+                    .get_species(&wolf.species_id)
+                    .expect("a wolf is a kind of thing")
+                    .attack_damage
+            };
+            let reckoned = simulation.population.agents[0].what_a_blow_costs_me(coming);
+            let mut rng = crate::core::dice::roll();
+            let _ = simulation.fighting_a_beast(&which, &None, 0, &mut rng, 10);
+            let took = 100.0 - simulation.population.agents[0].state.health;
+            if took > 0.0 {
+                return (took, reckoned);
+            }
+        }
+        panic!("the wolf never once got the better of an exchange in two hundred");
+    };
+
+    let (bare, bare_reckoned) = what_got_through(false);
+    let (armed, armed_reckoned) = what_got_through(true);
+
+    assert!(
+        (bare - bare_reckoned).abs() < 0.01,
+        "bare-handed the whole of it gets through: took {bare:.1}, reckoned {bare_reckoned:.1}"
+    );
+    assert!(
+        (armed - armed_reckoned).abs() < 0.01,
+        "with a spear he takes what he reckoned he would: took {armed:.1}, reckoned {armed_reckoned:.1}"
+    );
+    assert!(armed < bare, "and the spear turns some of it: {armed:.1} against {bare:.1}");
+}

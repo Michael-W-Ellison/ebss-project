@@ -169,7 +169,7 @@ impl Simulation {
         let room = self
             .world
             .pit_at(here)
-            .map(|pit| crate::world::Pit::WHAT_A_PIT_TAKES - pit.how_much_is_in_it())
+            .map(|pit| pit.how_much_room_is_left())
             .unwrap_or(0);
 
         if room == 0 {
@@ -867,6 +867,119 @@ impl Simulation {
         }
     }
 
+    /// How much wood raising a store into a granary takes (#420): posts, a
+    /// floor of poles and the frame of a thatch.
+    pub(in crate::analytics) const WOOD_A_GRANARY_TAKES: u32 = 10;
+
+    /// What raising a granary costs, in what it would save (#420): the wood
+    /// fetched and the day's work, some forty units of food.
+    pub(in crate::analytics) const WHAT_RAISING_A_GRANARY_COSTS: f64 = 40.0;
+
+    /// The store of the camp's this one would raise into a granary (#420),
+    /// by somebody who knows how: the fullest covered store near home, if
+    /// home has no granary with room already and what the camp has put by
+    /// about it, up to what a granary holds, would save over a season more
+    /// than the granary costs, by what they reckon a lined store loses and
+    /// how much waste bothers them.
+    pub(in crate::analytics) fn a_store_to_raise(&self, agent: &crate::agents::Agent) -> Option<crate::world::Position> {
+        use crate::world::Pit;
+        let home = Self::where_this_one_lives(agent);
+        let near_home = |pit: &&Pit| {
+            Self::within((pit.where_it_is.x, pit.where_it_is.y), home, Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS)
+        };
+        if self.world.pits.iter().filter(near_home).any(|pit| pit.is_a_granary() && pit.has_room()) {
+            return None;
+        }
+        let put_by: u32 = self
+            .world
+            .pits
+            .iter()
+            .filter(near_home)
+            .filter(|pit| pit.covered && !pit.is_a_granary())
+            .map(|pit| pit.how_much_is_in_it())
+            .sum();
+        let a_day_saved = agent.what_i_reckon_a_store_loses("lined").max(0.0);
+        let season = crate::environment::seasons::DAYS_PER_SEASON as f64;
+        let worth = f64::from(put_by.min(Pit::WHAT_A_GRANARY_TAKES)) * a_day_saved * season * agent.how_much_waste_bothers_me();
+        if worth < Self::WHAT_RAISING_A_GRANARY_COSTS {
+            return None;
+        }
+        self.world
+            .pits
+            .iter()
+            .filter(near_home)
+            .filter(|pit| pit.covered && !pit.is_a_granary())
+            .max_by_key(|pit| (pit.how_much_is_in_it(), pit.where_it_is.x, pit.where_it_is.y))
+            .map(|pit| pit.where_it_is)
+    }
+
+    /// The next of raising a granary (#420): the wood for it fetched, then
+    /// walked to the store and raised.
+    pub(in crate::analytics) fn a_granary_to_raise(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<crate::environment::Action> {
+        use crate::environment::Action;
+        if !agent.knows_the_way("granary")
+            || !agent.immediate_needs_met()
+            || agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT
+        {
+            return None;
+        }
+        let store = self.a_store_to_raise(agent)?;
+        if agent.how_many_i_have("wood") < Self::WOOD_A_GRANARY_TAKES {
+            return self
+                .nearest_resource_within(agent, here, Self::FORAGE_RADIUS, |resource| {
+                    resource.resource_type == crate::world::ResourceType::Wood
+                })
+                .map(|_| Action::Gather { resource_type: "wood".to_string() });
+        }
+        if Self::within((here.0, here.1), (store.x, store.y), 1) {
+            Some(Action::RaiseGranary)
+        } else {
+            Some(Action::Move { target: (store.x, store.y, here.2) })
+        }
+    }
+
+    /// `Action::RaiseGranary`: the covered store this one stands at raised
+    /// on a floor of poles under a thatch, of the wood in hand (#420).
+    pub(in crate::analytics) fn raising_a_granary(&mut self, agent_index: usize) -> crate::environment::ActionResult {
+        use crate::environment::ActionResult;
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_the_way("granary") {
+            return ActionResult::failure("Nobody here raises a granary".to_string());
+        }
+        if agent.how_many_i_have("wood") < Self::WOOD_A_GRANARY_TAKES {
+            return ActionResult::failure("Not wood enough for a granary".to_string());
+        }
+        let here = agent.state.position;
+        let Some(at) = self
+            .world
+            .pits
+            .iter()
+            .filter(|pit| pit.covered && !pit.is_a_granary())
+            .map(|pit| pit.where_it_is)
+            .find(|at| Self::within((here.0, here.1), (at.x, at.y), 1))
+        else {
+            return ActionResult::failure("No store here to raise".to_string());
+        };
+        self.what_opening_the_store_shows(agent_index, at);
+        self.population.agents[agent_index].inventory.remove_item("wood", Self::WOOD_A_GRANARY_TAKES);
+        if let Some(pit) = self.world.pit_at_mut(at) {
+            pit.holds.push(crate::agents::InventoryItem::new_with_weight(
+                crate::world::Pit::GRANARY.to_string(),
+                1,
+                0.0,
+            ));
+        }
+        self.world.granaries_built += 1;
+        ActionResult::success()
+            .with_drive_change(crate::core::DriveType::Preparedness, -0.3)
+            .with_energy_cost(10.0)
+            .with_message("Raised a granary".to_string())
+    }
+
     /// `Action::LineStore`: the bare store this one stands at lined, opened to
     /// do it (#394).
     pub(in crate::analytics) fn lining_a_store(&mut self, agent_index: usize) -> crate::environment::ActionResult {
@@ -916,6 +1029,17 @@ impl Simulation {
         agent.what_i_saw_of_a_store(how, held * days, gnawed as f64);
         if agent.what_the_stores_have_shown_me() {
             debug!("Agent {} saw the bare stores lose what the lined ones kept", agent.id);
+        }
+        // Gnawed through a lining often enough, somebody who lines their
+        // stores and grows a harvest thinks to get the store up off the
+        // ground where the burrowers cannot come at it (#420)
+        if gnawed > 0 && how == "lined" && agent.knows_the_way("line_the_store") && agent.knows_how_to_do("TillSoil") {
+            agent.skills.made_one(crate::agents::Agent::A_LINED_STORE_GNAWED_BY_A_FARMER);
+            if agent.skills.times_made(crate::agents::Agent::A_LINED_STORE_GNAWED_BY_A_FARMER)
+                >= crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_A_GRANARY
+            {
+                agent.it_comes_to_me("know:granary", crate::agents::Agent::LINED_STORES_GNAWED_BEFORE_A_GRANARY);
+            }
         }
         // Gnawed through a lining, and somebody who lines their stores thinks
         // to daub the next one shut (#393)

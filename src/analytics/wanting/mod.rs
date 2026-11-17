@@ -1480,6 +1480,9 @@ impl Simulation {
                 // And the camp's bare stores lined, by somebody who has seen
                 // what they lose and minds it (#394)
                 .or_else(|| self.a_store_to_line(agent, agent_position))
+                // And a granary raised over the camp's fullest store, by a
+                // farmer who has seen even lined stores gnawed (#420)
+                .or_else(|| self.a_granary_to_raise(agent, agent_position))
                 // A line of snares is food put by that you do not have to
                 // carry or keep from spoiling: it stays alive in the wood
                 // until you want it, which is what makes trapping the

@@ -306,6 +306,20 @@ fn a_ripe_crop_seen_to_fall_is_how_the_seasons_come_to_mind() {
     assert!(simulation.world.crops_lost_to_the_season.is_empty());
 }
 
+/// Field crop that falls is counted by how far it was from the nearest
+/// home (#424): within a walk, within two, and farther.
+#[test]
+fn fallen_crop_is_counted_by_how_far_it_was_from_home() {
+    let mut simulation = a_farmer_at_home();
+    let walk = Simulation::FIELD_WALK_RADIUS as i32;
+    simulation.world.field_crop_fallen_where.push((Position::new(HOME.0 + 3, HOME.1), 5));
+    simulation.world.field_crop_fallen_where.push((Position::new(HOME.0, HOME.1 + walk + 1), 7));
+    simulation.world.field_crop_fallen_where.push((Position::new(HOME.0 + 2 * walk + 1, HOME.1), 11));
+    simulation.where_the_field_crop_fell();
+    assert_eq!(simulation.world.field_crop_fallen_by_distance, [5, 7, 11]);
+    assert!(simulation.world.field_crop_fallen_where.is_empty());
+}
+
 /// Somebody who keeps the seasons brings a ripe crop of the camp's in when
 /// its season is nearly out, hungry or not; not while there is time yet, and
 /// a lazy man not for a few heads.

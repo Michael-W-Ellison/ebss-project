@@ -296,6 +296,9 @@ pub enum Action {
     /// Lay the brush in hand along the edge round the camp's fields where the
     /// agent stands (#398)
     HedgeAField,
+    /// Raise the covered store the agent stands at into a granary, of the
+    /// wood in hand (#420)
+    RaiseGranary,
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
     /// Go over a standing field pulling weeds out of it and picking pests off
@@ -488,6 +491,7 @@ impl Action {
             Action::DigOutMidden => Some(DriveType::Sustenance), // Compost is next year's crop
             Action::LineStore => Some(DriveType::Preparedness), // What vermin do not take is put by
             Action::HedgeAField => Some(DriveType::Sustenance), // What beasts do not trample is eaten
+            Action::RaiseGranary => Some(DriveType::Preparedness), // What vermin cannot reach is put by
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::TakeFrom { .. } => Some(DriveType::Utility),

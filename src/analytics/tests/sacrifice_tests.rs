@@ -128,6 +128,152 @@ fn the_same_man_alone_runs() {
     );
 }
 
+/// Wolves at a child, and the parent already struck down to forty with the
+/// wound still open: one more go could be the last, and the parent breaks
+/// off (#429). People stood over their own against a lion and went again
+/// and again until they fell.
+fn wolves_at_the_child_and_the_parent_at_forty(opened: f32) -> Simulation {
+    let mut world = an_empty_country();
+    for at in [(32, 30), (32, 31), (31, 31), (32, 29)] {
+        world
+            .spawn_animal("wolf".to_string(), at)
+            .expect("a wolf should spawn");
+    }
+    let mut simulation = a_parent_and_a_child(world);
+    simulation.population.agents[0].state.health = 40.0;
+    simulation.population.agents[0].state.an_open_wound = opened;
+    simulation
+}
+
+fn what_the_parent_does(simulation: &mut Simulation) -> (&'static str, Option<Action>) {
+    simulation.feel_about_what_stands_in_the_way();
+    let here = simulation.population.agents[0].state.position;
+    simulation.what_this_threat_comes_to(&simulation.population.agents[0], here)
+}
+
+#[test]
+fn a_parent_beaten_down_breaks_off() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    let (branch, answer) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down, breaks off");
+    assert!(matches!(answer, Some(Action::FleeFrom { .. })), "{answer:?}");
+}
+
+/// The same parent with no legs left to run on covers up over the child
+/// instead of trading blows to the last (#434).
+#[test]
+fn a_parent_beaten_down_with_no_legs_covers_up_over_the_child() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.population.agents[0].state.energy = 0.0;
+    let (branch, answer) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down over its own, covers up");
+    assert!(matches!(answer, Some(Action::Freeze)), "{answer:?}");
+}
+
+/// Without a wound open, a parent with no legs left is not beaten down, and
+/// stands over the child as before.
+#[test]
+fn a_parent_with_no_legs_and_no_wound_still_stands_over_the_child() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.0);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.population.agents[0].state.energy = 0.0;
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "stands over one of its own");
+}
+
+/// The same protector, struck at forty by a blow of twenty-three, knows the
+/// next one would leave them at seventeen, past their three tenths, and
+/// breaks off before it lands rather than after (#435).
+#[test]
+fn a_protector_breaks_off_before_the_blow_that_would_finish_them() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    let mut traits = crate::core::TraitSet::new();
+    traits.add_trait(crate::core::Trait::Protector);
+    simulation.population.agents[0].traits = traits;
+    simulation.population.agents[0].state.the_hardest_blow_in_it = 23.0;
+    let (branch, answer) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down, breaks off");
+    assert!(matches!(answer, Some(Action::FleeFrom { .. })), "{answer:?}");
+}
+
+/// Struck by something light, the same protector at forty still stands:
+/// another blow of five would leave them at thirty-five (#435).
+#[test]
+fn a_protector_struck_lightly_at_forty_still_stands() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    let mut traits = crate::core::TraitSet::new();
+    traits.add_trait(crate::core::Trait::Protector);
+    simulation.population.agents[0].traits = traits;
+    simulation.population.agents[0].state.the_hardest_blow_in_it = 5.0;
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "stands over one of its own");
+}
+
+/// A parent beaten down who broke off and still has the wolves within a
+/// strike has been run down, and covers up rather than turn their back
+/// again (#436).
+#[test]
+fn a_parent_run_down_after_breaking_off_covers_up() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    let now = simulation.current_turn;
+    simulation.population.agents[0].state.ran_beaten_down_at = Some(now);
+    let (branch, answer) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down and run down, covers up");
+    assert!(matches!(answer, Some(Action::Freeze)), "{answer:?}");
+}
+
+/// A run long over is not being run down: the same parent breaks off again
+/// (#436).
+#[test]
+fn a_run_long_over_is_not_being_run_down() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    simulation.current_turn += 10 * crate::environment::seasons::MINUTES_PER_TURN;
+    let long_ago = simulation.current_turn - 5 * crate::environment::seasons::MINUTES_PER_TURN;
+    simulation.population.agents[0].state.ran_beaten_down_at = Some(long_ago);
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "beaten down, breaks off");
+}
+
+/// The hardest blow is kept with the wound it went into, and starts again
+/// once that wound has closed (#435).
+#[test]
+fn the_hardest_blow_is_kept_with_its_wound() {
+    let mut state = crate::agents::AgentState::new();
+    state.take_damage(10.0);
+    state.take_damage(23.0);
+    state.take_damage(5.0);
+    assert_eq!(state.the_hardest_blow_in_it, 23.0);
+    state.an_open_wound = 0.0;
+    state.take_damage(5.0);
+    assert_eq!(state.the_hardest_blow_in_it, 5.0);
+}
+
+/// The same parent, a protector, stands longer: forty is not yet down far
+/// enough for them.
+#[test]
+fn a_protector_at_forty_still_stands_over_the_child() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.6);
+    let mut traits = crate::core::TraitSet::new();
+    traits.add_trait(crate::core::Trait::Protector);
+    simulation.population.agents[0].traits = traits;
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "stands over one of its own");
+}
+
+/// Forty from a fever or a lean month is not being beaten down. With no
+/// wound open the parent stands over the child as before.
+#[test]
+fn a_parent_low_without_a_wound_still_stands_over_the_child() {
+    let mut simulation = wolves_at_the_child_and_the_parent_at_forty(0.0);
+    simulation.population.agents[0].traits = crate::core::TraitSet::new();
+    let (branch, _) = what_the_parent_does(&mut simulation);
+    assert_eq!(branch, "stands over one of its own");
+}
+
 /// Somebody who could fight it themselves is not being protected.
 #[test]
 fn nobody_lays_down_their_life_for_a_grown_man() {

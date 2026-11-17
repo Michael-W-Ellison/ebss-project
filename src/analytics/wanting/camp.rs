@@ -82,6 +82,15 @@ impl Simulation {
     ///
     /// A child not yet grown sleeps where a parent does.
     pub(in crate::analytics) fn where_this_one_sleeps(&self, agent_index: usize) -> Option<(i32, i32)> {
+        self.where_this_one_sleeps_and_whether_a_crop_held_it(agent_index).map(|(at, _)| at)
+    }
+
+    /// `where_this_one_sleeps`, and whether a crop standing by the camp kept
+    /// it from drifting tonight (#427).
+    pub(in crate::analytics) fn where_this_one_sleeps_and_whether_a_crop_held_it(
+        &self,
+        agent_index: usize,
+    ) -> Option<((i32, i32), bool)> {
         let agent = self.population.agents.get(agent_index)?;
 
         if !agent.state.life_stage.can_reproduce() {
@@ -91,7 +100,7 @@ impl Simulation {
                     && agent.parent_ids.contains(&them.id)
             });
             if let Some(parent) = parent {
-                return self.where_this_one_sleeps(parent);
+                return self.where_this_one_sleeps_and_whether_a_crop_held_it(parent);
             }
         }
 
@@ -128,6 +137,15 @@ impl Simulation {
         // the old answer. The one exception is a camp that has just moved:
         // its people are still on their way, the middle of them is out of
         // reach of where they now live, and home is the new place.
+        //
+        // **Nor off its fields (#427).** A crop standing by the camp holds
+        // it as a roof does: it drifts after its forage only as far as keeps
+        // the nearest field with a crop on it within a walk. It used to drift
+        // off them inside a season: 85% of the field crop that fell more
+        // than two walks from any home had been sown that year within two
+        // walks of the sower's hearth, and the hearth had drifted away
+        // without the camp ever moving (#426).
+        let mut held = false;
         let here_tonight: Vec<(i32, i32)> = self
             .who_lives_near(at)
             .into_iter()
@@ -143,7 +161,11 @@ impl Simulation {
                 here_tonight.iter().map(|p| p.1).sum::<i32>() / n,
             );
             if (middle.0 - at.0).abs().max((middle.1 - at.1).abs()) <= Self::THE_REACH_OF_A_CAMP {
-                at = middle;
+                if self.a_crop_holds_the_camp(at, middle) {
+                    held = true;
+                } else {
+                    at = middle;
+                }
             }
         }
 
@@ -162,7 +184,27 @@ impl Simulation {
                 (roof.0 - at.0).abs().max((roof.1 - at.1).abs()) <= Self::FORAGE_RADIUS as i32
             })
             .min_by_key(|roof| (roof.0 - at.0).abs() + (roof.1 - at.1).abs());
-        Some(roof.unwrap_or(at))
+        Some((roof.unwrap_or(at), held))
+    }
+
+    /// Whether a camp at `at` would drift off its fields by sleeping at
+    /// `tonight`: the nearest field with a crop standing on it, within a walk
+    /// of the camp, would be more than a walk from where it sleeps (#427).
+    pub(in crate::analytics) fn a_crop_holds_the_camp(&self, at: (i32, i32), tonight: (i32, i32)) -> bool {
+        let walk = Self::FIELD_WALK_RADIUS as i32;
+        let nearest = self
+            .world
+            .nodes_near(crate::world::Position::new(at.0, at.1), Self::FIELD_WALK_RADIUS)
+            .filter(|crop| crop.amount > 0)
+            .filter(|crop| {
+                self.world
+                    .grid
+                    .get_tile(&crop.position)
+                    .is_some_and(|tile| tile.terrain.is_cultivated())
+            })
+            .map(|crop| (crop.position.x, crop.position.y))
+            .min_by_key(|field| ((field.0 - at.0).abs().max((field.1 - at.1).abs()), *field));
+        nearest.is_some_and(|field| !Self::within(field, tonight, walk))
     }
 
     /// The middle of the people who live around a place, found by stepping to
@@ -223,9 +265,12 @@ impl Simulation {
     /// they are sleeping in, wherever it has drifted to. Not a move, so it
     /// does not count as one (`hearth_moved_at`).
     pub(in crate::analytics) fn settle_the_hearth(&mut self, agent_index: usize) {
-        let Some(home) = self.where_this_one_sleeps(agent_index) else {
+        let Some((home, held)) = self.where_this_one_sleeps_and_whether_a_crop_held_it(agent_index) else {
             return;
         };
+        if held {
+            self.nights_a_crop_held_the_camp.set(self.nights_a_crop_held_the_camp.get() + 1);
+        }
         let agent = &mut self.population.agents[agent_index];
         let here = agent.state.position;
         if (home.0 - here.0).abs().max((home.1 - here.1).abs()) <= Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS {

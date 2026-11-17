@@ -405,7 +405,52 @@ impl Simulation {
         // standing over their child, whatever the odds are - and the odds are
         // exactly what this sets aside. It is the one place in the model
         // where an agent knowingly takes the worse of two options.
+        //
+        // Until it has beaten them down. Somebody struck down to where they
+        // would no longer stand, and with somewhere to go, breaks off rather
+        // than go at it again: people stood over their own against a lion
+        // or polar bear and went again and again the same day until they
+        // fell, and six of the thirteen who did died of it (#428, #429).
+        let breaks_off = || {
+            Self::beaten_down(agent)
+                && agent.could_i_run_at_all(Self::NOTHING_LEFT)
+                && self.is_there_anywhere_to_run(
+                    &agent.exploration_knowledge,
+                    agent_position,
+                    where_it_is,
+                )
+        };
+        let run = || Action::FleeFrom {
+            away_from: (where_it_is.0, where_it_is.1, agent_position.2),
+        };
+
+        // Run down. Somebody beaten down who ran from a hunter and has it
+        // within a strike of them still has not got away, and a second run
+        // is a back to it: they cover up where they are instead. Whatever it
+        // does then, it does without a lost exchange of theirs adding a blow
+        // (#431), and they get their breath back (#433) (#436).
+        if a_hunter_of_people
+            && paces <= Self::PREDATOR_STRIKE_RANGE
+            && Self::beaten_down(agent)
+            && agent.state.ran_beaten_down_at.is_some_and(|at| {
+                self.current_turn.saturating_sub(at) <= crate::environment::seasons::MINUTES_PER_TURN
+            })
+        {
+            return ("beaten down and run down, covers up", Some(Action::Freeze));
+        }
+
         if could_fight && a_hunter_of_people && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
+            if breaks_off() {
+                return ("beaten down, breaks off", Some(run()));
+            }
+            // And beaten down with no legs left or nowhere to go, it stops
+            // trading blows over them, as a cornered person does (#431): it
+            // covers up where it stands. The one death by a blow left after
+            // #433 was a parent over their own against a lion, four blows
+            // of twenty-three without a step back (#434).
+            if Self::beaten_down(agent) {
+                return ("beaten down over its own, covers up", Some(Action::Freeze));
+            }
             return (
                 "stands over one of its own",
                 Some(if paces <= Self::HUNT_REACH {
@@ -447,10 +492,6 @@ impl Simulation {
                     target: (where_it_is.0, where_it_is.1, agent_position.2),
                 }
             }
-        };
-
-        let run = || Action::FleeFrom {
-            away_from: (where_it_is.0, where_it_is.1, agent_position.2),
         };
 
         // Angry is not a reason to stand in front of something that outweighs
@@ -495,7 +536,23 @@ impl Simulation {
         }
 
         match (standing, could_fight, could_run) {
-            // What it wanted to do, and it can
+            // What it wanted to do, and it can - unless it has been beaten
+            // down to where it would not stand, and can get away
+            (true, true, true) if Self::beaten_down(agent) => {
+                ("beaten down, breaks off", Some(run()))
+            }
+
+            // And beaten down with nowhere to go, it stops trading blows all
+            // the same. It cannot get away, so it covers up where it stands:
+            // the thing may still come at it, but a lost exchange no longer
+            // adds a blow of its own. Cornered fights went on to the last
+            // blow as standing over one's own did before #429 - a woolly
+            // mammoth took a person from 78 to nothing in one afternoon, two
+            // of the five blows in exchanges they went on trading at 33
+            // (#430, #431). Afraid or angry, it is the same corner.
+            (_, true, false) if Self::beaten_down(agent) => {
+                ("beaten down and cornered, covers up", Some(Action::Freeze))
+            }
             (true, true, _) => ("stands its ground", Some(fight())),
             (false, _, true) => ("runs", Some(run())),
 
@@ -509,6 +566,60 @@ impl Simulation {
             (_, false, false) => ("freezes", Some(Action::Freeze)),
         }
     }
+
+    /// Whether this one has been beaten down: struck, with the wound still
+    /// open, and down to the shape it would no longer stand in.
+    ///
+    /// Read off the body rather than the fight. A blow is the one thing that
+    /// opens a wound (`take_damage`), so a person low from hunger or a fever
+    /// with no wound on them is not beaten down, and stands over their own
+    /// as before; one a lion has opened up twice is. How far down that is
+    /// depends on who they are (`the_shape_this_one_breaks_off_at`).
+    ///
+    /// And it is reckoned by where the next blow would leave them, not where
+    /// the last one did. A person who has been hit knows how hard (the
+    /// hardest blow in the wound). Read off what was left, a parent who
+    /// breaks off at three tenths stood over their own against a lion at
+    /// 30.8, eight thousandths above the line, and the fourth blow of 23
+    /// killed them: the line was only ever crossed one blow from death, and
+    /// it was the one death by a blow left (#434, #435).
+    pub(in crate::analytics) fn beaten_down(agent: &crate::agents::Agent) -> bool {
+        agent.state.an_open_wound > 0.0
+            && Self::where_the_next_blow_leaves_me(agent) <= Self::the_shape_this_one_breaks_off_at(agent)
+    }
+
+    /// The shape this one would be in after another blow like the hardest
+    /// already in their wound.
+    pub(in crate::analytics) fn where_the_next_blow_leaves_me(agent: &crate::agents::Agent) -> f32 {
+        (agent.state.health - agent.state.the_hardest_blow_in_it) / 100.0
+    }
+
+    /// How far down somebody is struck before they break off a fight: half
+    /// a whole body for most people. A protector, the brave and the stubborn
+    /// stand longer; the anxious and a coward go sooner. Every trait that
+    /// bears on it counts, kept within reason so that nobody stands to the
+    /// last blow and nobody breaks off whole.
+    pub(in crate::analytics) fn the_shape_this_one_breaks_off_at(agent: &crate::agents::Agent) -> f32 {
+        use crate::core::Trait;
+        let leaning = agent
+            .traits
+            .get_traits()
+            .iter()
+            .map(|what| match what {
+                Trait::Protector => 0.6,
+                Trait::Brave => 0.7,
+                Trait::Stubborn => 0.8,
+                Trait::Anxious => 1.2,
+                Trait::Coward => 1.4,
+                _ => 1.0,
+            })
+            .product::<f32>();
+        (Self::BEATEN_DOWN * leaning).clamp(0.15, 0.85)
+    }
+
+    /// Half a whole body: where most people break off a fight they are
+    /// losing.
+    pub(in crate::analytics) const BEATEN_DOWN: f32 = 0.5;
 
     /// How much of a whole body this one has left to fight with: health on
     /// the scale it starts at, never less than a tenth.
