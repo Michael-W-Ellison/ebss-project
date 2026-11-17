@@ -31903,3 +31903,104 @@ up there did no harm and gave rest. Neither person was struck in either
 draw, run or covered, so these runs cannot say whether covering up
 beats running again once a hunter is hungry enough to strike.
 
+
+### 437. A hunter chases someone who runs
+
+**Why.** Nothing made a beast follow a person who ran from it. Hunters
+struck whoever stood within three paces, and a run of nineteen paces
+took anybody out of that, so running always worked (#436). Asked for:
+a lion chases someone who runs and strikes if it catches them; someone
+it has run down stops running from it; they cover up only when it is
+close.
+
+**Changed**, in eight steps, each measured on the same forty worlds
+(two draws where noted) against #436:
+
+1. *A hungry hunter runs down somebody who ran from it* (8b7ba80). A
+   hunter that is hungry and could take the person follows someone who
+   ran from where it stands, if they are within its reach (the person's
+   bolt at its pace against theirs), once in a half hour, ending a
+   stride behind them. Measured: no chase in forty worlds. People ran
+   from lions and polar bears 343 times in three worlds traced and the
+   hunter was never more than 0.18 hungry.
+2. *Running sets a hunter off, hungry or fed* (7f28ec8). It strikes one
+   time in ten when it gets there (`A_CAUGHT_RUNNER_IS_STRUCK`), or at
+   its hunger's odds if higher. Measured: 1,243 chases and 22 deaths by
+   a blow in forty worlds. People ran, were run down, covered up and ran
+   again from a hunter a pace off, every half hour; one person was run
+   down 66 times in a day. `a_hungry_predator_turns_on_the_settlement`
+   compared all maulings by starving and fed wolves; fed wolves now maul
+   runners they chase, so it compares blows that did not end a chase.
+3. *Someone a hunter has run down stops running from it* (11f2dc0), for
+   a day, while it is within its reach: they cover up instead, and a fed
+   hunter does not strike someone who is not running. Measured: 428
+   chases, 6 deaths by a blow and 1 by a wound. Lions go about in twos:
+   run down by one, people stayed for it and ran from its mate, which
+   ran them down, and then from the first again, eleven times in a day.
+4. *For any hunter of that kind* (ef25037), not the one beast. Measured
+   on 36 worlds: 265 chases, at most 4 of one person in a day, 5 deaths
+   by a blow and 1 by hunger. All five blows were people who stayed
+   beside a polar bear or a pair of lions, ran from it again a pace off
+   once the day was out, and were run down and struck; one was run down
+   on seven days running.
+5. *For as long as one is within reach* (b1e498d), not a day; the memory
+   is cleared in the hunters' pass once none is. Measured on two draws:
+   490 chases, 2 deaths by a blow, 1 by hunger.
+6. *Cover up only when it is close* (667fd92). Kept covered up while one
+   was anywhere within its reach, a wounded person lay five days with
+   lions about. Now within three paces they cover up; further off they
+   walk on and the fear drive answers what they dread rather than
+   running them off. Measured on one draw: the same 2 deaths.
+7. *A beast does not stand its ground on someone covered up* (06ede2a).
+   Traced: four fed lions a pace from that person each reckoned them a
+   threat and stood their ground, which holds a beast still without
+   striking. A beast now lets up on someone covered up in the last half
+   hour, as one keeping its ground already did (#432). Measured on two
+   draws: 2 deaths by a blow, both in the first.
+8. *Cover up only while the hunter still has them* (8540f93). Traced,
+   both deaths of step 7: the lions had let up and lay idle or ranged
+   about a pace off, and the person stayed covered up four days and died
+   of the wounds and thirst; in the other world a polar bear a pace off
+   was squared up to somebody else for three days. Now someone run down
+   covers up while a hunter of that kind is within strike and standing
+   over them or hunting them (`it_still_has_me`), and otherwise gets up
+   and walks on, which does not set it off again.
+
+Tests: `chase_tests.rs`, 22 tests, among them
+`somebody_run_down_is_not_kept_down_by_a_lion_lying_beside_them`, which
+runs whole half hours, and `somebody_run_down_walks_away_from_a_lion_that_has_let_up`;
+both fail without step 8. The dice counts in repeatable_tests are
+unchanged.
+
+**Measured** (step 8 against #436 and step 7, two draws of forty
+worlds, 720 days):
+
+| | #436 | step 7 | step 8 |
+|---|---|---|---|
+| chases | 0 | 394 | 557 |
+| runs from a hunter | 0 | 953 | 1,247 |
+| blows from lions and polar bears | 0 | 30 | 62 |
+| deaths by a blow | 0 | 2 | 0 |
+| deaths in childbirth | 9 | 7 | 7 |
+| run-down cover-up decisions | 0 | 222,304 | 30,146 |
+| walk-on decisions | 0 | 86 | 9,602 |
+| most chases of one person in a day | 0 | 7 | 5 |
+| wasting person-days, per draw | 107 | 95 | 72 |
+| alive at the end, per draw | 674 | 672 | 672 |
+
+Under step 8 nobody stayed covered up for a hunter through a whole day
+in either draw, and no one died by a beast. Field crop brought in and
+fallen are within noise of #436.
+
+**What this shows.** A chase that ends in a strike one time in ten is
+dangerous only when it repeats, and every death on the way came from
+the person being held near the hunter: running again from it (steps
+2-5) or kept still beside it (steps 6-7). Once someone run down stops
+running and also stops waiting on a beast that has stopped caring
+about them, the chases cost blows (62 over two draws) and no lives.
+
+**Not explained.** Blows from boars rose over the same runs: 94 under
+#436, 116 under step 7, 120 under step 8. Nothing in #437 touches
+boars, and this has not been traced. A hunger death in one world
+(sm_s10) under steps 4-6 was of somebody never chased, and it did not
+recur under steps 7-8; it was not traced either.
