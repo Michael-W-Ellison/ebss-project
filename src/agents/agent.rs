@@ -1219,6 +1219,11 @@ pub struct AgentState {
     #[serde(default)]
     pub chased_at: Option<u32>,
 
+    /// The hunter that last ran this one down. Run down once, they do not
+    /// run from it again while it is within reach of them (#437).
+    #[serde(default)]
+    pub chased_by: Option<uuid::Uuid>,
+
     /// The tick this one last covered up: beaten down, they stopped
     /// fighting and stayed where they were (#431). A beast that drives
     /// people off its ground lets up on somebody who has (#432).
@@ -1320,6 +1325,7 @@ impl AgentState {
             ran_beaten_down_at: None,
             ran_from: None,
             chased_at: None,
+            chased_by: None,
             bleeding: 0.0,
             wound_dressed_until: 0,
             wound_cleaned: false,

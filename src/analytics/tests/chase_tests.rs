@@ -147,3 +147,93 @@ fn somebody_past_a_lions_reach_has_got_away() {
 
     assert_eq!(where_the_lion_is(&simulation), (30, 31), "out of its reach at {reach}");
 }
+
+/// A grown man a lion has just run down, frightened of it, with the lion a
+/// pace off and his legs and health whole.
+fn run_down_by_a_lion() -> Simulation {
+    let mut simulation = ran_from_a_lion(0.0);
+    simulation.predators_try_their_luck_at(0);
+    let agent = &mut simulation.population.agents[0];
+    agent.state.health = 100.0;
+    agent.state.energy = 100.0;
+    agent.traits = crate::core::TraitSet::new();
+    let kind = simulation.world.animals.get_species("lion").expect("lions exist").name.clone();
+    simulation.population.agents[0]
+        .emotions
+        .set_fear(crate::agents::emotions::EmotionSource::Creature(kind), 0.9);
+    simulation
+}
+
+#[test]
+fn somebody_a_lion_has_run_down_does_not_run_from_it_again() {
+    let simulation = run_down_by_a_lion();
+    assert_eq!(simulation.world.people_run_down, 1, "the lion should have run him down");
+
+    let him = &simulation.population.agents[0];
+    let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
+
+    assert_eq!(branch, "run down, covers up");
+    assert!(matches!(answer, Some(crate::environment::Action::Freeze)), "{answer:?}");
+}
+
+#[test]
+fn fear_alone_does_not_send_somebody_run_down_off_again() {
+    let mut simulation = run_down_by_a_lion();
+    // Somebody who could not face it, whom fear on its own sends running
+    simulation.population.agents[0].state.life_stage = LifeStage::Child;
+    let him = &simulation.population.agents[0];
+
+    let answer = simulation.what_to_run_from(him, him.state.position);
+
+    assert!(matches!(answer, Some(crate::environment::Action::Freeze)), "{answer:?}");
+}
+
+#[test]
+fn somebody_run_down_a_day_ago_runs_as_before() {
+    let mut simulation = run_down_by_a_lion();
+    simulation.current_turn = NOW + crate::environment::seasons::ONCE_A_DAY;
+    let him = &simulation.population.agents[0];
+
+    let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
+
+    assert_ne!(branch, "run down, covers up");
+    assert!(matches!(answer, Some(crate::environment::Action::FleeFrom { .. })), "{branch}: {answer:?}");
+}
+
+#[test]
+fn somebody_run_down_by_one_lion_still_runs_from_another() {
+    let mut simulation = run_down_by_a_lion();
+    // The lion that ran him down is somebody else's now
+    simulation.population.agents[0].state.chased_by = Some(uuid::Uuid::from_u128(7));
+    let him = &simulation.population.agents[0];
+
+    let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
+
+    assert_ne!(branch, "run down, covers up");
+    assert!(matches!(answer, Some(crate::environment::Action::FleeFrom { .. })), "{branch}: {answer:?}");
+}
+
+/// The whole of it, minute by minute, with the lion keeping two paces off
+/// him: somebody who covers up is not run down again, and a fed lion
+/// beside him leaves him be. Without the cover-up he runs every minute and
+/// is run down again every half hour.
+#[test]
+fn a_fed_lion_runs_somebody_down_once_and_no_more() {
+    let mut simulation = run_down_by_a_lion();
+    let health = simulation.population.agents[0].state.health;
+    for minute in 1..=(3 * crate::environment::seasons::MINUTES_PER_TURN) {
+        simulation.current_turn = NOW + minute;
+        let at = simulation.population.agents[0].state.position;
+        simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 2);
+        let him = &simulation.population.agents[0];
+        if let (_, Some(crate::environment::Action::FleeFrom { away_from })) =
+            simulation.what_this_threat_comes_to(him, him.state.position)
+        {
+            simulation.fleeing_from(&away_from, 0);
+        }
+        simulation.predators_try_their_luck_at(0);
+    }
+
+    assert_eq!(simulation.world.people_run_down, 1);
+    assert_eq!(simulation.population.agents[0].state.health, health, "a fed lion strikes nobody standing");
+}

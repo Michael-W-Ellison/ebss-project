@@ -317,6 +317,34 @@ impl Simulation {
             })
     }
 
+    /// Whether the hunter this one would run from has run them down already
+    /// and is still within reach of them.
+    ///
+    /// Then a run is only the next chase. With nothing else stopping it,
+    /// people ran, were run down, covered up and ran again from a hunter a
+    /// pace off, every half hour, and were struck about one chase in ten:
+    /// one person was run down fifty-four times in a day, and sixteen people
+    /// died of it in thirty-two worlds that lost none to a hunter before
+    /// (#437). Run down by it once in the day, they stay where they are
+    /// while it is near, and a fed hunter leaves somebody who is not
+    /// running alone. The day is chosen, not measured.
+    pub(in crate::analytics) fn run_down_by_it_already(
+        &self,
+        agent: &crate::agents::Agent,
+        animal: &crate::environment::fauna::Animal,
+    ) -> bool {
+        let Some(species) = self.world.animals.get_species(&animal.species_id) else {
+            return false;
+        };
+        let at = agent.state.position;
+        let off = (at.0 - animal.position.0).abs().max((at.1 - animal.position.1).abs());
+        agent.state.chased_by == Some(animal.id)
+            && agent.state.chased_at.is_some_and(|when| {
+                self.current_turn.saturating_sub(when) < crate::environment::seasons::ONCE_A_DAY
+            })
+            && off <= Self::how_far_it_runs_somebody_down(species, animal) + Self::PREDATOR_STRIKE_RANGE
+    }
+
     /// Whether a beast of this kind would ever strike a person of this age.
     ///
     /// It hunts, its blow does something, and it is not too small to take
@@ -663,6 +691,7 @@ impl Simulation {
                 hunter.position = beside;
             }
             self.population.agents[agent_index].state.chased_at = Some(current_turn);
+            self.population.agents[agent_index].state.chased_by = Some(animal_id);
             self.world.people_run_down += 1;
         }
 

@@ -307,6 +307,11 @@ impl Simulation {
                 (animal.position.0 - here.0).abs() + (animal.position.1 - here.1).abs()
             })?;
 
+        // Not from a hunter that has run this one down already (#437)
+        if self.run_down_by_it_already(agent, closest) {
+            return Some(Action::Freeze);
+        }
+
         Some(Action::FleeFrom {
             away_from: (closest.position.0, closest.position.1, agent_position.2),
         })
@@ -337,6 +342,30 @@ impl Simulation {
     /// nothing about whether the tree was working or idle. The name is what
     /// `Simulation::what_a_threat_came_to` counts.
     pub(in crate::analytics) fn what_this_threat_comes_to(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> (&'static str, Option<Action>) {
+        let answer = self.what_this_threat_comes_to_at_first(agent, agent_position);
+
+        // Every way of getting away from a hunter that has already run this
+        // one down, and is still within reach of them, is the next chase:
+        // they cover up where they are instead (#437).
+        if let (_, Some(Action::FleeFrom { away_from })) = answer {
+            let the_one_that_ran_me_down = self.world.animals.get_all().iter().find(|animal| {
+                animal.is_alive()
+                    && (animal.position.0 - away_from.0).abs().max((animal.position.1 - away_from.1).abs()) <= 1
+                    && self.run_down_by_it_already(agent, animal)
+            });
+            if the_one_that_ran_me_down.is_some() {
+                return ("run down, covers up", Some(Action::Freeze));
+            }
+        }
+        answer
+    }
+
+    /// The tree as it stands before asking whether a run is any use.
+    fn what_this_threat_comes_to_at_first(
         &self,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
