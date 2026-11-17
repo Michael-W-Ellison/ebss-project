@@ -201,16 +201,35 @@ fn somebody_run_down_a_day_ago_runs_as_before() {
 }
 
 #[test]
-fn somebody_run_down_by_one_lion_still_runs_from_another() {
+fn somebody_run_down_by_a_polar_bear_still_runs_from_a_lion() {
     let mut simulation = run_down_by_a_lion();
-    // The lion that ran him down is somebody else's now
-    simulation.population.agents[0].state.chased_by = Some(uuid::Uuid::from_u128(7));
+    simulation.population.agents[0].state.chased_by = Some("polar_bear".to_string());
     let him = &simulation.population.agents[0];
 
     let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
 
     assert_ne!(branch, "run down, covers up");
     assert!(matches!(answer, Some(crate::environment::Action::FleeFrom { .. })), "{branch}: {answer:?}");
+}
+
+/// Lions go about in twos. Run down by one, he does not run from the other
+/// when it comes up beside him: it would run him down the same (#437).
+#[test]
+fn somebody_run_down_by_one_lion_does_not_run_from_the_other() {
+    let mut simulation = run_down_by_a_lion();
+    let at = simulation.population.agents[0].state.position;
+    // The one that ran him down has gone off, and its mate is beside him
+    simulation.world.animals.get_all_mut()[0].position = (at.0 + 60, at.1);
+    simulation
+        .world
+        .spawn_animal("lion".to_string(), (at.0, at.1 - 1))
+        .expect("a second lion should spawn");
+    let him = &simulation.population.agents[0];
+
+    let (branch, answer) = simulation.what_this_threat_comes_to(him, him.state.position);
+
+    assert_eq!(branch, "run down, covers up");
+    assert!(matches!(answer, Some(crate::environment::Action::Freeze)), "{answer:?}");
 }
 
 /// The whole of it, minute by minute, with the lion keeping two paces off

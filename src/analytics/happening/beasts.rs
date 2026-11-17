@@ -317,8 +317,8 @@ impl Simulation {
             })
     }
 
-    /// Whether the hunter this one would run from has run them down already
-    /// and is still within reach of them.
+    /// Whether a hunter of the kind this one would run from has run them
+    /// down already, and this one is within reach of them.
     ///
     /// Then a run is only the next chase. With nothing else stopping it,
     /// people ran, were run down, covered up and ran again from a hunter a
@@ -328,6 +328,11 @@ impl Simulation {
     /// (#437). Run down by it once in the day, they stay where they are
     /// while it is near, and a fed hunter leaves somebody who is not
     /// running alone. The day is chosen, not measured.
+    ///
+    /// Of its kind rather than the one beast: lions go about in twos, and
+    /// with only the one that had run them down to stay for, people stayed
+    /// for it and ran from the other, which ran them down, and then from
+    /// the first again - eleven times in a day in one world (#437).
     pub(in crate::analytics) fn run_down_by_it_already(
         &self,
         agent: &crate::agents::Agent,
@@ -338,7 +343,7 @@ impl Simulation {
         };
         let at = agent.state.position;
         let off = (at.0 - animal.position.0).abs().max((at.1 - animal.position.1).abs());
-        agent.state.chased_by == Some(animal.id)
+        agent.state.chased_by.as_deref() == Some(animal.species_id.as_str())
             && agent.state.chased_at.is_some_and(|when| {
                 self.current_turn.saturating_sub(when) < crate::environment::seasons::ONCE_A_DAY
             })
@@ -530,7 +535,7 @@ impl Simulation {
         // Those a beast came at and stopped short of, what it was and where
         let mut warnings: Vec<(usize, String, String, (i32, i32))> = Vec::new();
         // Who a hunter ran down, and where it ended up beside them (#437)
-        let mut chases: Vec<(uuid::Uuid, usize, (i32, i32))> = Vec::new();
+        let mut chases: Vec<(uuid::Uuid, String, usize, (i32, i32))> = Vec::new();
 
         for animal in self.world.animals.get_all() {
             if !animal.is_alive() || animal.is_domesticated {
@@ -661,7 +666,7 @@ impl Simulation {
             // It has closed on them.
             let ran_down = chased.is_some();
             if let Some((index, beside)) = chased {
-                chases.push((animal.id, index, beside));
+                chases.push((animal.id, animal.species_id.clone(), index, beside));
             }
 
             // A full belly makes a cautious animal. Hunger is what changes
@@ -686,12 +691,12 @@ impl Simulation {
 
         // The chase itself: it is beside them, and they know they have been
         // run down, once in the half hour.
-        for (animal_id, agent_index, beside) in chases {
+        for (animal_id, kind, agent_index, beside) in chases {
             if let Some(hunter) = self.world.animals.get_mut(&animal_id) {
                 hunter.position = beside;
             }
             self.population.agents[agent_index].state.chased_at = Some(current_turn);
-            self.population.agents[agent_index].state.chased_by = Some(animal_id);
+            self.population.agents[agent_index].state.chased_by = Some(kind);
             self.world.people_run_down += 1;
         }
 
