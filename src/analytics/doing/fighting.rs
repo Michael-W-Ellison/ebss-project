@@ -536,7 +536,24 @@ impl Simulation {
         // Beaten down, it is covering up rather than frozen with fright, and
         // that is something a beast that only wants it gone can see (#432).
         let now = self.current_turn;
+
+        // So is keeping still with a hunter that has run it down within
+        // striking distance: it has stopped running and is not coming at
+        // anything (#437).
+        let for_what_ran_me_down = {
+            let agent = &self.population.agents[agent_index];
+            let at = agent.state.position;
+            agent.state.chased_by.is_some()
+                && self.world.animals.get_all().iter().any(|animal| {
+                    animal.is_alive()
+                        && Self::within_its_strike(animal, at)
+                        && self.run_down_by_it_already(agent, animal)
+                })
+        };
         let agent = &mut self.population.agents[agent_index];
+        if for_what_ran_me_down && !Self::beaten_down(agent) {
+            agent.state.covered_up_at = Some(now);
+        }
         if Self::beaten_down(agent) {
             agent.state.covered_up_at = Some(now);
 

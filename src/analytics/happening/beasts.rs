@@ -75,11 +75,24 @@ impl Simulation {
 
         // Everybody who might be a threat to something, and what they are
         // worth in a fight
+        let now = self.current_turn;
         let people: Vec<((i32, i32), f32, uuid::Uuid)> = self
             .population
             .agents
             .iter()
             .filter(|agent| agent.state.is_alive)
+            // **Not somebody who has covered up**, as a beast keeping its
+            // ground lets up on them (#432). Somebody covered up is coming at
+            // nothing. Reckoned a threat, four fed lions stood their ground
+            // beside a person covered up for them for five days, none of
+            // them striking and none moving off, while the person, wounded
+            // and kept still by lions a pace away, died of the wounds and
+            // thirst (#437). A hungry hunter still hunts them.
+            .filter(|agent| {
+                !agent.state.covered_up_at.is_some_and(|at| {
+                    now.saturating_sub(at) <= crate::environment::seasons::MINUTES_PER_TURN
+                })
+            })
             .map(|agent| {
                 let armed = agent
                     .what_i_have_to_work_with(crate::agents::SkillType::MeleeCombat)

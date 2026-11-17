@@ -314,7 +314,7 @@ impl Simulation {
     }
 
     /// Whether a beast is near enough to strike somebody standing here.
-    fn within_its_strike(
+    pub(in crate::analytics) fn within_its_strike(
         animal: &crate::environment::fauna::Animal,
         agent_position: (i32, i32, i32),
     ) -> bool {

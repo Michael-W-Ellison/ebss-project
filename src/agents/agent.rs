@@ -1226,8 +1226,10 @@ pub struct AgentState {
     pub chased_by: Option<String>,
 
     /// The tick this one last covered up: beaten down, they stopped
-    /// fighting and stayed where they were (#431). A beast that drives
-    /// people off its ground lets up on somebody who has (#432).
+    /// fighting and stayed where they were (#431), or run down, they kept
+    /// still with the hunter close (#437). A beast that drives people off
+    /// its ground lets up on somebody who has (#432), and no beast stands
+    /// its ground against them (#437).
     #[serde(default)]
     pub covered_up_at: Option<u32>,
 

@@ -320,3 +320,38 @@ fn somebody_never_run_down_runs_from_a_lion_out_of_its_strike() {
     assert!(matches!(answer, Some(crate::environment::Action::FleeFrom { .. })), "{branch}: {answer:?}");
     assert!(!simulation.walks_on_past_what_ran_me_down(them, them.state.position));
 }
+
+fn stands_its_ground_on_them(simulation: &Simulation) -> bool {
+    let them = simulation.population.agents[0].id;
+    matches!(
+        simulation.world.animals.get_all()[0].state,
+        crate::environment::fauna::AnimalState::Attacking { target_id } if target_id == them
+    )
+}
+
+/// A lion beside somebody who is not covered up stands its ground on them.
+#[test]
+fn a_lion_beside_somebody_stands_its_ground_on_them() {
+    let mut simulation = run_down_by_a_lion();
+
+    simulation.what_the_beasts_make_of_us();
+
+    assert!(stands_its_ground_on_them(&simulation), "{:?}", simulation.world.animals.get_all()[0].state);
+}
+
+/// Covered up for a lion that has run them down, they are no threat to it,
+/// and it does not stand over them: four fed lions stood a pace off
+/// somebody covered up for five days, and the person died of thirst and
+/// their wounds (#437).
+#[test]
+fn a_lion_does_not_stand_its_ground_on_somebody_covered_up_for_it() {
+    let mut simulation = run_down_by_a_lion();
+    let at = simulation.population.agents[0].state.position;
+    simulation.world.animals.get_all_mut()[0].position = (at.0, at.1 - 1);
+
+    simulation.freezing(0);
+    assert_eq!(simulation.population.agents[0].state.covered_up_at, Some(NOW));
+    simulation.what_the_beasts_make_of_us();
+
+    assert!(!stands_its_ground_on_them(&simulation), "{:?}", simulation.world.animals.get_all()[0].state);
+}
