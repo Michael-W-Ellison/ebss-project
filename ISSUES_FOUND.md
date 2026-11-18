@@ -31999,8 +31999,46 @@ the person being held near the hunter: running again from it (steps
 running and also stops waiting on a beast that has stopped caring
 about them, the chases cost blows (62 over two draws) and no lives.
 
-**Not explained.** Blows from boars rose over the same runs: 94 under
-#436, 116 under step 7, 120 under step 8. Nothing in #437 touches
-boars, and this has not been traced. A hunger death in one world
+**Not explained here.** Blows from boars rose over the same runs: 94
+under #436, 116 under step 7, 120 under step 8. Traced in #438. A hunger death in one world
 (sm_s10) under steps 4-6 was of somebody never chased, and it did not
 recur under steps 7-8; it was not traced either.
+
+### 438. The extra boar blows under #437
+
+**Why.** Under #437 blows from boars rose from 94 (#436) to 139, 116
+and 120 over two draws of forty worlds (steps 5, 7 and 8). Nothing in
+#437 is about boars.
+
+**Traced**, from the #437 measurement traces. No new run.
+
+- *No boar strike changed.* The only change #437 made to how a beast
+  strikes is the chase, and no boar chased anybody: every chase was a
+  lion, a polar bear or a wolf.
+- *No one was struck by a boar while held by a hunter.* Of 226
+  person-days with a boar blow under steps 5, 7 and 8, none had a chase,
+  a run from a hunter, a cover-up or a walk-on in the three days before.
+- *Boar victims were no more often chased than anyone else.* Under step
+  8, 15 of 57 boar victims had ever been chased (26 per cent), against
+  244 of 923 people in the traces (26 per cent).
+- *The blows come in episodes, and the episodes move from world to
+  world.* A boar near camp strikes several people over a few days.
+  Counted as episodes (blows in one world within five days of each
+  other) the runs read 27 (#436), 36, 32 and 34. Worlds that run line
+  for line as under #436 have the same boar blows by construction. The
+  five worlds that changed most each part from #436 at their first chase
+  or run from a hunter, between day 46 and day 241, and their boar
+  episodes come 100 to 300 days after. In one of them, sm_s3, there is
+  one episode under #436, none, one and seven under steps 5, 7 and 8,
+  each run parting from the last before its episode.
+- *Only the second draw rose.* In the worlds that parted from #436, the
+  first draw went 8 episodes to 8, 5 and 11, and the second 4 to 13, 12
+  and 8. The three #437 runs are not three draws: they share each
+  world's course up to the first point where they differ, and in sc_s5
+  all three are line for line the same, so its one episode (five blows,
+  days 619 to 637) is counted in each.
+
+**What this shows.** No mechanism ties the extra boar blows to #437.
+They are episodes in worlds whose course #437 changed, rising in one
+draw and not the other. Two draws cannot say whether the second draw's
+rise is chance; a third draw of #436 and step 8 would.
