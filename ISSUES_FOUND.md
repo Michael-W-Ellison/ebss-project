@@ -32042,3 +32042,33 @@ and 120 over two draws of forty worlds (steps 5, 7 and 8). Nothing in
 They are episodes in worlds whose course #437 changed, rising in one
 draw and not the other. Two draws cannot say whether the second draw's
 rise is chance; a third draw of #436 and step 8 would.
+
+**Third draw.** The same forty worlds under #436 and step 8 (8540f93),
+with a third set of seeds (REDRAW=2).
+
+| | #436 | step 8 |
+|---|---|---|
+| boar blows | 55 | 73 |
+| boar episodes | 14 | 19 |
+| worlds that parted from #436 | | 22 of 40 |
+| boar episodes in those worlds | 12 | 17 |
+| lion and polar bear blows | 0 | 20 |
+| chases | 0 | 157 |
+| deaths | 3 childbirth | 3 childbirth |
+| alive at day 720 | 673 | 675 |
+| wasting person-days | 59 | 55 |
+
+The rise came again. Over the three draws boar episodes went 41 to 53
+and boar blows 149 to 193, and each draw rose: 14 to 17, 13 to 17 and
+14 to 19 episodes. World by world it is thinner. Of 120 world-draws,
+episodes rose in 9 and fell in 5 (mean +0.10 a world, t +1.71), and
+blows rose in 11 and fell in 8 (t +1.59). Much of it is a few worlds:
+sc_s11 went from no boar blows to 13 in the third draw, as sm_s3 went
+from 1 to 16 in the second.
+
+**What this shows now.** A rise in all three draws is less likely to be
+chance than one in a single draw, but at the level of single worlds it
+is short of t 2, and the tracing above found no way for #437 to bring a
+boar to anyone. Left open: no change is made for it. If it matters, the
+next step is to trace where the boars are in the worlds that rose,
+against where the camp is, rather than a fourth draw.
