@@ -32072,3 +32072,65 @@ is short of t 2, and the tracing above found no way for #437 to bring a
 boar to anyone. Left open: no change is made for it. If it matters, the
 next step is to trace where the boars are in the worlds that rose,
 against where the camp is, rather than a fourth draw.
+
+**Where the boars are against the camp.** The third draw again under
+both, with a trace that only prints: once a day, every live boar and how
+far it is from the nearest hearth; at every boar blow, which boar, what
+it was doing and what the person struck was about; and what took each
+boar that was eaten. Three worlds from the earlier draws whose boar
+episodes rose most were run as well (sm_s3 of the second draw, sc_s6
+and sm_s10 of the first). Every line but the new ones is the same as in
+the untraced runs, in all 86.
+
+*There are no more boars.* Over the forty worlds of the third draw:
+
+| | #436 | step 8 |
+|---|---|---|
+| boar-days | 763,298 | 765,646 |
+| boars alive at day 720 | 820 | 823 |
+| boars born | 1,051 | 1,051 |
+| starved | 612 | 606 |
+| taken by lions | 100 | 101 |
+| taken by bears | 29 | 35 |
+| boar-days within 10 of a hearth, at the day's end | 69 | 85 |
+| within 3 | 13 | 14 |
+| within 30 | 295 | 347 |
+
+So lions busy with people did not leave more boars about.
+
+*Boars do not settle by camp.* At the day's end a boar is within ten
+cells of anybody's hearth on about one boar-day in ten thousand, under
+either. Of 42 episodes (16 under #436, 26 under step 8, all 43 worlds a
+side), the striking boar had not been within ten of a hearth at any
+day's end in the 30 days before in 31.
+
+*Where the blows come from.* All 43 worlds a side, 59 blows under #436
+and 109 under step 8:
+
+| | #436 | step 8 |
+|---|---|---|
+| the boar was **fleeing** | 49 | 92 |
+| it was following its herd | 8 | 15 |
+| it was attacking | 2 | 2 |
+| the person struck was **gathering wood** | 47 | 95 |
+| no plan | 12 | 14 |
+| the boar within 10 of the struck person's hearth | 38 | 76 |
+| episodes by one boar | 13 of 16 | 21 of 26 |
+
+**A boar that has decided to run still charges.** 141 of the 168 boar
+blows (84 per cent) are struck by a boar whose own reckoning of the
+person in front of it, in `what_the_beasts_make_of_us`, came out
+Fleeing. The charge in `predators_try_their_luck` asks only whether the
+kind keeps a ground (`would_it_charge`) and whether somebody is inside
+it; it never asks what the beast made of them. And 142 of the 168 were
+somebody out gathering wood, mostly within ten cells of home: a boar
+crosses the wood-gatherers' ground, sees them, turns to run, and charges
+them on its way.
+
+**What this shows.** No mechanism ties the rise to #437: no more boars,
+no lion took fewer, no boar stays near camp. The blows come from boars
+met in passing by wood-gatherers near home, and from a boar that
+charges while it runs, under both. The rise is in which worlds happen to
+put a wood-gatherer across a boar's path after #437 has moved their
+course. The fleeing boar's charge is a defect of its own, under #436 as
+much as under #437, and is not fixed here.
