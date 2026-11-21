@@ -569,7 +569,16 @@ impl Simulation {
             // Somebody inside the ground of a beast that keeps one is
             // charged, hungry or not, whatever their age, and the beast takes
             // nothing for it.
-            if Self::would_it_charge(species) {
+            //
+            // **Not one that has turned to run.** A beast that has made up
+            // its mind to flee what it saw (`what_the_beasts_make_of_us`) is
+            // getting away, not driving anybody off its ground. Asked only
+            // whether somebody stood inside the ground, a boar running from
+            // a wood-gatherer charged them on its way: 141 of 168 boar blows
+            // over 43 worlds a side were struck by a boar that was fleeing
+            // (#438).
+            let running = matches!(animal.state, crate::environment::fauna::AnimalState::Fleeing { .. });
+            if Self::would_it_charge(species) && !running {
                 let too_near = agent_positions
                     .iter()
                     .filter(|(_, position)| {

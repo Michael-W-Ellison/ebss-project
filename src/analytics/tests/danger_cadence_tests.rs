@@ -463,6 +463,28 @@ fn a_warned_person_backs_off_the_beasts_ground() {
     }
 }
 
+/// But not one that has turned to run (#438). A boar fleeing a person
+/// charged them on its way, and that was most of what boars ever struck.
+#[test]
+fn a_fleeing_beast_does_not_charge() {
+    for kind in ["bear", "boar", "mammoth"] {
+        let mut simulation = one_person_beside(kind, 30);
+        let beast = simulation.world.animals.get_all()[0].position;
+        let fleeing = crate::environment::fauna::AnimalState::Fleeing { from_position: (beast.0 - 1, beast.1) };
+        let mut struck = 0;
+        for _ in 0..40 {
+            simulation.world.animals.get_all_mut()[0].state = fleeing.clone();
+            struck += struck_in(&mut simulation, 1);
+        }
+        assert_eq!(struck, 0, "a fleeing {kind} charged");
+        // Nor stops short of them: it is not warning anybody off.
+        assert!(
+            simulation.population.agents[0].emotions.what_last_struck_me.is_none(),
+            "a fleeing {kind} came at somebody"
+        );
+    }
+}
+
 /// A boar roots for its living and takes a rabbit when it finds one: it
 /// charges whoever comes into its ground, and does not hunt people (#372).
 #[test]
