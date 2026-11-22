@@ -28,10 +28,13 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #437, a hunter chases someone who
-runs): `cargo test --lib` in one piece, 3,199 tests: 3,193 passed, 0
-failed, 6 ignored, in 22 minutes. The 22 chase tests are the whole
-difference. Before it, #435 and #436: 3,177 tests, 3,171 passed, 0
+**Last full run** (ISSUES_FOUND #439, a beast that has turned to run
+does not charge): `cargo test --lib` in one piece, 3,200 tests: 3,194
+passed, 0 failed, 6 ignored, in 25.5 minutes. The one new test,
+`a_fleeing_beast_does_not_charge`, is the whole difference; nothing
+else changed colour. Before it, #437: 3,199 tests, 3,193 passed, 0
+failed, in 22 minutes, the 22 chase tests the difference from #435 and
+#436: 3,177 tests, 3,171 passed, 0
 failed. (`cargo test` without `--lib` stops
 at two examples, `debug_survival` and `world_integration_demo`, that do
 not set `WorldConfig::terrain`.)

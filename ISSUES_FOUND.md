@@ -32134,3 +32134,65 @@ charges while it runs, under both. The rise is in which worlds happen to
 put a wood-gatherer across a boar's path after #437 has moved their
 course. The fleeing boar's charge is a defect of its own, under #436 as
 much as under #437, and is not fixed here.
+
+The fleeing boar's charge is fixed in #439.
+
+### 439. A beast that has turned to run does not charge
+
+**Why.** #438 found that 141 of 168 boar blows were struck by a boar
+that had already made up its mind to flee the person it struck. The
+charge in `predators_try_their_luck` asked whether somebody stood inside
+the beast's ground, and never what the beast had made of them.
+
+**Change.** In `predators_try_their_luck` (beasts.rs) a beast whose
+state is `Fleeing` neither charges nor stops short to warn anybody off.
+Everything else about the charge is as it was: a boar, bear or mammoth
+that stands its ground, follows its herd or grazes still keeps its
+ground. Test: `a_fleeing_beast_does_not_charge` (danger_cadence_tests),
+a bear, a boar and a mammoth set fleeing beside one person for forty
+turns each; it fails without the change.
+
+**Suite.** `cargo test --lib`, 3,200 tests: 3,194 passed, 0 failed, 6
+ignored, in 25.5 minutes. The dice counts are unchanged, 6,765 and
+944,097.
+
+**Measured.** The forty worlds (smooth 1 to 24, scattered 1 to 16, 720
+days, farming on), two draws (REDRAW 0 and 1), under step 8 (8540f93)
+and under this change (97a6432): 80 world-draws a side. 59 of the 80
+run line for line the same under both; 21 part.
+
+| | 8540f93 | 97a6432 | world-draws up / down |
+|---|---|---|---|
+| boar blows | 120 | 31 | 0 / 16 (t -3.13) |
+| boar episodes | 34 | 17 | 0 / 11 (t -3.02) |
+| boar blows from a fleeing boar | 89 | 0 | 0 / 16 |
+| from a boar following its herd | 26 | 27 | 4 / 3 |
+| from a boar attacking | 3 | 2 | |
+| grazing, hunting | 1, 1 | 1, 1 | |
+| mammoth blows | 4 | 0 | 0 / 1 |
+| lion blows | 46 | 46 | |
+| polar bear blows | 16 | 18 | 1 / 0 |
+| bear blows | 0 | 0 | |
+| fights with a beast | 87 | 80 | 6 / 7 |
+| hunts that turned | 683 | 709 | 9 / 7 |
+| deaths | 7, all childbirth | 8, all childbirth | 2 / 1 |
+| births | 392 | 390 | 5 / 6 |
+| alive at day 720 | 1,345 | 1,342 | 5 / 6 |
+
+The boars themselves did not move: 1,642 and 1,641 alive at day 720,
+2,103 and 2,091 born, 1,266 and 1,262 starved, 221 and 218 taken;
+boar-days within 10 of a hearth at the day's end 185 and 192, within 3
+35 and 43, within 30 930 and 952 (none of these t beyond 1.1). No death
+under either was put down to a beast (`killed_by None` in all fifteen).
+Wasting person-days were not captured by these runs.
+
+**What this shows.** Every boar blow from a fleeing boar is gone, and
+nothing took their place: blows from boars in every other state are
+where they were. Boar blows fall by three quarters and boar episodes by
+half. The four mammoth blows were in one world (smooth 7 of the first
+draw, days 312 to 324, three people), and are gone there; the trace
+does not record what the mammoth was doing. Deaths, births and the living are within a few of each other
+and move both ways. In #438's traces the rise under #437 was mostly blows
+from fleeing boars (49 under #436, 92 under step 8); those are the
+blows that are now gone. #436 was not run again here, so whether the
+rest of the rise is left is not measured.
