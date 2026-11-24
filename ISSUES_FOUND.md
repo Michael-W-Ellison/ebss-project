@@ -32196,3 +32196,41 @@ and move both ways. In #438's traces the rise under #437 was mostly blows
 from fleeing boars (49 under #436, 92 under step 8); those are the
 blows that are now gone. #436 was not run again here, so whether the
 rest of the rise is left is not measured.
+
+**Against #436.** The same eighty world-draws under #436 (80308fb), with
+the same trace (the chase line has nowhere to go in #436, which has no
+chase). Its boar blows, 94, are the 94 #438 started from.
+
+| | #436 | step 8 | this change |
+|---|---|---|---|
+| boar blows | 94 | 120 | 31 |
+| from a fleeing boar | 68 | 89 | 0 |
+| from a boar in any other state | 26 | 31 | 31 |
+| boar episodes | 27 | 34 | 17 |
+| mammoth blows | 4 | 4 | 0 |
+| lion blows | 0 | 46 | 46 |
+| polar bear blows | 0 | 16 | 18 |
+| boars taken by beasts | 268 | 221 | 218 |
+| boars alive at day 720 | 1,620 | 1,642 | 1,641 |
+| deaths, all childbirth | 9 | 7 | 8 |
+| births | 396 | 392 | 390 |
+| alive at day 720 | 1,347 | 1,345 | 1,342 |
+
+World-draw by world-draw against #436: under this change boar blows
+fell in 14 and rose in 6 (t -2.31), episodes fell in 11 and rose in 5
+(t -1.60). Boar blows from a boar that was not fleeing went 26 to 31
+under step 8 (up in 6, down in 2, t +0.62) and 26 to 31 under this
+change (up in 8, down in 3, t +0.52). Lion and polar bear blows rose in
+17 and 12 world-draws and fell in none, under step 8 and under this
+change alike: they are #437's chase. Boars taken by beasts fell under
+#437 (down in 23, up in 4, t -2.59) and stay down under this change
+(t -2.41); boars alive at day 720 did not move (t +0.65 and +0.59).
+
+**What this shows.** Of the 26 boar blows #437 added over these two
+draws, 21 were from fleeing boars, and those are gone. The other 5 are
+still there, 26 to 31, short of t 1 either way. With the fleeing charge
+gone, boar blows sit at a third of #436's. Lions and polar bears now
+strike where under #436 they did not; that is the chase #437 asked for,
+and this change leaves it as it was. In these draws a lion busy with
+people took fewer boars (268 to 221), which #438's third-draw census
+did not show (100 to 101 taken by lions); it left no more boars alive.
