@@ -32234,3 +32234,89 @@ strike where under #436 they did not; that is the chase #437 asked for,
 and this change leaves it as it was. In these draws a lion busy with
 people took fewer boars (268 to 221), which #438's third-draw census
 did not show (100 to 101 taken by lions); it left no more boars alive.
+
+### 440. The boars eaten by lions
+
+**Why.** In #439's runs, boars taken by beasts fell from 268 under #436
+to 221 under #437's step 8 and 218 under #439. The animal code did not
+change between #436 (80308fb) and #439 (97a6432); the changes were all
+on the people's side and in how a beast strikes a person.
+
+**Traced**, no change. The same eighty world-draws (forty worlds, two
+draws, 720 days, farming), under #436 and #439, with a daily count of
+lions (alive, hunting, hunger, near a hearth, born, dead and of what),
+a line for every kill a lion makes and for every blow that feeds one.
+The lines the earlier traces also wrote are the same line for line as
+in #439's runs (checked in seven worlds). Then the seventeen world-draws
+in which a lion died of something other than age, hunger or another
+beast, again under both, with a line wherever a lion is killed and by
+what. Everything else in those runs is the same line for line as the
+first trace (all 34 checked).
+
+| | #436 | #439 | up / down | t |
+|---|---|---|---|---|
+| boars taken by lions | 208 | 162 | 7 / 23 | -2.67 |
+| all kills by lions | 5,748 | 5,509 | 14 / 22 | -2.25 |
+| lion-days | 222,353 | 214,575 | 6 / 17 | -2.20 |
+| lions born | 170 | 159 | 3 / 9 | -1.70 |
+| lions dead of age | 36 | 36 | 0 / 0 | |
+| lions starved, or taken by a beast | 0 | 0 | | |
+| lions dead of anything else, net of any that wandered in | 6 | 18 | 13 / 4 | +2.42 |
+| lions alive at day 720 | 324 | 301 | 6 / 16 | -2.55 |
+| a lion chasing someone who ran | 0 | 560 | 49 / 0 | +5.99 |
+| people fighting a lion | 22 | 87 | | |
+
+Twenty-nine of the 87 fights under #439 were a cornered person fighting
+back, which #436 does not have.
+
+*What killed the lions* (the seventeen world-draws):
+
+| | #436 | #439 |
+|---|---|---|
+| a hunter's throw | 2 | 11 |
+| a person fighting it | 1 | 6 |
+| prey that fought back | 3 | 2 |
+| all | 6 | 19 |
+
+Under #439, 15 of the 17 lions killed by people died on the day a lion
+ran somebody down or within two days of it. The other two died 17 and
+188 days after the last chase in their world. In 4 of the 6 fights the
+person who killed the lion was one it had run down in those two days.
+In one world, smooth 5 of the second draw, one person killed both of
+its lions on day 503, two days after one of them ran that person down.
+#436 has no chase; its three lions killed by people were on days 476,
+614 and 688.
+
+*Where the boars went.* Fifty-four of the world-draws had a lion born
+or a boar taken by one; all 208 and 162 boars are in them.
+
+- In the 23 where lion-days differ between the two, lion-days fell 7.0%
+  (111,554 to 103,776), all lion kills 8.6% (2,910 to 2,660; down in
+  17, up in 6, t -2.57) and boars taken 25% (99 to 74; down in 14, up
+  in 5, t -1.73).
+- In the 31 where lion-days are the same, all lion kills did not move
+  (2,765 to 2,776; t +1.00), and boars taken fell 109 to 88 (down in 9,
+  up in 2, t -2.33). Of that 21, 13 were in the 16 of these
+  world-draws that had a chase and 8 in the 15 that had none, 7 of
+  those 8 in one world (smooth 6 of the second draw, 13 to 6).
+- Boars were not fewer: boar-days 554,181 and 554,010 in the 31 (t
+  -0.02), 511,810 and 514,921 in the 23 (t +0.23). Boars were not by the
+  camps: under one boar-day in a thousand ended within 30 of a hearth
+  under either.
+
+**What this shows.** #437's chase costs lions. When a lion runs someone
+down it ends the move beside them, and there people kill it: by throws
+when they hunt and by fighting it. Lions killed by people went from 3
+to 17 in these worlds, nearly all of them within two days of a chase.
+Fewer lions, and fewer born to the ones left, take fewer boars, as they
+take less of everything: that is about half of the drop (25 of 46),
+where lion-days fell.
+
+The other half (21) is in world-draws whose lions lived and died alike
+under both versions and took as much in all. There they took fewer
+boars and more of other things. Nothing measured here accounts for it:
+not the number of boars, not where the boars were against the camps, not
+the animal code, which is the same in both. Once anything in a world
+differs, every roll after it differs, so a share this small (about one
+kill in thirty) can move by chance; this trace does not tell the two
+apart.
