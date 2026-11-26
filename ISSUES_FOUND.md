@@ -32320,3 +32320,72 @@ the animal code, which is the same in both. Once anything in a world
 differs, every roll after it differs, so a share this small (about one
 kill in thirty) can move by chance; this trace does not tell the two
 apart.
+
+### 441. A lion ends its chase a strike's length off
+
+**Why.** #440 found that a lion which runs somebody down ends its move
+beside them, and that people then kill it there, by throws when they
+hunt and by fighting it. Lions killed by people went from 3 under #436
+to 17 under #439, nearly all within two days of a chase.
+
+**Change** (3b94110). A lion that runs somebody down now stops
+PREDATOR_STRIKE_RANGE (3) short of them, on the side it came from: near
+enough to strike, and for them to cover up, and a pace beyond HUNT_REACH
+(2), from which a person fights. A lion already within a strike of them
+stays where it is. If the spot short of them cannot be stood on, it
+stays where it was. Two chase tests check both cases; the two that
+measured the lion beside the person now measure a strike's length.
+
+**Suite.** 3,202 tests, 3,196 passed, 0 failed, 6 ignored. The two new
+tests are the difference from #439. The dice counts did not move (6,765
+and 944,097).
+
+**Measured.** The same eighty world-draws as #440 (forty worlds, two
+draws, 720 days, farming), under #439 (97a6432) and this change, paired
+world by world. The run of this change also wrote a line wherever a lion
+is killed and by what.
+
+| | #439 | #441 | up / down | t |
+|---|---|---|---|---|
+| a lion chasing someone who ran | 560 | 410 | 15 / 28 | -2.05 |
+| people fighting a beast | 80 | 51 | 4 / 19 | -2.16 |
+| blows from a lion | 46 | 26 | 3 / 12 | -1.90 |
+| blows from a boar | 31 | 16 | 1 / 7 | -2.29 |
+| blows from a polar bear | 18 | 8 | 3 / 9 | -1.79 |
+| lions dead of anything but age, hunger or a beast, net of any that wandered in | 18 | 19 | 6 / 5 | +0.20 |
+| lions born | 159 | 169 | 7 / 4 | +1.39 |
+| lions alive at day 720 | 301 | 311 | 10 / 9 | +1.05 |
+| lion-days | 214,575 | 217,377 | 8 / 14 | +0.72 |
+| boars taken by lions | 162 | 177 | 16 / 8 | +1.54 |
+| all kills by lions | 5,509 | 5,562 | 13 / 19 | +0.50 |
+| people dead | 8 | 5 | 0 / 3 | -1.75 |
+| people alive at day 720 | 1,342 | 1,340 | 7 / 9 | -0.50 |
+
+Every death of a person in both is in childbirth.
+
+*What killed the lions.* In all eighty under this change: a hunter's
+throw 16, a person fighting it 1, prey that fought back 2. All sixteen
+throws fell on a day a lion ran somebody down in that world; the one
+fight was within two days of one. In the seventeen world-draws #440
+traced:
+
+| | #439 | #441 |
+|---|---|---|
+| a hunter's throw | 11 | 11 |
+| a person fighting it | 6 | 1 |
+| prey that fought back | 2 | 2 |
+| all | 19 | 14 |
+
+**What this shows.** A lion that stops a strike's length off is no
+longer fought where it stops: fights with beasts fell by a third and
+lions killed in a fight from 6 to 1. Lions are not killed less in all
+(18 and 19), because hunters still take them. A lion is prey to a hunter
+(`the_best_prey_to_eat` includes it), so a hunter walks up to the lion
+that has just stopped short of somebody and throws at it, and every lion
+killed by a throw died on a chase day. In smooth 5 of the second draw,
+two lions ran down three people in a row on day 282, and all three of
+that world's lions were speared that day.
+
+Chases also fell (560 to 410), and with them blows from lions. This
+trace does not show why. Lions, boars at 720, lion kills and boars taken
+moved by less than chance can account for (all |t| under 1.6).
