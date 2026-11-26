@@ -290,7 +290,8 @@ impl Simulation {
             .round() as i32
     }
 
-    /// Somebody this hunter runs down, and where it ends up beside them.
+    /// Somebody this hunter runs down, and where it ends up: a strike's
+    /// length short of them.
     ///
     /// Somebody who ran from where it stands, this minute or the last; whom
     /// it can reach at its pace; and who has not been run down already this
@@ -320,14 +321,39 @@ impl Simulation {
                 ran_from_here && !chased_already && off <= reach + Self::PREDATOR_STRIKE_RANGE
             })
             .min_by_key(|(_, at)| (at.0 - animal.position.0).abs() + (at.1 - animal.position.1).abs())
-            .map(|(index, at)| {
-                // A stride behind them, on the way it came
-                let behind = ((animal.position.0 - at.0).signum(), (animal.position.1 - at.1).signum());
-                let beside = (at.0 + behind.0, at.1 + behind.1);
-                let level = self.population.agents[*index].state.position.2;
-                let beside = if self.world.is_terrain_passable((beside.0, beside.1, level)) { beside } else { *at };
-                (*index, beside)
-            })
+            .map(|(index, at)| (*index, self.where_a_chase_ends(animal.position, *at, self.population.agents[*index].state.position.2)))
+    }
+
+    /// Where a hunter that has run somebody down stops: a strike's length
+    /// short of them, on the way it came. Near enough to strike, and for
+    /// them to cover up under it (`it_still_has_me`); a pace past a thrown
+    /// spear and an arm's reach (`HUNT_REACH`).
+    ///
+    /// It used to stop a stride behind them, and there people killed it.
+    /// Under #437's chase, lions killed by people went from 3 to 17 in the
+    /// seventeen world-draws where a lion died of something other than age,
+    /// 15 of the 17 on the day of a chase or within two days of it, by
+    /// throws and in fights; 23 fewer lions were alive at day 720 of eighty
+    /// world-draws, and they took 46 fewer boars (#440).
+    ///
+    /// Already within a strike of them, it stays where it is. Where the
+    /// ground a strike's length off will not take it, it stops where it
+    /// stands: the chase ends short rather than at their elbow.
+    pub(in crate::analytics) fn where_a_chase_ends(&self, from: (i32, i32), them: (i32, i32), level: i32) -> (i32, i32) {
+        let off = (them.0 - from.0).abs().max((them.1 - from.1).abs());
+        if off <= Self::PREDATOR_STRIKE_RANGE {
+            return from;
+        }
+        let back = ((from.0 - them.0).signum(), (from.1 - them.1).signum());
+        let short = (
+            them.0 + back.0 * Self::PREDATOR_STRIKE_RANGE,
+            them.1 + back.1 * Self::PREDATOR_STRIKE_RANGE,
+        );
+        if self.world.is_terrain_passable((short.0, short.1, level)) {
+            short
+        } else {
+            from
+        }
     }
 
     /// Whether a hunter of the kind this one would run from has run them
@@ -693,8 +719,8 @@ impl Simulation {
 
             // It has closed on them.
             let ran_down = chased.is_some();
-            if let Some((index, beside)) = chased {
-                chases.push((animal.id, animal.species_id.clone(), index, beside));
+            if let Some((index, short_of_them)) = chased {
+                chases.push((animal.id, animal.species_id.clone(), index, short_of_them));
             }
 
             // A full belly makes a cautious animal. Hunger is what changes
@@ -717,11 +743,11 @@ impl Simulation {
             }
         }
 
-        // The chase itself: it is beside them, and they know they have been
-        // run down, once in the half hour.
-        for (animal_id, kind, agent_index, beside) in chases {
+        // The chase itself: it has closed to a strike's length of them, and
+        // they know they have been run down, once in the half hour.
+        for (animal_id, kind, agent_index, short_of_them) in chases {
             if let Some(hunter) = self.world.animals.get_mut(&animal_id) {
-                hunter.position = beside;
+                hunter.position = short_of_them;
             }
             self.population.agents[agent_index].state.chased_at = Some(current_turn);
             self.population.agents[agent_index].state.chased_by = Some(kind);

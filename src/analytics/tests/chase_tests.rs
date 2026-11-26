@@ -50,8 +50,9 @@ fn a_starving_lion_runs_down_somebody_who_ran_from_it() {
     simulation.predators_try_their_luck_at(0);
 
     let them = simulation.population.agents[0].state.position;
-    assert!(
-        paces_between(where_the_lion_is(&simulation), them) <= 1,
+    assert_eq!(
+        paces_between(where_the_lion_is(&simulation), them),
+        Simulation::PREDATOR_STRIKE_RANGE,
         "the lion is at {:?} and they are at {them:?}",
         where_the_lion_is(&simulation)
     );
@@ -66,7 +67,45 @@ fn a_fed_lion_runs_down_somebody_who_ran_from_it_too() {
     simulation.predators_try_their_luck_at(0);
 
     let them = simulation.population.agents[0].state.position;
-    assert!(paces_between(where_the_lion_is(&simulation), them) <= 1, "running sets it off, fed or not");
+    assert_eq!(
+        paces_between(where_the_lion_is(&simulation), them),
+        Simulation::PREDATOR_STRIKE_RANGE,
+        "running sets it off, fed or not"
+    );
+    assert_eq!(simulation.world.people_run_down, 1);
+}
+
+/// It stops a strike's length short of them, on the way it came: near
+/// enough to strike, a pace past a spear. Stopping a stride behind them,
+/// people killed it there - lions killed by people went from 3 to 17 in
+/// seventeen world-draws, 15 of them within two days of a chase (#440).
+#[test]
+fn a_lion_that_runs_somebody_down_stops_a_strike_short_of_them() {
+    let mut simulation = ran_from_a_lion(1.0);
+
+    simulation.predators_try_their_luck_at(0);
+
+    let them = simulation.population.agents[0].state.position;
+    assert_eq!(where_the_lion_is(&simulation), (30, 50 - Simulation::PREDATOR_STRIKE_RANGE), "on the side it came from");
+    let off = paces_between(where_the_lion_is(&simulation), them);
+    assert!(off > Simulation::HUNT_REACH, "{off} paces off is within a spear's reach");
+    assert!(off <= Simulation::PREDATOR_STRIKE_RANGE, "{off} paces off is past its own strike");
+    assert!(
+        simulation.run_down_by_it_already(&simulation.population.agents[0], &simulation.world.animals.get_all()[0]),
+        "they still know it has them"
+    );
+}
+
+/// Somebody who ran and is still within a strike of it is not closed on
+/// any further.
+#[test]
+fn a_lion_already_within_a_strike_of_somebody_stays_where_it_is() {
+    let mut simulation = ran_from_a_lion(0.0);
+    simulation.population.agents[0].state.position = (30, 33, 0);
+
+    simulation.predators_try_their_luck_at(0);
+
+    assert_eq!(where_the_lion_is(&simulation), (30, 31));
     assert_eq!(simulation.world.people_run_down, 1);
 }
 
