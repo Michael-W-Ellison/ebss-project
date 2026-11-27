@@ -28,12 +28,13 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #441, a lion ends its chase a strike's
-length short of the person): `cargo test --lib` in one piece, 3,202
-tests: 3,196 passed, 0 failed, 6 ignored, in 25.5 minutes. The two new
-chase tests are the whole difference; the two that had the lion a pace
-from the person now have it a strike's length off, and the dice counts
-did not move. Before it, #439: 3,200 tests, 3,194 passed, 0 failed, the
+**Last full run** (ISSUES_FOUND #443, beasts that hunt people are not
+quarry): `cargo test --lib` in one piece, 3,205 tests: 3,199 passed, 0
+failed, 6 ignored, in 25 minutes. The three new hunting tests are the
+whole difference, and the dice counts did not move. Before it, #441:
+3,202 tests, 3,196 passed, 0 failed, the two new chase tests the
+difference; the two that had the lion a pace from the person now have it
+a strike's length off. #439: 3,200 tests, 3,194 passed, 0 failed, the
 one new test `a_fleeing_beast_does_not_charge` the difference. #437: 3,199 tests, 3,193 passed, 0
 failed, in 22 minutes, the 22 chase tests the difference from #435 and
 #436: 3,177 tests, 3,171 passed, 0
