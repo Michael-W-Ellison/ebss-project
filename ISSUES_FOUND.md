@@ -32389,3 +32389,73 @@ that world's lions were speared that day.
 Chases also fell (560 to 410), and with them blows from lions. This
 trace does not show why. Lions, boars at 720, lion kills and boars taken
 moved by less than chance can account for (all |t| under 1.6).
+
+### 442. Why the chases fell
+
+**Why.** Under #441, a beast chasing somebody who ran fell from 560 to
+410 (t -2.05) in the eighty world-draws, and blows from lions with it.
+#441 did not find why.
+
+**Traced**, no change. Here a line written twice in a row counts once, so
+the counts are lower than #441's.
+
+*Where the two versions part.* In 31 of the 80 world-draws, the two
+versions are the same line for line. In the other 49, the first line that
+differs is always a chase: a beast stops a strike's length short of
+somebody instead of beside them. Every chase is part of a run of them, each
+within ten days of the last. In the run of chases where the two versions
+part, there were 125 chases under #439 and 119 under #441 (12 up, 17 down,
+t -0.41). After that run there were 313 and 177 (12 up, 25 down, t -2.50).
+
+*Who ran.* About half the times somebody runs from a beast end in a chase,
+under both versions. Rerunning those 49 world-draws with a line on how used
+people are to each kind of beast changed nothing else: all 98 files match
+the earlier runs line for line, apart from the new lines. After the
+versions part:
+
+| | #439 | #441 | up / down | t |
+|---|---|---|---|---|
+| runs from a lion | 338 | 209 | 12 / 16 | -1.95 |
+| chases by a lion | 266 | 162 | 11 / 18 | -1.88 |
+| half hours somebody spent within reach of a lion | 34,211 | 27,025 | 16 / 15 | -0.37 |
+| the same, by somebody not used to lions (under one half) | 11,659 | 8,847 | 14 / 17 | -1.18 |
+| runs from a polar bear | 151 | 141 | 7 / 12 | -0.16 |
+| chases by a polar bear | 102 | 61 | 6 / 12 | -1.33 |
+
+Almost everybody who ran from a lion was not used to lions: 336 of 338 and
+203 of 209. In both versions, about a third of the time people spent within
+reach of a lion they were not yet used to it (34% and 33%).
+
+The drop is in a few world-draws where, in one version, people were seldom
+near a lion they did not know:
+
+| world-draw | half hours near an unknown lion | runs | chases |
+|---|---|---|---|
+| smooth 11, second draw | 817 → 62 | 44 → 4 | 38 → 2 |
+| scattered 10, first draw | 804 → 131 | 21 → 3 | 23 → 3 |
+| scattered 7, second draw | 620 → 124 | 18 → 3 | 15 → 2 |
+| smooth 4, first draw | 233 → 462 | 11 → 19 | 11 → 15 |
+
+*A third draw.* All forty worlds again, under both versions, with
+REDRAW=2. Twenty-one are the same line for line. The other nineteen again
+part at a chase.
+
+| | #439 | #441 | up / down | t |
+|---|---|---|---|---|
+| chases by a lion | 63 | 108 | 9 / 2 | +2.13 |
+| runs from a lion | 75 | 130 | 9 / 3 | +2.18 |
+| chases by a polar bear | 29 | 53 | 6 / 2 | +1.37 |
+| half hours within reach of a lion | 27,283 | 25,329 | 10 / 4 | -1.13 |
+| blows from a lion | 10 | 15 | 5 / 3 | +0.64 |
+
+In all three draws, 120 world-draws, chases went from 531 to 458: up in 29,
+down in 29, t -1.14.
+
+**What this shows.** The fall in chases under #441 is not the change.
+Where the two versions part, the chases that follow are as many under
+either version. After that, the two histories differ in every roll. In a
+handful of world-draws, whether a lion comes to stay near people who are
+not used to it decides how many chases there are. In the first two draws
+that went against #441, and in the third it went the other way by about as
+much. The fall in blows from lions (46 to 26 in #441) went with the chases:
+in the third draw they rose, 10 to 15.
