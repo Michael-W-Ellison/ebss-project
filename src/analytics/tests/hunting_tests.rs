@@ -724,3 +724,97 @@ fn a_skin_hunt_goes_after_a_skin() {
     assert_eq!(chosen.species_id, "deer", "went after the {} for its skin", chosen.species_id);
 }
 
+
+/// A hunter with a flint spear in the pack and in hand: whole, armed, and
+/// willing to take on anything that fights back.
+fn an_armed_hunter_among(animals: &[(&str, (i32, i32))]) -> Simulation {
+    use crate::agents::equipment::WeaponTemplate;
+    use crate::agents::skills::Quality;
+
+    let mut simulation = a_hunter_among(animals);
+    simulation.population.agents[0]
+        .equipment
+        .equip(WeaponTemplate::wooden_spear(Quality::Common))
+        .expect("the spear should go in the hand");
+    simulation
+}
+
+/// Nobody goes looking for a beast that hunts people, armed or not.
+///
+/// Lions were quarry, and hunters walked up to a lion that had just run
+/// somebody down and threw at it: under #441, 16 of the 19 lions killed by
+/// anything but age died of a hunter's throw, every one on a day a lion ran
+/// somebody down. The same armed hunter still goes after a bear, which keeps
+/// its ground rather than hunting, and a seal, which hunts fish and is
+/// passive: the gate turns away the hunters of people and nothing else.
+#[test]
+fn nobody_goes_after_a_beast_that_hunts_people() {
+    for kind in ["wolf", "lion", "tiger", "crocodile", "polar_bear"] {
+        let simulation = an_armed_hunter_among(&[(kind, (30, 31))]);
+        let beast = simulation.world.animals.get_all()[0].clone();
+        let species = simulation.world.animals.get_species(kind).unwrap();
+        assert!(Simulation::one_that_hunts_people(species), "a {kind} hunts people");
+        assert!(
+            !simulation.worth_hunting(&simulation.population.agents[0], &beast),
+            "an armed hunter went after a {kind}"
+        );
+    }
+    for kind in ["bear", "seal", "boar", "eagle"] {
+        let simulation = an_armed_hunter_among(&[(kind, (30, 31))]);
+        let species = simulation.world.animals.get_species(kind).unwrap();
+        assert!(!Simulation::one_that_hunts_people(species), "a {kind} does not hunt grown people");
+    }
+    for kind in ["bear", "seal"] {
+        let simulation = an_armed_hunter_among(&[(kind, (30, 31))]);
+        let beast = simulation.world.animals.get_all()[0].clone();
+        assert!(
+            simulation.worth_hunting(&simulation.population.agents[0], &beast),
+            "the same armed hunter should still go after a {kind}"
+        );
+    }
+}
+
+/// A lion at a hunter's elbow is neither supper nor a coat, even a hurt one
+/// a throw or two would bring down, which is worth the blows it might land.
+/// With only that lion about, nothing is gone after; with a deer further off
+/// as well, the deer is.
+#[test]
+fn a_lion_close_by_is_neither_supper_nor_a_coat() {
+    let mut simulation = an_armed_hunter_among(&[("lion", (30, 31))]);
+    simulation.world.animals.get_all_mut()[0].current_health = 10.0;
+    let hunter = &simulation.population.agents[0];
+    let here = hunter.state.position;
+    assert!(simulation.the_best_prey_to_eat(hunter, here, 8).is_none(), "the lion was chosen for supper");
+    assert!(simulation.the_best_prey_for_its_skin(hunter, here).is_none(), "the lion was chosen for its skin");
+
+    let simulation = an_armed_hunter_among(&[("lion", (30, 31)), ("deer", (30, 36))]);
+    let hunter = &simulation.population.agents[0];
+    let (for_supper, _, _) = simulation
+        .the_best_prey_to_eat(hunter, here, 8)
+        .expect("the deer is worth a throw");
+    assert_eq!(simulation.world.animals.get(&for_supper).unwrap().species_id, "deer");
+    let (for_a_coat, _) = simulation
+        .the_best_prey_for_its_skin(hunter, here)
+        .expect("the deer has a skin worth having");
+    assert_eq!(simulation.world.animals.get(&for_a_coat).unwrap().species_id, "deer");
+}
+
+/// And a hunt at one is refused where it is made, however it was chosen: a
+/// plan, a way already in hand, or whatever stood nearest. Nothing is thrown
+/// and the lion is untouched.
+#[test]
+fn a_hunt_at_a_lion_is_refused_where_it_is_made() {
+    let mut simulation = an_armed_hunter_among(&[("lion", (30, 31))]);
+    let lion = simulation.world.animals.get_all()[0].id;
+    let whole = simulation.world.animals.get(&lion).unwrap().current_health;
+
+    for _ in 0..20 {
+        simulation.population.agents[0].busy_until = 0;
+        let result = simulation.execute_action(&Action::Hunt { animal_id: lion, weapon: None }, 0);
+        assert!(!result.success, "a hunt at a lion went ahead");
+    }
+    let lion = simulation.world.animals.get(&lion).expect("the lion is still there");
+    assert!(lion.is_alive());
+    assert_eq!(lion.current_health, whole, "the lion was struck");
+    assert_eq!(simulation.population.agents[0].state.health, 100.0, "the hunter was struck");
+}

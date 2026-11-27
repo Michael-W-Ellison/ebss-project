@@ -37,7 +37,32 @@ impl Simulation {
             return false;
         }
 
+        // Nor anything that hunts people (`one_that_hunts_people`).
+        if Self::one_that_hunts_people(species) {
+            return false;
+        }
+
         Self::fit_to_take_it_on(agent, species)
+    }
+
+    /// Whether a beast of this kind hunts people: one that comes after a
+    /// grown person and could take them.
+    ///
+    /// Nobody goes after one, for its meat or for its skin. Lions were
+    /// quarry, and hunters walked up to a lion that had just run somebody
+    /// down and stopped a strike's length off them, and threw at it: under
+    /// #441, 16 of the 19 lions killed by anything but age died of a
+    /// hunter's throw, every one on a day a lion ran somebody down. Somebody
+    /// one comes at still fights it (`between_us::threat`); this is only
+    /// about going looking for it.
+    ///
+    /// The wolf, the lion, the tiger, the crocodile and the polar bear. Not
+    /// the seal, which lives by hunting and is big enough to take a man but
+    /// is passive; nor the bear or the boar, which keep their ground rather
+    /// than hunt (`would_it_charge`).
+    pub(in crate::analytics) fn one_that_hunts_people(species: &crate::environment::fauna::AnimalSpecies) -> bool {
+        Self::could_it_take(species, Self::TOO_BIG_FOR_A_SMALL_HUNTER)
+            && matches!(species.behavior, crate::environment::AnimalBehavior::Aggressive)
     }
 
     /// Whether a hunted beast of this kind turns on the hunter.

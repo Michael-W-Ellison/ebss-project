@@ -1092,6 +1092,13 @@ impl Simulation {
             return ActionResult::failure(format!("Not fit to take on a {}", species.name));
         }
 
+        // And never one that hunts people, however it came to be chosen: from
+        // a plan, a way already in hand, or as whatever stood nearest
+        // (`one_that_hunts_people`).
+        if Self::one_that_hunts_people(&species) {
+            return ActionResult::failure(format!("Not going after a {}", species.name));
+        }
+
         // Now get mutable reference to animal
         if let Some(animal) = self.world.animals.get_mut(animal_id) {
 
