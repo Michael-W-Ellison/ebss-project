@@ -437,6 +437,7 @@ impl Simulation {
         let knife = self.population.agents[agent_index]
             .how_much_my_tools_bring_back(crate::agents::skills::SkillType::Leatherworking);
         let butchered = self.butcher(&items_gained, knife);
+        self.count_the_skins(species, &butchered);
         self.into_the_pack_or_on_the_ground(agent_index, butchered, where_it_fell);
 
         if knife > 1.0 {

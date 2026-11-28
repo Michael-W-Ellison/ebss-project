@@ -471,6 +471,7 @@ impl Simulation {
                     crate::agents::skills::SkillType::Leatherworking,
                 );
             let butchered = self.butcher(&items_gained, knife);
+            self.count_the_skins(&species, &butchered);
             {
                 self.into_the_pack_or_on_the_ground(
                     agent_index,

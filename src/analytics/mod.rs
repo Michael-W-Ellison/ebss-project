@@ -1005,6 +1005,24 @@ impl Simulation {
         left
     }
 
+    /// Counts the skins that came off a carcass (#444), for the measurement
+    /// of who goes after what for a coat. It changes nothing.
+    pub(in crate::analytics) fn count_the_skins(
+        &mut self,
+        species: &crate::environment::AnimalSpecies,
+        butchered: &[crate::agents::InventoryItem],
+    ) {
+        for item in butchered {
+            if matches!(item.item_id.as_str(), "hides" | "leather" | "wool") {
+                *self
+                    .world
+                    .skins_off_carcasses
+                    .entry(format!("{} {}", species.id, item.item_id))
+                    .or_insert(0) += item.quantity as u64;
+            }
+        }
+    }
+
     fn butcher(
         &self,
         dropped: &[crate::environment::ItemStack],

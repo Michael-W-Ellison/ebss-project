@@ -390,6 +390,11 @@ pub struct World {
     /// Field crop brought in, the same way (#424).
     #[serde(default)]
     pub field_crop_brought_in_by_distance: [u64; 3],
+    /// Skins cut off carcasses (#444), by the beast and what came off it:
+    /// "deer hides", "sheep wool". Hides, leather and wool, which are what
+    /// a skin is wanted for (`the_best_prey_for_its_skin`).
+    #[serde(default)]
+    pub skins_off_carcasses: std::collections::BTreeMap<String, u64>,
     /// Where field crop fell today and how much, for the people's side to
     /// sort by how far it was from home (#424). Not kept: it is a day long.
     #[serde(skip)]
@@ -2176,6 +2181,7 @@ impl World {
             new_ground_broken_away_from_home: 0,
             field_crop_fallen_by_distance: [0; 3],
             field_crop_brought_in_by_distance: [0; 3],
+            skins_off_carcasses: std::collections::BTreeMap::new(),
             field_crop_fallen_where: Vec::new(),
             crops_ripened_full: 0,
             crops_ripened_short: 0,
