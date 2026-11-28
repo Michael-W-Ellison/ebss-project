@@ -32512,3 +32512,58 @@ near people more often (580 to 957 half hours within 30 cells, t +2.25),
 and lion blows rose from 26 to 34, which is within chance (t +1.03).
 Chases rose from 410 to 535 and split 15 up and 16 down, which #442 found
 is how far chases wander once histories part.
+
+### 444. Skins taken and clothes worn
+
+**Why.** #443 took wolves, lions, tigers, crocodiles and polar bears off
+the hunters' quarry for their skins as well as their meat, and the runs
+did not count skins or clothing, so whether that cost anybody a coat was
+not measured.
+
+**Change.** A counter and nothing else. Skins cut off a carcass (hides,
+leather and wool, the cuts `the_best_prey_for_its_skin` looks for) are
+counted on the world by beast (`count_the_skins`, at both places a
+carcass is cut up). The discovery watch counts, once a day after the
+day's last turn: person-days dressed in anything, person-days with at
+least one garment of hide, fur, leather or rawhide on, person-days
+chilly (below the temperature that makes somebody want a coat,
+`CHILLY_MARGIN`), and garment-days by material. Nothing reads the counts.
+All 160 runs below are line for line the runs of #443 apart from the new
+lines, and the dice counts and the 44 hunting and clothing tests pass.
+
+**Measured.** The forty worlds, two draws each, 720 days, #441 against
+#443.
+
+| | #441 | #443 | up / down | t |
+|---|---|---|---|---|
+| hides off carcasses, all beasts | 5,131 | 4,839 | 15 / 20 | -0.87 |
+| from lions | 482 | 32 | 1 / 11 | -2.66 |
+| from polar bears | 91 | 0 | 0 / 3 | -1.73 |
+| from wolves | 30 | 17 | 1 / 1 | -0.65 |
+| from camels | 296 | 517 | 6 / 2 | +1.80 |
+| from boars | 248 | 333 | 7 / 5 | +1.57 |
+| from reindeer | 1,844 | 1,764 | 12 / 12 | -0.44 |
+| wool | 840 | 783 | 11 / 13 | -0.67 |
+| person-days dressed | 120,211 | 118,140 | 16 / 18 | -1.13 |
+| person-days in a skin garment | 4,032 | 3,731 | 0 / 4 | -1.61 |
+| garment-days in linen | 75,647 | 75,310 | 12 / 13 | -0.24 |
+| garment-days in cotton | 46,181 | 43,908 | 7 / 11 | -1.60 |
+| garment-days in fur | 4,216 | 3,914 | 0 / 4 | -1.61 |
+| garment-days in leather | 642 | 642 | 0 / 0 | |
+| person-days chilly | 120,389 | 120,129 | 22 / 20 | -0.41 |
+
+Lion hides were taken in eleven world-draws under #441. In ten of them
+the person-days in a skin garment are the same under both versions. Of
+the four world-draws where they fell, one had lion or polar-bear hides
+under #441 (smooth 2, first draw: 174 to 125); the other three had none.
+
+In 60 of the 80 world-draws under #443 nobody wore a skin garment at all.
+
+**What this shows.** Losing the lion and polar-bear skins did not leave
+people colder: chilly person-days are the same, and nobody died of cold
+in either version (#443). The hides from beasts that hunt people were
+603 of the 5,131 under #441, and they went almost entirely
+unworn: where they were taken, skin clothing did not change. Skins are
+not what clothing is short of. About five thousand hides come in over
+two years, yet somebody is in a skin garment on about one in thirty of
+the person-days dressed; people dress in linen and cotton.
