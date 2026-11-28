@@ -32459,3 +32459,56 @@ not used to it decides how many chases there are. In the first two draws
 that went against #441, and in the third it went the other way by about as
 much. The fall in blows from lions (46 to 26 in #441) went with the chases:
 in the third draw they rose, 10 to 15.
+
+### 443. Beasts that hunt people are not quarry
+
+**Why.** Under #441, 16 of the 19 lions that died were killed by a
+hunter's throw, all on days a lion had chased somebody. A whole lion is
+never worth a throw: what its blows would cost leaves nothing of its worth.
+A hurt lion that one or two throws would bring down was worth one, so
+hunters went after lions a chase had hurt.
+
+**Change.** A beast that could take a grown person and is aggressive is
+not quarry, for its meat or for its skin (`one_that_hunts_people` in
+quarry.rs). That is the wolf, lion, tiger, crocodile and polar bear. The
+seal is big enough but passive; the bear and the boar do not hunt people.
+`worth_hunting` turns such a beast down, so it is never the best prey to
+eat, the best prey for a skin, or game the hunters note. A hunt chosen
+some other way, from an animal close by, a plan or a known way, is refused
+before any throw (`hunting` in getting.rs). People still fight a beast
+that comes at them. Three tests in hunting_tests.rs cover the predicate,
+a hurt lion beside a deer, and twenty hunts at a lion; all three fail
+without the change.
+
+**Suite.** 3,205 tests: 3,199 passed, 0 failed, 6 ignored. The dice counts
+did not move.
+
+**Measured.** The forty worlds, two draws each, 720 days, against #441.
+Eighteen world-draws are the same line for line.
+
+| | #441 | #443 | up / down | t |
+|---|---|---|---|---|
+| lions killed by a hunt | 16 | 0 | | |
+| lions killed in a fight with a person | 1 | 1 | | |
+| lions killed by their prey | 2 | 4 | | |
+| lions dying other than of old age | 19 | 5 | 3 / 11 | -2.40 |
+| lions alive at day 720 | 311 | 321 | 13 / 5 | +1.20 |
+| chases by a lion | 410 | 535 | 15 / 16 | +1.44 |
+| half hours with a lion within 30 cells | 580 | 957 | 20 / 6 | +2.25 |
+| blows from a lion | 26 | 34 | 6 / 2 | +1.03 |
+| blows from a polar bear | 8 | 14 | 4 / 2 | +1.00 |
+| blows from a boar | 16 | 22 | 3 / 1 | +1.28 |
+| bones broken | 11 | 6 | 3 / 7 | -1.39 |
+| deaths (all in childbirth) | 5 | 6 | 1 / 0 | +1.00 |
+| births | 385 | 389 | 7 / 4 | +1.07 |
+| alive at day 720 | 1,340 | 1,343 | 6 / 4 | +0.83 |
+
+Nobody died of cold or exposure in either version; every death was in
+childbirth. The run does not count clothing or skins worn, so whether
+fewer skins came in is not measured here.
+
+**What this shows.** No hunter killed a lion. The lions that live are
+near people more often (580 to 957 half hours within 30 cells, t +2.25),
+and lion blows rose from 26 to 34, which is within chance (t +1.03).
+Chases rose from 410 to 535 and split 15 up and 16 down, which #442 found
+is how far chases wander once histories part.
